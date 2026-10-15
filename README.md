@@ -66,7 +66,7 @@ Nothing is published automatically: every release is a deliberate **Run workflow
 
 ## 📦 Distribution
 
-- **Website / PWA** — the primary target. Download `aurabeats-web.zip` from a release and upload its contents to Cloudflare Pages; install it as a PWA on Android, iOS, or any desktop browser.
+- **Website / PWA** — the primary target, hosted as a standard live website: download `aurabeats-web.zip` from a release and upload its contents to Cloudflare Pages. Installable as a PWA on Android, iOS, or any desktop browser, with no offline cache layer in between.
 - **Android APK** — built by `Manual: APK Build` and attached to the latest GitHub Release as `AuraBeats.apk`; the in-app **Check App Update** button picks new versions up.
 - **No desktop installer** — the project is web-first by design. On PC, use the website directly or install the PWA from Chrome/Edge.
 
@@ -131,6 +131,12 @@ running app when both APKs share one signing identity.
 
 AuraBeats is a fully installable Progressive Web App — works like a native app on all platforms.
 
+An installed PWA is a **shortcut to the live site**, not an offline copy: the
+service worker caches nothing (`public/sw.js` is a pure passthrough that exists
+only to keep the app installable), so every open is served straight from
+Cloudflare Pages exactly like a normal website. No stale shell, no cache to
+clear, no "force reinstall" — a reload is always the newest build.
+
 ### Android / PC (Chrome / Edge)
 1. Open [aurabeats.pages.dev](https://aurabeats.pages.dev/).
 2. Tap the **three-dot menu (⋮)** or the **install icon (⊕)** in the address bar.
@@ -142,9 +148,11 @@ AuraBeats is a fully installable Progressive Web App — works like a native app
 
 ### 🔄 Updates
 
-**Website / PWA** — the service worker checks silently every time the app is
-opened and refreshes the app shell when a newer build is hosted, so the site
-stays current without any action.
+**Website / PWA** — nothing to update. The site is served live from Cloudflare
+Pages with no offline cache, so uploading a new `aurabeats-web.zip` *is* the
+update: the next open or reload already runs the new build. An installed PWA and
+the Android app show which build they are on (**App version v1.4** in Settings);
+the plain website deliberately shows no version stamp.
 
 **Android APK** — a real in-app updater:
 

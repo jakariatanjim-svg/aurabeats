@@ -1,82 +1,43 @@
-// AuraBeats Service Worker — Offline-First PWA Shell
-// Bump this on deploys that must invalidate stale hosted JS aggressively.
-const CACHE = "aurabeats-v4";
-const SHELL = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  "/icon.svg",
-  "/icon-512.png",
-  "/og-card.svg"
-];
+// AuraBeats Service Worker — installability only, no offline cache.
+//
+// The site is served live from Cloudflare Pages like any standard website:
+// every request goes to the network, nothing is stored, and nothing is served
+// when offline. This worker exists purely so the app stays installable as a PWA
+// (browsers require a registered service worker with a fetch handler).
+//
+// It also cleans up behind the previous offline-first worker: every cache left
+// over from older builds is deleted on activation, so nobody keeps a stale app
+// shell after this change ships.
 
-self.addEventListener("install", (e) => {
-  // Force installing the new worker immediately
+self.addEventListener("install", () => {
+  // Take over from any older worker without waiting for tabs to close.
   self.skipWaiting();
-  e.waitUntil(
-    caches.open(CACHE).then(async (c) => {
-      // Fetch each shell file individually so a single 404 (like a missing icon) 
-      // doesn't cause the entire Service Worker installation to fail and get stuck.
-      for (const req of SHELL) {
-        try {
-          await c.add(req);
-        } catch (err) {
-          console.warn(`[SW] Failed to cache shell asset: ${req}`, err);
-        }
-      }
-    })
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    Promise.all([
+      // Drop all caches created by the old offline-first worker.
+      (async () => {
+        if (!self.caches) return;
+        const keys = await self.caches.keys();
+        await Promise.all(keys.map((key) => self.caches.delete(key)));
+      })(),
+      self.clients.claim(),
+    ])
   );
 });
 
-self.addEventListener("activate", (e) => {
-  // Claim clients immediately so the worker takes over the current page
-  e.waitUntil(self.clients.claim());
-  e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
-  );
-});
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
 
-self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
-  
-  // 1. Handle Navigation Requests (e.g., /home, /search, or PWA startup)
-  // For any HTML page request, we MUST return index.html from cache if offline.
-  if (e.request.mode === "navigate" || (e.request.method === "GET" && e.request.headers.get("accept")?.includes("text/html"))) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match("/index.html"))
-    );
-    return;
-  }
+  // Only our own site is handled at all. Music streams, artwork and the catalog
+  // APIs (YouTube, JioSaavn, Audius, ...) are left completely untouched so
+  // playback behaves exactly as it would with no worker registered.
+  if (url.origin !== self.location.origin) return;
+  if (event.request.method !== "GET") return;
 
-  // 2. We only cache our own app assets (JS, CSS, Images from our domain)
-  // We NEVER cache the music API calls (JioSaavn, Audius) here, nor the MP3 streams
-  if (url.origin !== location.origin) return;
-
-  // 3. Static Assets (JS, CSS) — Network First, fallback to Cache
-  // Vite generates new filenames for JS/CSS on every build (e.g., index-xyz.js).
-  // Network-first ensures users get the latest app if online.
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        // Save the valid new asset to cache
-        if (res && res.status === 200 && res.type === "basic") {
-          const clone = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, clone));
-        }
-        return res;
-      })
-      .catch(() => {
-        // If offline, serve from cache
-        return caches.match(e.request);
-      })
-  );
-});
-
-// Immediately notify clients when a new service worker is installed
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  // Pure passthrough: the network answers, or the browser shows its own offline
+  // page. Never a cached copy — the newest build is always what you get.
+  event.respondWith(fetch(event.request));
 });

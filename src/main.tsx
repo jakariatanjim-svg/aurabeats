@@ -17,28 +17,12 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-// Register service worker for PWA install + offline app shell
+// Register the service worker. It exists only so the site stays installable as
+// a PWA — it caches nothing (see public/sw.js), so the site behaves like any
+// standard website served live from Cloudflare Pages and a reload always gets
+// the newest build. No update polling, no cache invalidation, no auto-reload.
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").then((registration) => {
-      registration.addEventListener("updatefound", () => {
-        const newWorker = registration.installing;
-        if (newWorker) {
-          newWorker.addEventListener("statechange", () => {
-            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              newWorker.postMessage({ type: "SKIP_WAITING" });
-            }
-          });
-        }
-      });
-    }).catch(() => {});
-    
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    });
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }

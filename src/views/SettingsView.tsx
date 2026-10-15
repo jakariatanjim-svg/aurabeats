@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   ArrowRight,
   Database,
-  DownloadCloud,
   Info,
   Moon,
   Palette,
@@ -25,6 +24,17 @@ import { Button, SectionHeader } from "@/components/ui";
 /** Environment detection */
 const isCapacitor = typeof window !== "undefined" && Boolean((window as any).Capacitor?.isNativePlatform?.());
 const isApp = isCapacitor;
+
+/**
+ * Running as an installed PWA (own window, no browser chrome) rather than a
+ * plain browser tab. The version stamp is shown for the two "app" forms — an
+ * installed PWA and the Android build — while the plain website stays a plain
+ * website: served live from Cloudflare Pages, nothing cached, nothing stamped.
+ */
+const isPwaInstalled =
+  typeof window !== "undefined" &&
+  (window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true);
 
 function StatusItem({ name, status, latency }: { name: string; status: "Online" | "Testing..." | "Offline"; latency: string }) {
   const isTesting = status === "Testing...";
@@ -296,51 +306,23 @@ export function SettingsView() {
           </div>
           <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2">
             {!isApp ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (navigator.serviceWorker) {
-                      navigator.serviceWorker.getRegistration().then(reg => {
-                        if (reg) {
-                          reg.update();
-                          toast("Checking for web updates...", "info");
-                        } else {
-                          toast("No updater found in this browser", "error");
-                        }
-                      });
-                    }
-                  }}
-                  className="justify-start w-full"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" /> Check Web Update
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (!window.confirm("Force reinstall? This fixes missing logos/bugs by clearing app cache. Your playlists and history will be safe.")) return;
-                    window.caches.keys().then((keys) => {
-                      Promise.all(keys.map((k) => window.caches.delete(k))).then(() => {
-                        if (navigator.serviceWorker) {
-                          navigator.serviceWorker.getRegistrations().then((regs) => {
-                            regs.forEach(reg => reg.unregister());
-                            toast("Cache cleared! Reinstalling web app...", "success");
-                            setTimeout(() => window.location.reload(), 800);
-                          });
-                        } else {
-                          window.location.reload();
-                        }
-                      });
-                    });
-                  }}
-                  className="justify-start w-full border-sky-500/30 text-sky-400 hover:border-sky-500 hover:text-sky-300"
-                >
-                  <DownloadCloud className="h-3.5 w-3.5" /> Force Web Reinstall
-                </Button>
-                <p className="text-[10px] text-ink3 leading-relaxed sm:col-span-2 -mt-1">
-                  If installed as PWA, uninstall the app from your device and reinstall it to update the home screen icon. Your data (playlists, history) will stay safe in the browser.
-                </p>
-              </>
+              // A standard live website: there is no app cache to check, clear
+              // or reinstall. An installed PWA only needs a reload to pick up
+              // whatever Cloudflare Pages is serving right now.
+              isPwaInstalled ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.location.reload()}
+                    className="justify-start w-full sm:col-span-2"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Reload App
+                  </Button>
+                  <p className="text-[10px] text-ink3 leading-relaxed sm:col-span-2 -mt-1">
+                    Runs live from Cloudflare Pages — nothing is cached on this device, so a reload always gets the newest build.
+                  </p>
+                </>
+              ) : null
             ) : (
               <>
                 <Button
@@ -364,11 +346,14 @@ export function SettingsView() {
               </>
             )}
 
-            {/* Which build is installed — the version the release pipeline stamped. */}
-            <p className="text-[10px] text-ink3 sm:col-span-full">
-              App version <span className="font-bold text-ink2">{installedVersionLabel()}</span>
-              {isApp ? "" : " · the site refreshes itself through the service worker"}
-            </p>
+            {/* Which build is installed — stamped automatically by the release
+                pipeline. Shown for the installed PWA and the Android app; the
+                plain website stays unbranded. */}
+            {(isApp || isPwaInstalled) && (
+              <p className="text-[10px] text-ink3 sm:col-span-full">
+                App version <span className="font-bold text-ink2">{installedVersionLabel()}</span>
+              </p>
+            )}
 
             <Button
               variant="outline"
