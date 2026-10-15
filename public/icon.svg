@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <!-- Waveform bars — small tall tall small (matches icon-512.png) -->
+  <rect x="100" y="200" width="58" height="148" rx="29" fill="white"/>
+  <rect x="188" y="110" width="58" height="292" rx="29" fill="white"/>
+  <rect x="276" y="110" width="58" height="292" rx="29" fill="white"/>
+  <rect x="364" y="200" width="58" height="148" rx="29" fill="white"/>
+</svg>

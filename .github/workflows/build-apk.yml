@@ -1,0 +1,71 @@
+name: "Auto: Android APK"
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Build APK & Upload to Latest Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Setup Capacitor Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Set App Icon
+        run: |
+          for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher.png" 2>/dev/null || true
+            cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher_round.png" 2>/dev/null || true
+            cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher_foreground.png" 2>/dev/null || true
+          done
+
+      - name: Patch Kotlin stdlib conflict
+        run: |
+          cat >> android/build.gradle << 'EOF'
+
+          subprojects {
+              configurations.all {
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+              }
+          }
+          EOF
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk AuraBeats.apk
+
+      - name: Upload APK to latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing release found, skipping."
+            exit 0
+          fi
+          gh release upload "$LATEST_TAG" AuraBeats.apk --clobber
