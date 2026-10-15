@@ -1,17 +1,115 @@
-name: "Manual: Android APK"
+# Manual APK build — attaches the Android package to an existing release.
+#
+# Nothing runs automatically. The branch dropdown at the top of the run dialog
+# ("Use workflow from") is the build selector:
+#
+#   default branch (main) -> PRODUCTION. The APK is built, signed with the
+#                            committed keystore, stamped with the version of the
+#                            release marked "latest", and uploaded into that
+#                            release as `AuraBeats.apk`. No new tag, no new
+#                            release, no version bump — versions are minted by
+#                            "Manual: Website Build" only.
+#   any other branch      -> TEST. Same build, but nothing is published: no
+#                            upload, no tag, no release edits. The APK is
+#                            uploaded as a run artifact to sideload and verify.
+#
+# Stamping the APK with the latest release's version is what makes the in-app
+# updater honest: the app compares its own baked-in version against the release
+# version and only offers a download when the release is strictly newer, so it
+# can never "update" itself to the build it already is.
+name: "Manual: APK Build"
 
 on:
-  workflow_dispatch:
+  workflow_dispatch
+
+# Serialized so two runs cannot upload over each other.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
   apk:
-    name: Manual APK → Overwrite Latest Release
+    name: APK build (${{ github.ref_name }})
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # main (or whatever the repo's default branch is) -> upload to the release.
+      # Anything else -> artifact only.
+      - name: Resolve build mode
+        id: mode
+        run: |
+          DEFAULT_BRANCH=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.default_branch')
+          BRANCH="$GITHUB_REF_NAME"
+          if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
+            MODE="release"
+          else
+            MODE="artifact"
+          fi
+          {
+            echo "default_branch=$DEFAULT_BRANCH"
+            echo "branch=$BRANCH"
+            echo "mode=$MODE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Branch '$BRANCH' (default '$DEFAULT_BRANCH') -> mode: $MODE"
+
       - uses: actions/checkout@v4
+
+      # The release marked "latest" is the target — the very same endpoint the
+      # app queries (/releases/latest), so build and client always agree.
+      - name: Resolve target release + version
+        id: target
+        run: |
+          MODE="${{ steps.mode.outputs.mode }}"
+          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
+
+          if [ -n "$LATEST_TAG" ]; then
+            TAG="$LATEST_TAG"
+            VERSION=$(printf '%s' "$LATEST_TAG" | python3 -c 'import re,sys; m=re.fullmatch(r"v?(\d+)\.(\d+)", sys.stdin.read().strip()); print("%d.%d" % (int(m.group(1)), int(m.group(2))) if m else "")')
+            if [ -z "$VERSION" ]; then
+              echo "::error::Latest release tag '$LATEST_TAG' carries no MAJOR.MINOR version. Run 'Manual: Website Build' to publish a versioned release first."
+              exit 1
+            fi
+          elif [ "$MODE" = "release" ]; then
+            echo "::error::No release exists yet. Run 'Manual: Website Build' on the default branch first — this workflow only attaches an APK to an existing release."
+            exit 1
+          else
+            # Test build with no release to point at: label it with the version
+            # the next production run would mint.
+            TAG=""
+            gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
+            VERSION=$(python3 - /tmp/tags.txt <<'PY'
+          import re, sys
+
+          highest = None
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              for line in fh:
+                  m = re.fullmatch(r"v?(\d+)\.(\d)", line.strip())
+                  if not m:
+                      continue
+                  pair = (int(m.group(1)), int(m.group(2)))
+                  if highest is None or pair > highest:
+                      highest = pair
+
+          if highest is None:
+              print("1.0")
+          elif highest[1] < 9:
+              print("%d.%d" % (highest[0], highest[1] + 1))
+          else:
+              print("%d.0" % (highest[0] + 1))
+          PY
+          ) || exit 1
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+          echo "Target release: '${TAG:-<none>}' -> version $VERSION"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -22,20 +120,113 @@ jobs:
           java-version: 21
 
       - run: npm ci
-      - run: npm run build
+      - run: npx tsc --noEmit
+
+      # The WebView bundle inside the APK must know its own version — that is
+      # what the in-app updater compares against the latest release.
+      - name: Build web bundle
+        env:
+          APP_VERSION: ${{ steps.target.outputs.version }}
+        run: npm run build
 
       - name: Setup Capacitor Android
         run: |
           npx cap add android
           npx cap sync android
 
-      - name: Set App Icon
+      - name: Set app icon
         run: |
           for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
             cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher.png" 2>/dev/null || true
             cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher_round.png" 2>/dev/null || true
             cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher_foreground.png" 2>/dev/null || true
           done
+
+      # versionName is the human version; versionCode must strictly increase or
+      # Android treats the APK as a downgrade and refuses to install it over the
+      # running app. major*10 + minor keeps both in lockstep with 1.0 -> 1.9 ->
+      # 2.0 (10 -> 19 -> 20).
+      - name: Stamp APK version
+        id: stamp
+        run: |
+          VERSION="${{ steps.target.outputs.version }}"
+          VERSION_CODE=$(python3 -c "
+          major, minor = [int(p) for p in '$VERSION'.split('.')[:2]]
+          print(major * 10 + minor)
+          ") || exit 1
+
+          python3 - "$VERSION" "$VERSION_CODE" <<'PY'
+          import pathlib, re, sys
+
+          version, code = sys.argv[1], sys.argv[2]
+          path = pathlib.Path("android/app/build.gradle")
+          text = path.read_text()
+          text, hits_code = re.subn(r"versionCode\s+\d+", "versionCode %s" % code, text, count=1)
+          text, hits_name = re.subn(r'versionName\s+"[^"]*"', 'versionName "%s"' % version, text, count=1)
+          if hits_code != 1 or hits_name != 1:
+              print("::error::Could not patch versionCode/versionName in %s" % path)
+              raise SystemExit(1)
+          path.write_text(text)
+          print("versionName %s / versionCode %s" % (version, code))
+          PY
+
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+      # Without this the package installer is never offered the downloaded APK
+      # and FileOpener's intent dies with ActivityNotFound on Android 8+.
+      - name: Allow in-app APK install
+        run: |
+          python3 - <<'PY'
+          import pathlib
+
+          path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
+          if "REQUEST_INSTALL_PACKAGES" in text:
+              print("REQUEST_INSTALL_PACKAGES already declared")
+              raise SystemExit(0)
+
+          permission = '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />'
+          anchor = '<uses-permission android:name="android.permission.INTERNET" />'
+          if anchor in text:
+              text = text.replace(anchor, anchor + "\n    " + permission, 1)
+          else:
+              text = text.replace("</manifest>", "    " + permission + "\n</manifest>", 1)
+          path.write_text(text)
+          print("Declared REQUEST_INSTALL_PACKAGES")
+          PY
+
+      # A fresh runner has no ~/.android/debug.keystore, so Gradle would invent
+      # a new identity on every run and updates could never install in place.
+      # signing/ holds one committed keystore instead (see signing/README.md).
+      - name: Sign with the committed keystore
+        run: |
+          if [ ! -f signing/keystore.properties ] || [ ! -f signing/aurabeats.keystore ]; then
+            echo "::warning::signing/ not found on this branch — falling back to the runner's throwaway debug key. This APK will NOT install over an existing build."
+            exit 0
+          fi
+
+          cat >> android/app/build.gradle <<'EOF'
+
+          // --- appended by CI: one stable signing identity for every APK ---
+          android {
+              signingConfigs {
+                  stable {
+                      def propsFile = file("../../signing/keystore.properties")
+                      def props = new Properties()
+                      propsFile.withInputStream { props.load(it) }
+                      storeFile new File(propsFile.parentFile, props.getProperty("storeFileName", "aurabeats.keystore"))
+                      storePassword props.getProperty("storePassword")
+                      keyAlias props.getProperty("keyAlias")
+                      keyPassword props.getProperty("keyPassword")
+                  }
+              }
+              buildTypes {
+                  debug { signingConfig signingConfigs.stable }
+                  release { signingConfig signingConfigs.stable }
+              }
+          }
+          EOF
+          echo "Stable signing enabled (signing/aurabeats.keystore)"
 
       - name: Patch Kotlin stdlib conflict
         run: |
@@ -56,25 +247,95 @@ jobs:
           ./gradlew assembleDebug --no-daemon
 
       - name: Collect APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk AuraBeats.apk
-
-      - name: Overwrite APK in latest release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No existing release found."
-            exit 1
-          fi
-          gh release upload "$LATEST_TAG" AuraBeats.apk --clobber
+          cp android/app/build/outputs/apk/debug/app-debug.apk AuraBeats.apk
+          ls -lh AuraBeats.apk
 
-      # Keep the release body's build stamp truthful: after an overwrite the
-      # release contains THIS commit's APK, and the in-app update check
-      # compares that stamp against the SHA baked into each build.
-      - name: Stamp release body with built commit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Proof in the log that this APK carries the same signing identity as the
+      # previous one — the precondition for installing an update in place.
+      - name: Record signing identity
         run: |
-          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
-          gh release edit "$LATEST_TAG" --body "Auto build · ${{ github.sha }}"
+          keytool -printcert -jarfile AuraBeats.apk 2>/dev/null | grep -Ei "^Owner|SHA256:" | head -4
+          echo "If the SHA256 fingerprint above differs from the previous run, in-place updates will be rejected by Android."
+
+      # ---------------- production: push into the latest release ----------------
+      - name: Upload APK to release
+        if: steps.mode.outputs.mode == 'release'
+        run: |
+          TAG="${{ steps.target.outputs.tag }}"
+          gh release upload "$TAG" AuraBeats.apk --clobber
+          echo "Uploaded AuraBeats.apk to $TAG"
+
+      # Keep the notes truthful: the release now contains THIS commit's APK, and
+      # the line is replaced (not appended) on every rebuild.
+      - name: Record the APK build in the release notes
+        if: steps.mode.outputs.mode == 'release'
+        run: |
+          TAG="${{ steps.target.outputs.tag }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILT_AT="$(date -u '+%Y-%m-%d %H:%M UTC')"
+
+          printf -- '- Android APK: built from `%s` on %s (versionName %s, versionCode %s, signed with signing/aurabeats.keystore)\n' \
+            "$SHORT_SHA" "$BUILT_AT" "${{ steps.target.outputs.version }}" "${{ steps.stamp.outputs.version_code }}" > /tmp/apk-line.txt
+
+          gh release view "$TAG" --json body --jq '.body' > /tmp/body.md 2>/dev/null || : > /tmp/body.md
+
+          python3 - /tmp/body.md /tmp/apk-line.txt > /tmp/new-body.md <<'PY'
+          import pathlib, re, sys
+
+          body = pathlib.Path(sys.argv[1]).read_text()
+          line = pathlib.Path(sys.argv[2]).read_text().rstrip("\n")
+
+          # Replace the placeholder ("run Manual: APK Build ...") or a previous
+          # APK line; otherwise append.
+          pattern = re.compile(r"^- Android(?: APK)?:.*$", re.MULTILINE)
+          if pattern.search(body):
+              body = pattern.sub(lambda _m: line, body, count=1)
+          else:
+              body = body.rstrip("\n") + "\n" + line + "\n"
+
+          print(body)
+          PY
+
+          gh release edit "$TAG" --notes-file /tmp/new-body.md
+          echo "Release notes updated for $TAG"
+
+      # ---------------- test branch: artifact only ----------------
+      # Branch names may contain characters that are invalid in artifact names
+      # (slash, colon, ...), so derive a safe label first.
+      - name: Prepare artifact label
+        if: steps.mode.outputs.mode == 'artifact'
+        id: label
+        run: |
+          SAFE_REF=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'a-zA-Z0-9._-' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//')
+          {
+            echo "ref=$SAFE_REF"
+            echo "sha=${GITHUB_SHA::7}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload test artifact
+        if: steps.mode.outputs.mode == 'artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuraBeats-${{ steps.label.outputs.ref }}-${{ steps.label.outputs.sha }}-v${{ steps.target.outputs.version }}
+          path: AuraBeats.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### AuraBeats APK build"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Branch | \`$GITHUB_REF_NAME\` |"
+            echo "| Mode | \`${{ steps.mode.outputs.mode }}\` |"
+            echo "| Version | \`v${{ steps.target.outputs.version }}\` (versionCode ${{ steps.stamp.outputs.version_code }}) |"
+            if [ "${{ steps.mode.outputs.mode }}" = "release" ]; then
+              echo "| Pushed into | [${{ steps.target.outputs.tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.target.outputs.tag }}) |"
+            else
+              echo "| Pushed into | nothing — test branch, sideload the APK from **Artifacts** |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

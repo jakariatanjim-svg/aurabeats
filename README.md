@@ -60,32 +60,61 @@ No builds, no installs — AuraBeats is already live:
 2. **PWA** — install it from the browser menu for a native-app feel (see below).
 3. **Android APK** — grab `AuraBeats.apk` from the [latest GitHub Release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest); afterwards the app updates itself from Settings.
 
-New versions are built, packaged and published automatically by GitHub Actions on every push to `main` — there is nothing to compile by hand.
+Nothing is published automatically: every release is a deliberate **Run workflow** press in the Actions tab (see [GitHub Actions](#-github-actions)).
 
 ---
 
 ## 📦 Distribution
 
-- **Website / PWA** — the primary target. Host `dist/` anywhere static (Cloudflare Pages recommended) and install it as a PWA on Android, iOS, or any desktop browser.
-- **Android APK** — built by the APK workflows and attached to GitHub Releases; the in-app **Check App Update** button picks new versions up.
+- **Website / PWA** — the primary target. Download `aurabeats-web.zip` from a release and upload its contents to Cloudflare Pages; install it as a PWA on Android, iOS, or any desktop browser.
+- **Android APK** — built by `Manual: APK Build` and attached to the latest GitHub Release as `AuraBeats.apk`; the in-app **Check App Update** button picks new versions up.
 - **No desktop installer** — the project is web-first by design. On PC, use the website directly or install the PWA from Chrome/Edge.
 
 ---
 
 ## 🔄 GitHub Actions
 
-Builds and releases are automated; the workflows live in `.github/workflows/`:
+Two manual workflows and nothing else — there are no push triggers, so a commit
+(or an agent session) can never publish anything by itself. Both live in
+`.github/workflows/`:
 
-| Workflow | Trigger | What it does |
+| Workflow | On the **default branch** (`main`) | On **any other branch** |
 | --- | --- | --- |
-| `build.yml` — Auto: Web Build & Release | push to `main` | type-check, build, create a timestamped GitHub Release (e.g. `2026.09.25-42`) with the ready-to-host ZIP |
-| `build-apk.yml` — Auto: Android APK | push to `main` | build a debug APK and upload it into the latest release |
-| `manual-web.yml` — Manual: Web Build | `workflow_dispatch` | rebuild the web bundle and overwrite the files in the latest release |
-| `manual-apk.yml` — Manual: Android APK | `workflow_dispatch` | rebuild the APK and overwrite it in the latest release |
-| `branch-web.yml` — Manual: Branch Web Build | `workflow_dispatch` (one button, nothing to pick) | builds the newest non-main branch and saves a run artifact; never touches releases |
-| `branch-apk.yml` — Manual: Branch APK Build | `workflow_dispatch` (one button, nothing to pick) | builds the newest non-main branch and saves a run artifact; never touches releases |
+| `manual-web.yml` — **Manual: Website Build** | mints the next version, creates the tag **and** the GitHub Release, attaches `aurabeats-web.zip` (the `dist/` bundle for Cloudflare Pages) | builds the same ZIP and uploads it as a run **artifact** only — no tag, no release |
+| `manual-apk.yml` — **Manual: APK Build** | builds and signs the APK, stamps it with the latest release's version and pushes `AuraBeats.apk` into **that** release | builds the same APK and uploads it as a run **artifact** only — no release is touched |
 
-Branch builds exist for testing work-in-progress code without any automatic trigger: press the button and the run itself picks the newest branch other than `main` (the one the current Arena session works on), then download the ZIP/APK from the run's **Artifacts** section. Releases are only ever created or updated by the `main` pipelines or a manual dispatch.
+The branch is picked with the **"Use workflow from"** dropdown at the top of the
+run dialog: default branch = production release, any other branch = a test run
+you can sideload and inspect before releasing it for real.
+
+### Versioning
+
+Versions are automatic and monotonic — no dates, no run counters:
+
+```
+1.0 → 1.1 → 1.2 → … → 1.9 → 2.0 → 2.1 → …
+```
+
+**Manual: Website Build** reads the highest existing `vX.Y` tag and mints the
+next one (the very first run gives `v1.0`), then tags the release `v1.4` and
+titles it `AuraBeats — v1.4`. Its run dialog has an optional **version
+override** field — leave it empty to auto-advance.
+
+**Manual: APK Build** never mints a version. It stamps the APK with the version
+of the release marked *latest* and pushes the APK into that same release, so the
+package always agrees with the release it lives in. Android receives
+`versionName 1.4` / `versionCode 14` (`MAJOR × 10 + MINOR`), which keeps updates
+from ever looking like a downgrade.
+
+A normal release is therefore two runs: **Website Build** (creates `v1.4`) then
+**APK Build** (fills `v1.4` with `AuraBeats.apk`).
+
+### Signing
+
+Every APK is signed with the keystore committed in [`signing/`](signing/) — see
+its README for why that is safe and why it is required. A stable signature is
+what makes in-place updates possible: Android only installs an update over a
+running app when both APKs share one signing identity.
 
 ---
 
@@ -102,8 +131,26 @@ AuraBeats is a fully installable Progressive Web App — works like a native app
 1. Open [aurabeats.pages.dev](https://aurabeats.pages.dev/) in **Safari**.
 2. Tap the **Share button** and scroll down to **"Add to Home Screen"**.
 
-### 🔄 Auto-Updates
-The app checks for updates silently in the background every time it is opened. When a new version is found, it will automatically refresh the app shell to ensure you are always on the latest version.
+### 🔄 Updates
+
+**Website / PWA** — the service worker checks silently every time the app is
+opened and refreshes the app shell when a newer build is hosted, so the site
+stays current without any action.
+
+**Android APK** — a real in-app updater:
+
+1. Settings queries the [latest release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
+   as soon as the screen opens and compares **versions**, not commit hashes: a
+   download is offered only when the published version is *strictly newer* than
+   the installed one. Equal means "you are on the latest version" — the app
+   never re-installs the build it already is.
+2. The button turns into **Update to v1.4** and the APK downloads **inside the
+   app** with a live progress bar — no browser hop, no notification shade.
+3. When the download finishes, Android's package installer opens by itself and
+   the update installs in place, so playlists, history and offline downloads all
+   survive.
+
+The installed build is always visible in Settings (**App version v1.4**).
 
 ---
 
