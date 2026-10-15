@@ -97,8 +97,17 @@ Versions are automatic and monotonic — no dates, no run counters:
 
 **Manual: Website Build** reads the highest existing `vX.Y` tag and mints the
 next one (the very first run gives `v1.0`), then tags the release `v1.4` and
-titles it `AuraBeats — v1.4`. Its run dialog has an optional **version
-override** field — leave it empty to auto-advance.
+titles it `AuraBeats — v1.4`.
+
+Its run dialog also has an optional **version override** field (`3`, `3.0` and
+`v3.0` are all accepted); leave it empty to auto-advance. An override is
+published as an ordinary tag, so it becomes the **new baseline**: override
+`v3.0` while `v1.5` is the newest and the next automatic run mints `v3.1` — it
+never falls back to `v1.6`. Overriding *downwards* is allowed but prints a
+warning, because the sequence still continues after the highest tag: versions
+have to stay monotonic or installed apps stop seeing updates. Overrides only
+matter on a production run — a test-branch run creates no tag, so it can neither
+consume nor move a version.
 
 **Manual: APK Build** never mints a version. It stamps the APK with the version
 of the release marked *latest* and pushes the APK into that same release, so the

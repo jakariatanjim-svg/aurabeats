@@ -16,13 +16,19 @@
 # -> 2.1 ... The number is derived from the highest existing `vX.Y` tag, so one
 # run on the default branch produces exactly one new version. No dates, no run
 # counters.
+#
+# An override is published as an ordinary tag, so it becomes the new baseline:
+# override v3.0 at a time when v1.5 is the newest, and the next automatic run
+# mints v3.1 — it never falls back to v1.6. Overriding downwards is allowed but
+# warns, because the sequence still continues after the highest tag (versions
+# must stay monotonic or installed apps stop seeing updates).
 name: "Manual: Website Build"
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version override — leave empty for the next automatic version (1.0 → 1.1 → … → 1.9 → 2.0)"
+        description: "Version override (e.g. 3 or 1.4) — leave empty for the next automatic version. An override becomes the new baseline: the next auto run continues after it (v3.0 → v3.1), never back at the old sequence."
         required: false
         default: ""
         type: string
@@ -68,54 +74,83 @@ jobs:
         id: version
         env:
           VERSION_OVERRIDE: ${{ inputs.version }}
+          MODE: ${{ steps.mode.outputs.mode }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
 
-          VERSION=$(python3 - /tmp/tags.txt <<'PY'
-          import os, re, sys
+          # Python writes $GITHUB_OUTPUT itself on purpose: the version must
+          # never share a captured stdout stream with ::warning::/::error::
+          # annotations, or the annotation text ends up inside the value.
+          python3 - /tmp/tags.txt <<'PY'
+          import os, re, subprocess, sys
 
           override = os.environ.get("VERSION_OVERRIDE", "").strip()
+          mode = os.environ.get("MODE", "")
 
-          if override:
-              m = re.fullmatch(r"v?(\d+)\.(\d+)", override)
-              if not m:
-                  # Workflow commands are only parsed from stdout.
-                  print("::error::Version override '%s' must look like 1.4 (MAJOR.MINOR)." % override)
-                  raise SystemExit(1)
-              print("%d.%d" % (int(m.group(1)), int(m.group(2))))
-              raise SystemExit(0)
-
-          # Highest existing vX.Y tag wins; minor only ever runs 0-9, so 1.9
-          # rolls over to 2.0. Unrelated tags (legacy date stamps) are ignored.
+          # Highest existing vX.Y tag wins; the minor only ever runs 0-9, so
+          # 1.9 rolls over to 2.0. Unrelated tags (legacy date stamps) are
+          # ignored, and the raw set is kept for collision checks.
+          raw = set()
           highest = None
           with open(sys.argv[1], encoding="utf-8") as fh:
               for line in fh:
-                  m = re.fullmatch(r"v?(\d+)\.(\d)", line.strip())
+                  tag = line.strip()
+                  if not tag:
+                      continue
+                  raw.add(tag)
+                  m = re.fullmatch(r"v?(\d+)\.(\d)", tag)
                   if not m:
                       continue
                   pair = (int(m.group(1)), int(m.group(2)))
                   if highest is None or pair > highest:
                       highest = pair
 
-          if highest is None:
-              print("1.0")
-          elif highest[1] < 9:
-              print("%d.%d" % (highest[0], highest[1] + 1))
+          def after(pair):
+              major, minor = pair
+              return (major, minor + 1) if minor < 9 else (major + 1, 0)
+
+          def fail(message):
+              # Workflow commands are only parsed from stdout.
+              print("::error::" + message)
+              raise SystemExit(1)
+
+          if override:
+              # "3" means 3.0; "3.7" and "v3.7" work too.
+              m = re.fullmatch(r"v?(\d+)(?:\.(\d+))?", override)
+              if not m:
+                  fail("Version override '%s' must look like 3 or 1.4." % override)
+              chosen = (int(m.group(1)), int(m.group(2) or 0))
+              if highest and chosen < highest:
+                  # Allowed, but spell out the consequence: the sequence always
+                  # continues after the HIGHEST tag, never after a lower
+                  # override. Versions have to stay monotonic or installed apps
+                  # stop seeing updates.
+                  print("::warning::v%d.%d is older than the highest published v%d.%d — "
+                        "the next automatic run continues from v%d.%d, not from this override."
+                        % (chosen + highest + after(highest)))
+              version = "%d.%d" % chosen
           else:
-              print("%d.0" % (highest[0] + 1))
+              # Automatic. A published override is an ordinary tag, so the next
+              # run simply continues after it: override v3.0 -> next auto v3.1.
+              # It never falls back to the pre-override sequence.
+              version = "%d.%d" % (after(highest) if highest else (1, 0))
+
+          # Only a production run publishes anything, so only a production run
+          # can collide. Test-branch runs just label an artifact.
+          if mode == "release":
+              for existing in ("v" + version, version):
+                  if existing in raw:
+                      fail("Tag %s already exists — leave the override empty to auto-advance, or pick a free version." % existing)
+              published = subprocess.run(
+                  ["gh", "release", "view", "v" + version],
+                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+              if published:
+                  fail("Release v%s already exists — leave the override empty to auto-advance, or pick a free version." % version)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("version=%s\ntag=v%s\n" % (version, version))
+          print("Version for this run: v%s" % version)
           PY
-          ) || exit 1
-
-          if [ "${{ steps.mode.outputs.mode }}" = "release" ] && gh release view "v$VERSION" >/dev/null 2>&1; then
-            echo "::error::Release v$VERSION already exists. Leave the override empty to auto-advance, or pick a free version."
-            exit 1
-          fi
-
-          {
-            echo "version=$VERSION"
-            echo "tag=v$VERSION"
-          } >> "$GITHUB_OUTPUT"
-          echo "Version for this run: v$VERSION"
 
       - uses: actions/setup-node@v4
         with:
