@@ -7,6 +7,17 @@ A free music streaming app that brings songs, radio and more together in one sim
 **Source code:** [github.com/jakariatanjim-svg/aurabeats](https://github.com/jakariatanjim-svg/aurabeats)
 
 [![Website](https://img.shields.io/badge/Website-aurabeats.pages.dev-7c5cff?style=for-the-badge)](https://aurabeats.pages.dev/)
+[![Android APK](https://img.shields.io/badge/Android-APK-3ddc84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
+[![PWA](https://img.shields.io/badge/PWA-Installable-5a0fc8?style=for-the-badge&logo=pwa&logoColor=white)](#install-as-an-app-pwa)
+![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Android%20%7C%20Desktop-38bdf8?style=for-the-badge)
+![Sources](https://img.shields.io/badge/Music%20Sources-7-ff6b6b?style=for-the-badge)
+![Cost](https://img.shields.io/badge/Cost-100%25%20Free-22c55e?style=for-the-badge)
+![Account](https://img.shields.io/badge/Account-No%20Sign--up-f59e0b?style=for-the-badge)
+
+![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7-646cff?style=flat-square&logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)
 
 ---
 
