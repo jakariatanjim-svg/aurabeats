@@ -1,0 +1,102 @@
+# Website test build. Runs on any branch, publishes nothing: no tag, no release.
+# The artifact is the built site itself, so the downloaded ZIP can be inspected
+# locally or uploaded straight to Cloudflare Pages.
+#
+# The version baked into the bundle is the one the next release would mint. It is
+# a label only — this workflow never advances the published sequence.
+name: "Website — Test Build"
+
+on: workflow_dispatch
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  artifact:
+    name: Website artifact (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
+
+          VERSION=$(python3 - /tmp/tags.txt <<'PY'
+          import re, sys
+
+          highest = None
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              for line in fh:
+                  m = re.fullmatch(r"v?(\d+)\.(\d)", line.strip())
+                  if not m:
+                      continue
+                  pair = (int(m.group(1)), int(m.group(2)))
+                  if highest is None or pair > highest:
+                      highest = pair
+
+          if highest is None:
+              print("1.0")
+          elif highest[1] < 9:
+              print("%d.%d" % (highest[0], highest[1] + 1))
+          else:
+              print("%d.0" % (highest[0] + 1))
+          PY
+          ) || exit 1
+
+          [ -n "$VERSION" ] || { echo "::error::Could not determine a version label."; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version label: v$VERSION (not published)"
+
+      - name: Prepare artifact label
+        id: label
+        run: |
+          # Branch names may contain characters that are invalid in artifact names.
+          SAFE_REF=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'a-zA-Z0-9._-' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//')
+          {
+            echo "ref=$SAFE_REF"
+            echo "sha=${GITHUB_SHA::7}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+      - name: Build
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run build
+
+      # dist/ is uploaded as-is: the artifact ZIP already contains the finished
+      # site, with no nested archive to unpack.
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aurabeats-web-${{ steps.label.outputs.ref }}-${{ steps.label.outputs.sha }}-v${{ steps.version.outputs.version }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Website test build"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Branch | \`$GITHUB_REF_NAME\` |"
+            echo "| Version label | \`v${{ steps.version.outputs.version }}\` |"
+            echo "| Published | nothing — download the artifact |"
+          } >> "$GITHUB_STEP_SUMMARY"

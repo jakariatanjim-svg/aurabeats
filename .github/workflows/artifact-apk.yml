@@ -1,0 +1,237 @@
+# APK test build. Runs on any branch, publishes nothing: no tag, no release, no
+# upload. The artifact is the signed APK itself, ready to sideload.
+#
+# The APK is stamped with the version of the release marked "latest", or with the
+# version the next release would mint when none exists. It is a label only — this
+# workflow never advances the published sequence.
+name: "APK — Test Build"
+
+on: workflow_dispatch
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  artifact:
+    name: APK artifact (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: |
+          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
+          gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
+
+          VERSION=$(python3 - "$LATEST_TAG" /tmp/tags.txt <<'PY'
+          import re, sys
+
+          def parse(tag):
+              m = re.fullmatch(r"v?(\d+)\.(\d+)", tag.strip())
+              return (int(m.group(1)), int(m.group(2))) if m else None
+
+          pair = parse(sys.argv[1]) if sys.argv[1].strip() else None
+          if pair is None:
+              highest = None
+              with open(sys.argv[2], encoding="utf-8") as fh:
+                  for line in fh:
+                      found = parse(line)
+                      if found and (highest is None or found > highest):
+                          highest = found
+              if highest is None:
+                  pair = (1, 0)
+              elif highest[1] < 9:
+                  pair = (highest[0], highest[1] + 1)
+              else:
+                  pair = (highest[0] + 1, 0)
+          print("%d.%d" % pair)
+          PY
+          ) || exit 1
+
+          [ -n "$VERSION" ] || { echo "::error::Could not determine a version label."; exit 1; }
+          {
+            echo "version=$VERSION"
+            echo "asset=AuraBeats-$VERSION.apk"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version label: v$VERSION (not published)"
+
+      - name: Prepare artifact label
+        id: label
+        run: |
+          # Branch names may contain characters that are invalid in artifact names.
+          SAFE_REF=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'a-zA-Z0-9._-' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//')
+          {
+            echo "ref=$SAFE_REF"
+            echo "sha=${GITHUB_SHA::7}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+      - name: Build
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run build
+
+      - name: Setup Capacitor Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Set app icon
+        run: |
+          for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher.png" 2>/dev/null || true
+            cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher_round.png" 2>/dev/null || true
+            cp public/icon-512.png "android/app/src/main/res/${dir}/ic_launcher_foreground.png" 2>/dev/null || true
+          done
+
+      # versionCode must strictly increase or Android refuses the APK as a
+      # downgrade. major*10 + minor tracks 1.0 -> 1.9 -> 2.0 as 10 -> 19 -> 20.
+      - name: Stamp APK version
+        id: stamp
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_CODE=$(python3 -c "
+          major, minor = [int(p) for p in '$VERSION'.split('.')[:2]]
+          print(major * 10 + minor)
+          ") || exit 1
+
+          python3 - "$VERSION" "$VERSION_CODE" <<'PY'
+          import pathlib, re, sys
+
+          version, code = sys.argv[1], sys.argv[2]
+          path = pathlib.Path("android/app/build.gradle")
+          text = path.read_text()
+          text, hits_code = re.subn(r"versionCode\s+\d+", "versionCode %s" % code, text, count=1)
+          text, hits_name = re.subn(r'versionName\s+"[^"]*"', 'versionName "%s"' % version, text, count=1)
+          if hits_code != 1 or hits_name != 1:
+              print("::error::Could not patch versionCode/versionName in %s" % path)
+              raise SystemExit(1)
+          path.write_text(text)
+          print("versionName %s / versionCode %s" % (version, code))
+          PY
+
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+      # Without this permission the installer intent fails on Android 8+.
+      - name: Allow in-app APK install
+        run: |
+          python3 - <<'PY'
+          import pathlib
+
+          path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
+          if "REQUEST_INSTALL_PACKAGES" in text:
+              print("REQUEST_INSTALL_PACKAGES already declared")
+              raise SystemExit(0)
+
+          permission = '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />'
+          anchor = '<uses-permission android:name="android.permission.INTERNET" />'
+          if anchor in text:
+              text = text.replace(anchor, anchor + "\n    " + permission, 1)
+          else:
+              text = text.replace("</manifest>", "    " + permission + "\n</manifest>", 1)
+          path.write_text(text)
+          print("Declared REQUEST_INSTALL_PACKAGES")
+          PY
+
+      # A fresh runner has no debug keystore, so Gradle would generate a new
+      # signing identity per run and updates could not install in place.
+      # signing/ holds one committed keystore (see signing/README.md).
+      - name: Sign with the committed keystore
+        run: |
+          if [ ! -f signing/keystore.properties ] || [ ! -f signing/aurabeats.keystore ]; then
+            echo "::warning::signing/ is missing on this branch. Falling back to the runner's debug key; this APK will not install over an existing build."
+            exit 0
+          fi
+
+          cat >> android/app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  stable {
+                      def propsFile = file("../../signing/keystore.properties")
+                      def props = new Properties()
+                      propsFile.withInputStream { props.load(it) }
+                      storeFile new File(propsFile.parentFile, props.getProperty("storeFileName", "aurabeats.keystore"))
+                      storePassword props.getProperty("storePassword")
+                      keyAlias props.getProperty("keyAlias")
+                      keyPassword props.getProperty("keyPassword")
+                  }
+              }
+              buildTypes {
+                  debug { signingConfig signingConfigs.stable }
+                  release { signingConfig signingConfigs.stable }
+              }
+          }
+          EOF
+          echo "Signing with signing/aurabeats.keystore"
+
+      - name: Resolve Kotlin stdlib conflict
+        run: |
+          cat >> android/build.gradle << 'EOF'
+
+          subprojects {
+              configurations.all {
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+              }
+          }
+          EOF
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk "${{ steps.version.outputs.asset }}"
+          ls -lh "${{ steps.version.outputs.asset }}"
+
+      - name: Record signing identity
+        run: |
+          keytool -printcert -jarfile "${{ steps.version.outputs.asset }}" 2>/dev/null | grep -Ei "^Owner|SHA256:" | head -4
+
+      # The APK is the only file in the artifact. Actions always wraps an
+      # artifact in a ZIP container on download; compression-level 0 keeps the
+      # already-compressed package from being recompressed.
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuraBeats-${{ steps.label.outputs.ref }}-${{ steps.label.outputs.sha }}-v${{ steps.version.outputs.version }}
+          path: ${{ steps.version.outputs.asset }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### APK test build"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Branch | \`$GITHUB_REF_NAME\` |"
+            echo "| Version label | \`v${{ steps.version.outputs.version }}\` (versionCode ${{ steps.stamp.outputs.version_code }}) |"
+            echo "| Published | nothing — download the artifact |"
+          } >> "$GITHUB_STEP_SUMMARY"

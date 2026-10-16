@@ -1,17 +1,120 @@
-name: "Manual: Web Build"
+# Website release pipeline. Computes the next version, builds the site, creates
+# the tag and the GitHub Release, and attaches the Cloudflare Pages bundle.
+# Versions are minted here only; "APK — Release" fills the release afterwards.
+#
+# Version scheme: 1.0 -> 1.1 -> ... -> 1.9 -> 2.0, derived from the highest
+# existing vX.Y tag. An override is published as an ordinary tag and therefore
+# becomes the baseline for the next automatic run.
+name: "Website — Release"
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override (e.g. 3 or 1.4). Leave empty for the next automatic version."
+        required: false
+        default: ""
+        type: string
+      confirm:
+        description: "Release from a non-default branch — required only when such a branch is selected"
+        required: false
+        default: false
+        type: boolean
+
+# Parallel runs would compute the same version and race for the same tag.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  web:
-    name: Manual Web Build → Overwrite Latest Release
+  release:
+    name: Website release (${{ github.ref_name }})
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Check branch
+        env:
+          CONFIRMED: ${{ inputs.confirm }}
+        run: |
+          DEFAULT_BRANCH=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.default_branch')
+          if [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ]; then
+            echo "Default branch selected: $GITHUB_REF_NAME"
+            exit 0
+          fi
+          if [ "$CONFIRMED" != "true" ]; then
+            echo "::error::$GITHUB_REF_NAME is not the default branch ($DEFAULT_BRANCH), and this workflow publishes a tag and a release. Re-run it with \"Release from a non-default branch\" enabled to continue, or use \"Website — Test Build\" for an artifact-only build."
+            exit 1
+          fi
+          echo "::warning::Publishing a release from $GITHUB_REF_NAME. The default branch is $DEFAULT_BRANCH."
+
       - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
+
+          # Python writes $GITHUB_OUTPUT directly so that annotation text can
+          # never end up inside a captured value.
+          python3 - /tmp/tags.txt <<'PY'
+          import os, re, subprocess, sys
+
+          override = os.environ.get("VERSION_OVERRIDE", "").strip()
+
+          raw = set()
+          highest = None
+          with open(sys.argv[1], encoding="utf-8") as fh:
+              for line in fh:
+                  tag = line.strip()
+                  if not tag:
+                      continue
+                  raw.add(tag)
+                  m = re.fullmatch(r"v?(\d+)\.(\d)", tag)
+                  if not m:
+                      continue
+                  pair = (int(m.group(1)), int(m.group(2)))
+                  if highest is None or pair > highest:
+                      highest = pair
+
+          def after(pair):
+              major, minor = pair
+              return (major, minor + 1) if minor < 9 else (major + 1, 0)
+
+          def fail(message):
+              print("::error::" + message)
+              raise SystemExit(1)
+
+          if override:
+              m = re.fullmatch(r"v?(\d+)(?:\.(\d+))?", override)
+              if not m:
+                  fail("Version override '%s' must look like 3 or 1.4." % override)
+              chosen = (int(m.group(1)), int(m.group(2) or 0))
+              if highest and chosen < highest:
+                  print("::warning::v%d.%d is older than the highest published v%d.%d. The next automatic run continues from v%d.%d."
+                        % (chosen + highest + after(highest)))
+              version = "%d.%d" % chosen
+          else:
+              version = "%d.%d" % (after(highest) if highest else (1, 0))
+
+          for existing in ("v" + version, version):
+              if existing in raw:
+                  fail("Tag %s already exists. Leave the override empty to auto-advance, or choose a free version." % existing)
+          published = subprocess.run(["gh", "release", "view", "v" + version],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+          if published:
+              fail("Release v%s already exists. Leave the override empty to auto-advance, or choose a free version." % version)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write("version=%s\ntag=v%s\n" % (version, version))
+          print("Version: v%s" % version)
+          PY
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -19,32 +122,49 @@ jobs:
 
       - run: npm ci
       - run: npx tsc --noEmit
-      - run: npm run build
+
+      # APP_VERSION is baked into the bundle (see vite.config.ts).
+      - name: Build
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run build
 
       - name: Package
         run: |
-          cp dist/index.html aurabeats-app.html
-          cd dist && zip -r ../aurabeats-web.zip . && cd ..
+          cd dist && zip -qr ../aurabeats-web.zip .
+          ls -lh ../aurabeats-web.zip
 
-      - name: Overwrite latest release files
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create release
         run: |
-          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No existing release found."
-            exit 1
-          fi
-          echo "Overwriting web files in release: $LATEST_TAG"
-          gh release upload "$LATEST_TAG" aurabeats-app.html --clobber
-          gh release upload "$LATEST_TAG" aurabeats-web.zip --clobber
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILT_AT="$(date -u '+%Y-%m-%d %H:%M UTC')"
 
-      # Keep the release body's build stamp truthful: after an overwrite the
-      # release contains THIS commit's bundle, and the in-app update check
-      # compares that stamp against the SHA baked into each build.
-      - name: Stamp release body with built commit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES=$(cat <<EOF
+          AuraBeats v$VERSION
+
+          - Website bundle: built from \`$SHORT_SHA\` on $BUILT_AT
+          - \`aurabeats-web.zip\` holds the \`dist/\` output. Unzip it and upload the contents to Cloudflare Pages.
+          - Android: run **APK — Release** to attach \`AuraBeats-$VERSION.apk\` to this release.
+          EOF
+          )
+
+          gh release create "$TAG" aurabeats-web.zip \
+            --target "$GITHUB_SHA" \
+            --title "AuraBeats — v$VERSION" \
+            --notes "$NOTES" \
+            --latest
+
+      - name: Summary
+        if: always()
         run: |
-          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
-          gh release edit "$LATEST_TAG" --body "Auto build · ${{ github.sha }}"
+          {
+            echo "### Website release"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Branch | \`$GITHUB_REF_NAME\` |"
+            echo "| Version | \`v${{ steps.version.outputs.version }}\` |"
+            echo "| Release | [${{ steps.version.outputs.tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}) |"
+          } >> "$GITHUB_STEP_SUMMARY"
