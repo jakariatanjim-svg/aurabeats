@@ -21,7 +21,13 @@ createRoot(document.getElementById("root")!).render(
 // a PWA — it caches nothing (see public/sw.js), so the site behaves like any
 // standard website served live from Cloudflare Pages and a reload always gets
 // the newest build. No update polling, no cache invalidation, no auto-reload.
-if ("serviceWorker" in navigator && location.protocol === "https:") {
+//
+// Web only: inside the Android build the bundle is served locally by
+// Capacitor, where a worker adds nothing and would only sit between the
+// WebView and its own asset server.
+const isNativeApp = Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+
+if (!isNativeApp && "serviceWorker" in navigator && location.protocol === "https:") {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
