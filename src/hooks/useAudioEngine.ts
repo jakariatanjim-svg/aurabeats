@@ -11,6 +11,7 @@ import {
   getYouTubeDuration,
   getYouTubeBuffered,
   resetYTCurrentId,
+  releaseYouTubeVideo,
 } from "@/services/youtubePlayer";
 
 export interface AudioEngine {
@@ -59,9 +60,13 @@ export function useAudioEngine(): AudioEngine {
   const [errorTick, setErrorTick] = useState(0);
   const [blockedTick, setBlockedTick] = useState(0);
 
-  // Initialize YT Player
+  /** Whether the user currently wants the YouTube track playing (vs. cued/paused). */
+  const ytWantPlayRef = useRef(false);
+
+  // Boot the YouTube player at startup so it is warm before the first tap.
+  // initYouTubePlayer retries on its own until the player is ready.
   useEffect(() => {
-    initYouTubePlayer();
+    void initYouTubePlayer();
   }, []);
 
   if (!audioRef.current && typeof window !== "undefined") {
@@ -85,14 +90,20 @@ export function useAudioEngine(): AudioEngine {
       currentYtIdRef.current = videoId;
       audioRef.current?.pause(); // Stop native audio
 
-      // playYouTubeVideo handles the case where player isn't ready yet (queues it)
-      // We call initYouTubePlayer in parallel to ensure the API script is loaded
-      initYouTubePlayer().catch(() => {});
-      playYouTubeVideo(videoId);
+      // Safe before the player is ready: the request is kept and started as
+      // soon as it is (after any boot retries). autoplay:false (a restored
+      // session after a refresh) only cues the track, like native audio.
+      const autoplay = opts.autoplay !== false;
+      ytWantPlayRef.current = autoplay;
+      if (!autoplay) setIsBuffering(false);
+      playYouTubeVideo(videoId, autoplay);
     } else {
       setIsYtMode(false);
       currentYtIdRef.current = null;
-      pauseYouTubeVideo(); // Stop YT player
+      ytWantPlayRef.current = false;
+      // Drop any pending YouTube request too, or a still-booting player would
+      // start it later on top of this stream.
+      releaseYouTubeVideo();
 
       const el = audioRef.current;
       if (el) {
@@ -117,8 +128,11 @@ export function useAudioEngine(): AudioEngine {
     }
   }, []);
 
+  // Transport controls key off currentYtIdRef (updated synchronously in load)
+  // instead of the isYtMode state, which lags one render behind.
   const play = useCallback(async () => {
-    if (isYtMode && currentYtIdRef.current) {
+    if (currentYtIdRef.current) {
+      ytWantPlayRef.current = true;
       playYouTubeVideo(currentYtIdRef.current);
     } else {
       try {
@@ -128,17 +142,26 @@ export function useAudioEngine(): AudioEngine {
         setError(err instanceof Error ? err.message : "Playback could not start");
       }
     }
-  }, [isYtMode]);
+  }, []);
 
   const pause = useCallback(() => {
-    if (isYtMode) pauseYouTubeVideo();
-    else audioRef.current?.pause();
-  }, [isYtMode]);
+    if (currentYtIdRef.current) {
+      ytWantPlayRef.current = false;
+      pauseYouTubeVideo();
+    } else audioRef.current?.pause();
+  }, []);
 
   const toggle = useCallback(() => {
-    if (isYtMode) {
-      if (isPlaying) pauseYouTubeVideo();
-      else playYouTubeVideo(currentYtIdRef.current!);
+    const ytId = currentYtIdRef.current;
+    if (ytId) {
+      if (isPlaying || ytWantPlayRef.current) {
+        ytWantPlayRef.current = false;
+        pauseYouTubeVideo();
+        setIsBuffering(false);
+      } else {
+        ytWantPlayRef.current = true;
+        playYouTubeVideo(ytId);
+      }
     } else {
       const el = audioRef.current;
       if (el) {
@@ -146,10 +169,10 @@ export function useAudioEngine(): AudioEngine {
         else el.pause();
       }
     }
-  }, [isYtMode, isPlaying, play]);
+  }, [isPlaying, play]);
 
   const seek = useCallback((seconds: number) => {
-    if (isYtMode) {
+    if (currentYtIdRef.current) {
       seekYouTubeVideo(seconds);
       setCurrentTime(seconds);
     } else {
@@ -161,33 +184,27 @@ export function useAudioEngine(): AudioEngine {
         } catch {}
       }
     }
-  }, [isYtMode]);
+  }, []);
 
   const nudge = useCallback((delta: number) => seek(currentTime + delta), [seek, currentTime]);
 
   const setVolume = useCallback((v: number) => {
     const nextV = Math.min(1, Math.max(0, v));
     setVolumeState(nextV);
-    
-    if (isYtMode) {
-      setYouTubeVolume(nextV * 100);
-    } else {
-      const el = audioRef.current;
-      if (el) {
-        el.volume = nextV;
-      }
-    }
-  }, [isYtMode]);
+    // Both outputs always get the level. Before, the YouTube player only got
+    // it while already in YouTube mode, so a freshly booted player never
+    // received the saved volume / mute state.
+    setYouTubeVolume(nextV * 100);
+    const el = audioRef.current;
+    if (el) el.volume = nextV;
+  }, []);
 
   const setMuted = useCallback((m: boolean) => {
     setMutedState(m);
-    if (isYtMode) {
-      if (m) muteYouTubeVideo();
-      else unMuteYouTubeVideo();
-    } else {
-      if (audioRef.current) audioRef.current.muted = m;
-    }
-  }, [isYtMode]);
+    if (m) muteYouTubeVideo();
+    else unMuteYouTubeVideo();
+    if (audioRef.current) audioRef.current.muted = m;
+  }, []);
 
   // Sync YouTube time
   useEffect(() => {
@@ -215,6 +232,12 @@ export function useAudioEngine(): AudioEngine {
         setIsPlaying(false);
       } else if (state === 3) {
         setIsBuffering(true);
+      } else if (state === 5) {
+        // cued: when the user paused / it is a restored session, it is simply
+        // ready and waiting. If playback was requested the player is still
+        // being nudged to start, so keep showing the spinner.
+        setIsPlaying(false);
+        if (!ytWantPlayRef.current) setIsBuffering(false);
       } else if (state === 0) {
         setIsPlaying(false);
         setEndTick((n) => n + 1);
@@ -323,7 +346,7 @@ export function useAudioEngine(): AudioEngine {
 
   useEffect(() => () => {
     audioRef.current?.pause();
-    pauseYouTubeVideo();
+    releaseYouTubeVideo();
   }, []);
 
   return useMemo(

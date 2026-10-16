@@ -17,6 +17,7 @@ import {
 } from "react";
 import { useAudioEngine, type AudioEngine } from "@/hooks/useAudioEngine";
 import { reportListen } from "@/services/radio";
+import { isYouTubePlayerReady } from "@/services/youtubePlayer";
 import { resolveStreamUrls as resolveSC } from "@/services/soundcloud";
 import { storage, session } from "@/utils/storage";
 import { db } from "@/utils/db";
@@ -355,7 +356,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const doLoad = async () => {
       try {
         // 1. Try local offline storage first
-        const offlineBlob = await db.getTrackBlob(current.id);
+        // Never let this lookup hold up playback: on a first launch the
+        // database is still being created, and it can fail outright (private
+        // mode). Missing / slow / failed simply means "not downloaded".
+        const offlineBlob = await Promise.race([
+          db.getTrackBlob(current.id).catch(() => null),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
+        ]);
         if (offlineBlob && alive) {
           const localUrl = URL.createObjectURL(offlineBlob);
           engine.load(localUrl, { autoplay: !restorePauseRef.current, live: current.isLive });
@@ -395,7 +402,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!current) return;
     const timeoutMs = 12000;
-    const timer = window.setTimeout(() => {
+    const isYt = current.source === "youtube" || current.streamUrl.startsWith("yt-resolve:");
+    let timer = 0;
+    // YouTube tracks: the clock only starts once the hidden player has booted.
+    // On a cold first launch that boot alone can take longer than the timeout,
+    // and counting it used to burn the retry and skip / stall the track.
+    const arm = () => {
+      if (isYt && !isYouTubePlayerReady()) {
+        timer = window.setTimeout(arm, 1000);
+        return;
+      }
+      timer = window.setTimeout(check, isYt ? 15000 : timeoutMs);
+    };
+    const check = () => {
       const el = engineRef.current;
       if (el.currentTime > 0.2 || el.isPlaying || !el.isBuffering) return;
       const track = queueRef.current[indexRef.current];
@@ -409,7 +428,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         toast(`"${track.title}" timed out — skipping`, "error");
         goToRef.current?.(indexRef.current + 1);
       }
-    }, timeoutMs);
+    };
+    arm();
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, attempt]);
