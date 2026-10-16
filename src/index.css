@@ -132,6 +132,40 @@ body,
   height: 100%;
 }
 
+/* ------------------------------ safe areas ------------------------------
+   Space taken by the status bar, display cutout (notch / punch-hole camera)
+   and gesture bar, resolved per device at runtime — never hard-coded.
+   - Browsers / PWA: env(safe-area-inset-*) (needs viewport-fit=cover).
+   - Android app: Capacitor's SystemBars plugin injects --safe-area-inset-*
+     on <html>, which also covers older WebViews where env() reports 0.
+   ------------------------------------------------------------------------ */
+:root {
+  --sa-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sa-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --sa-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --sa-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
+/* Root layout: fills exactly the *visible* viewport. 100vh on mobile browsers
+   is the height with the URL bar hidden, so the centred shell overflowed and
+   its top slid under the browser bar. 100dvh tracks the bar; 100vh stays as
+   the fallback for engines without dynamic viewport units. */
+@utility app-shell {
+  --shell-gutter: 0px;
+  height: 100vh;
+  @supports (height: 100dvh) {
+    height: 100dvh;
+  }
+  padding: calc(var(--sa-top) + var(--shell-gutter)) calc(var(--sa-right) + var(--shell-gutter)) var(--shell-gutter)
+    calc(var(--sa-left) + var(--shell-gutter));
+  @variant sm {
+    --shell-gutter: 0.75rem;
+  }
+  @variant md {
+    --shell-gutter: 1.25rem;
+  }
+}
+
 body {
   margin: 0;
   background-color: var(--c-base);

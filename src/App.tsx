@@ -125,7 +125,7 @@ function Shell() {
   }, [toggle, next, previous, setExpanded, setQueueOpen, queueOpen, current, volume, setVolume, expanded]);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden p-0 sm:p-3 md:p-5 gap-4 relative z-0">
+    <div className="app-shell flex w-full overflow-hidden gap-4 relative z-0">
       <Sidebar route={route} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
 
       <div className="flex min-w-0 flex-1 flex-col relative z-10 h-full rounded-[2rem] blur-panel overflow-hidden border border-white/5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.5)]">
@@ -136,8 +136,8 @@ function Shell() {
             "scroll-area min-h-0 flex-1 overflow-y-auto px-4 pt-4 sm:px-8 transition-[padding] duration-300",
             // reserve room for the floating player bar only once it actually exists
             current
-              ? "pb-[calc(env(safe-area-inset-bottom)+12rem)] md:pb-[calc(env(safe-area-inset-bottom)+9rem)]"
-              : "pb-[calc(env(safe-area-inset-bottom)+6.5rem)] md:pb-10",
+              ? "pb-[calc(var(--sa-bottom)+12rem)] md:pb-[calc(var(--sa-bottom)+9rem)]"
+              : "pb-[calc(var(--sa-bottom)+6.5rem)] md:pb-10",
           )}
         >
           <Suspense

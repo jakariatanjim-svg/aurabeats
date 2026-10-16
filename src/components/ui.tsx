@@ -375,11 +375,11 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[90] flex items-end justify-center pt-[var(--sa-top)] sm:items-center sm:p-6 sm:pt-[calc(var(--sa-top)+1.5rem)] sm:pb-[calc(var(--sa-bottom)+1.5rem)]">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div
         className={cn(
-          "blur-panel relative z-10 w-full animate-slide-up p-5 shadow-2xl sm:animate-scale-in",
+          "blur-panel relative z-10 w-full animate-slide-up p-5 pb-[calc(var(--sa-bottom)+1.25rem)] shadow-2xl sm:animate-scale-in sm:pb-5",
           maxWidth,
           "rounded-b-none sm:rounded-[var(--panel-radius)]",
         )}
@@ -400,7 +400,7 @@ export function Modal({
 export function Toaster() {
   const { toasts, dismissToast } = usePlayer();
   return (
-    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] left-1/2 z-[95] flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col gap-2 sm:bottom-[calc(env(safe-area-inset-bottom)+6rem)] sm:left-6 sm:translate-x-0">
+    <div className="pointer-events-none fixed bottom-[calc(var(--sa-bottom)+6.5rem)] left-1/2 z-[95] flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col gap-2 sm:bottom-[calc(var(--sa-bottom)+6rem)] sm:left-6 sm:translate-x-0">
       {toasts.map((t) => (
         <button
           key={t.id}

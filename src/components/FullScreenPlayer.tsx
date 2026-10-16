@@ -142,9 +142,9 @@ export function FullScreenPlayer() {
         <div className="absolute inset-0 bg-black/25" />
       </div>
 
-      <div className="relative z-10 flex h-full flex-col">
+      <div className="relative z-10 flex h-full flex-col pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] pl-[var(--sa-left)]">
         {/* floating close button — no bar, no header */}
-        <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between sm:top-6 sm:left-6 sm:right-6">
+        <div className="absolute top-[calc(var(--sa-top)+1rem)] left-[calc(var(--sa-left)+1rem)] right-[calc(var(--sa-right)+1rem)] z-50 flex items-center justify-between sm:top-[calc(var(--sa-top)+1.5rem)] sm:left-[calc(var(--sa-left)+1.5rem)] sm:right-[calc(var(--sa-right)+1.5rem)]">
           <IconButton 
             onClick={() => setExpanded(false)} 
             aria-label="Close full screen" 
@@ -363,7 +363,7 @@ export function QueuePanel() {
       {queueOpen && <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setQueueOpen(false)} />}
       <aside
         className={cn(
-          "blur-panel fixed top-0 right-0 z-[61] flex h-full w-[min(92vw,22rem)] flex-col rounded-none! border-y-0! border-r-0! shadow-2xl transition-transform duration-300",
+          "blur-panel fixed top-0 right-0 z-[61] flex h-full w-[min(92vw,22rem)] flex-col rounded-none! border-y-0! border-r-0! pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] shadow-2xl transition-transform duration-300",
           queueOpen ? "translate-x-0" : "translate-x-full",
         )}
       >

@@ -113,6 +113,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     storage.set("accent", accent);
   }, [theme, mode, accent]);
 
+  // Android app only: status-bar icons follow the in-app mode, not the phone's
+  // system theme, so they stay readable over the app background.
+  useEffect(() => {
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (!cap?.isNativePlatform?.()) return;
+    import("@capacitor/core")
+      .then(({ SystemBars, SystemBarsStyle }) =>
+        SystemBars.setStyle({ style: mode === "dark" ? SystemBarsStyle.Dark : SystemBarsStyle.Light }),
+      )
+      .catch(() => {});
+  }, [mode]);
+
   const setTheme = useCallback((t: ThemeName) => setThemeState(t), []);
   const setMode = useCallback((m: ThemeMode) => setModeState(m), []);
   const setAccent = useCallback((hex: string) => setAccentState(hex), []);

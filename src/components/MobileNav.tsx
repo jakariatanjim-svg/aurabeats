@@ -20,7 +20,7 @@ export function MobileNav({
   favoritesCount: number;
 }) {
   return (
-    <nav className="blur-panel fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2 md:hidden">
+    <nav className="blur-panel fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! pb-[calc(var(--sa-bottom)+0.35rem)] pl-[calc(var(--sa-left)+0.5rem)] pr-[calc(var(--sa-right)+0.5rem)] pt-2 md:hidden">
       <div className="grid grid-cols-5 gap-1.5">
         {ITEMS.map(({ key, label, icon: Icon }) => {
           const active = route === key;
