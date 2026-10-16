@@ -1,5 +1,5 @@
 # Website release pipeline. Computes the next version, builds the site, creates
-# the tag and the GitHub Release, and attaches the Cloudflare Pages bundle.
+# the tag and the GitHub Release, and attaches the web bundle.
 # Versions are minted here only; "APK — Release" fills the release afterwards.
 #
 # Version scheme: 1.0 -> 1.1 -> ... -> 1.9 -> 2.0, derived from the highest
@@ -134,26 +134,18 @@ jobs:
           cd dist && zip -qr ../aurabeats-web.zip .
           ls -lh ../aurabeats-web.zip
 
+      # --generate-notes lets GitHub build the release notes automatically
+      # (What's Changed, New Contributors and Full Changelog), the same
+      # notes the "Generate release notes" button creates in the UI.
       - name: Create release
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          BUILT_AT="$(date -u '+%Y-%m-%d %H:%M UTC')"
-
-          NOTES=$(cat <<EOF
-          AuraBeats v$VERSION
-
-          - Website bundle: built from \`$SHORT_SHA\` on $BUILT_AT
-          - \`aurabeats-web.zip\` holds the \`dist/\` output. Unzip it and upload the contents to Cloudflare Pages.
-          - Android: run **APK — Release** to attach \`AuraBeats-$VERSION.apk\` to this release.
-          EOF
-          )
 
           gh release create "$TAG" aurabeats-web.zip \
             --target "$GITHUB_SHA" \
             --title "AuraBeats — v$VERSION" \
-            --notes "$NOTES" \
+            --generate-notes \
             --latest
 
       - name: Summary

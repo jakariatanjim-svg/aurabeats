@@ -231,36 +231,6 @@ jobs:
 
           gh release upload "$TAG" "$ASSET" --clobber
 
-      - name: Record the build in the release notes
-        run: |
-          TAG="${{ steps.target.outputs.tag }}"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          BUILT_AT="$(date -u '+%Y-%m-%d %H:%M UTC')"
-
-          printf -- '- Android APK: `%s`, built from `%s` on %s (versionName %s, versionCode %s)\n' \
-            "${{ steps.target.outputs.asset }}" "$SHORT_SHA" "$BUILT_AT" \
-            "${{ steps.target.outputs.version }}" "${{ steps.stamp.outputs.version_code }}" > /tmp/apk-line.txt
-
-          gh release view "$TAG" --json body --jq '.body' > /tmp/body.md 2>/dev/null || : > /tmp/body.md
-
-          # Replaces the placeholder or a previous APK line instead of appending.
-          python3 - /tmp/body.md /tmp/apk-line.txt > /tmp/new-body.md <<'PY'
-          import pathlib, re, sys
-
-          body = pathlib.Path(sys.argv[1]).read_text()
-          line = pathlib.Path(sys.argv[2]).read_text().rstrip("\n")
-
-          pattern = re.compile(r"^- Android(?: APK)?:.*$", re.MULTILINE)
-          if pattern.search(body):
-              body = pattern.sub(lambda _m: line, body, count=1)
-          else:
-              body = body.rstrip("\n") + "\n" + line + "\n"
-
-          print(body)
-          PY
-
-          gh release edit "$TAG" --notes-file /tmp/new-body.md
-
       - name: Summary
         if: always()
         run: |

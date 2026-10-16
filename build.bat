@@ -114,7 +114,6 @@ if %ERRORS% equ 0 (
     echo      [OK] BUILD SUCCESSFUL                          
     echo                                                     
     echo      Preview:  npm run preview                      
-    echo      Deploy:   upload dist/ to Cloudflare Pages     
     echo   ==================================================
 ) else (
     echo   ==================================================
