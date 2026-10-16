@@ -138,7 +138,7 @@ export function SearchView() {
             </div>
 
             {showSuggestions && suggestions.length > 0 && trimmed.length >= 2 && (
-              <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl blur-panel shadow-2xl animate-fade-in">
+              <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl blur-panel surface-raised shadow-2xl animate-fade-in">
                 {suggestions.map((s) => (
                   <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(s)}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink2 transition hover:bg-ink/[0.07] hover:text-ink">
@@ -164,8 +164,8 @@ export function SearchView() {
               className={cn(
                 "focus-ring inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition active:scale-95",
                 view === key
-                  ? "bg-accent text-white shadow-[0_8px_24px_-14px_var(--c-accent)]"
-                  : "border border-white/10 bg-white/[0.03] text-ink3 hover:text-ink",
+                  ? "bg-accent text-white shadow-[0_8px_24px_-14px_var(--glow)]"
+                  : "border border-line bg-ink/[0.03] text-ink3 hover:text-ink",
               )}>
               <Icon className="h-3.5 w-3.5" />{label}
             </button>
@@ -212,7 +212,7 @@ export function SearchView() {
               {view === "ytmusic" ? "YouTube Music" : "Other Sources"}
             </h2>
             {allTracks.length > 0 && (
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-ink3">
+              <span className="rounded-full border border-line bg-ink/[0.05] px-3 py-1 text-xs font-bold text-ink3">
                 {allTracks.length} found
               </span>
             )}

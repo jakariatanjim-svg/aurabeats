@@ -128,7 +128,7 @@ function Shell() {
     <div className="app-shell flex w-full overflow-hidden gap-4 relative z-0">
       <Sidebar route={route} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
 
-      <div className="flex min-w-0 flex-1 flex-col relative z-10 h-full rounded-[2rem] blur-panel overflow-hidden border border-white/5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.5)]">
+      <div className="shell-panel flex min-w-0 flex-1 flex-col relative z-10 h-full overflow-hidden">
         <TopBar route={route} onNavigate={navigate} />
         <main
           id="ab-scroll"

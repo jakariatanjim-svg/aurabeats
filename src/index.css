@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   AuraBeats — Dual Core Theme Engine
-   1. glassy  -> frosted glassmorphism, neon glow, vibrant gradients
-   2. modern  -> flat, high contrast premium dark / light
+   AuraBeats — Theme Engine
+   1. glassmorphism -> frosted translucent glass over a vivid aurora
+   2. material      -> Material Design 3 (tonal surfaces, shapes, ripples)
+   (3. liquid glass -> coming soon)
+
+   Components only use the tokens below (and the panel utilities further
+   down), so a theme is purely a set of custom properties on <html>.
    ========================================================================== */
 
 @theme inline {
@@ -16,110 +20,166 @@
   --color-ink3: var(--c-ink3);
   --color-accent: var(--c-accent);
   --color-accent2: var(--c-accent2);
-  --font-display: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--app-font);
 }
 
 :root {
-  --c-accent: #7c5cff;
+  --c-accent: #3b82f6;
   --c-accent2: #22d3ee;
-  --accent-rgb: 124 92 255;
+  --accent-rgb: 59 130 246;
+  --app-font: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* default = modern dark */
-  --c-base: #07070d;
-  --c-elev: #0f0f18;
-  --c-elev2: #181826;
-  --c-line: #252535;
-  --c-ink: #f6f6fa;
-  --c-ink2: #aaaabb;
-  --c-ink3: #6a6a80;
-  --panel-alpha: 1;
-  --panel-blur: 0px;
-  --panel-border: 1px solid var(--c-line);
-  --panel-radius: 14px;
+  /* Glow colour for accent shadows / drop-shadows. Themes without glow set it
+     to transparent, which removes every glow without touching components. */
+  --glow: var(--c-accent);
+  --glow-strength: 1;
+
+  /* Seek / volume fill */
+  --slider-fill: linear-gradient(90deg, var(--c-accent2), var(--c-accent));
+}
+
+/* ------------------------- GLASSMORPHISM / DARK ------------------------ */
+[data-theme="glassmorphism"][data-mode="dark"] {
+  --c-base: #07040f;
+  /* frosted white tint — the aurora behind stays visible through it */
+  --c-elev: rgb(255 255 255 / 0.065);
+  --c-elev-strong: rgb(22 16 40 / 0.62);
+  --c-elev2: rgb(255 255 255 / 0.1);
+  --c-line: rgb(255 255 255 / 0.12);
+  --c-ink: #fbf8ff;
+  --c-ink2: #d6cdef;
+  --c-ink3: #a196c8;
+
+  --panel-blur: 22px;
+  --panel-backdrop: blur(var(--panel-blur)) saturate(180%);
+  --panel-backdrop-raised: blur(30px) saturate(190%);
+  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.09) 0%, rgb(255 255 255 / 0.015) 55%, rgb(255 255 255 / 0.04) 100%);
+  --panel-border: 1px solid rgb(255 255 255 / 0.13);
+  --panel-radius: 24px;
+  --panel-shadow: 0 16px 44px -18px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.25);
+  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 0.16), inset 0 -1px 0 rgb(255 255 255 / 0.03);
+  --panel-hover-lift: -2px;
+
+  /* app frame (sidebar + content column): a light glass sheet, no blur, so
+     the panels inside it blur the real aurora instead of a flat layer */
+  --shell-bg: linear-gradient(160deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.018));
+  --shell-border: 1px solid rgb(255 255 255 / 0.09);
+  --shell-shadow: 0 30px 70px -30px rgb(0 0 0 / 0.65), inset 0 1px 0 rgb(255 255 255 / 0.08);
+  --shell-backdrop: none;
+  --shell-radius: 2rem;
+  --bar-radius: 1.6rem;
+  --bar-shadow: 0 30px 70px -24px rgb(0 0 0 / 0.75);
+
+  --glow-strength: 1;
+  --app-bg-image:
+    radial-gradient(900px 640px at 6% -8%, color-mix(in oklab, var(--c-accent) 55%, transparent), transparent 60%),
+    radial-gradient(760px 600px at 100% 8%, color-mix(in oklab, var(--c-accent2) 42%, transparent), transparent 60%),
+    radial-gradient(820px 640px at 70% 108%, rgb(236 72 153 / 0.32), transparent 62%),
+    radial-gradient(620px 520px at 0% 92%, rgb(99 102 241 / 0.3), transparent 62%),
+    linear-gradient(160deg, #120628 0%, #07040f 55%, #0b0420 100%);
+}
+
+/* ------------------------- GLASSMORPHISM / LIGHT ----------------------- */
+[data-theme="glassmorphism"][data-mode="light"] {
+  --c-base: #eef0ff;
+  --c-elev: rgb(255 255 255 / 0.42);
+  --c-elev-strong: rgb(255 255 255 / 0.72);
+  --c-elev2: rgb(255 255 255 / 0.6);
+  --c-line: rgb(255 255 255 / 0.7);
+  --c-ink: #120b26;
+  --c-ink2: #463d63;
+  --c-ink3: #6f6895;
+
+  --panel-blur: 22px;
+  --panel-backdrop: blur(var(--panel-blur)) saturate(170%);
+  --panel-backdrop-raised: blur(30px) saturate(180%);
+  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.55) 0%, rgb(255 255 255 / 0.12) 60%, rgb(255 255 255 / 0.3) 100%);
+  --panel-border: 1px solid rgb(255 255 255 / 0.75);
+  --panel-radius: 24px;
+  --panel-shadow: 0 16px 40px -20px rgb(60 40 140 / 0.35), 0 2px 6px -2px rgb(60 40 140 / 0.12);
+  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 0.9);
+  --panel-hover-lift: -2px;
+
+  --shell-bg: linear-gradient(160deg, rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.16));
+  --shell-border: 1px solid rgb(255 255 255 / 0.7);
+  --shell-shadow: 0 30px 70px -34px rgb(60 40 140 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.85);
+  --shell-backdrop: none;
+  --shell-radius: 2rem;
+  --bar-radius: 1.6rem;
+  --bar-shadow: 0 26px 60px -26px rgb(60 40 140 / 0.45);
+
+  --glow-strength: 0.7;
+  --app-bg-image:
+    radial-gradient(900px 640px at 6% -8%, color-mix(in oklab, var(--c-accent) 45%, transparent), transparent 60%),
+    radial-gradient(760px 600px at 100% 8%, color-mix(in oklab, var(--c-accent2) 40%, transparent), transparent 60%),
+    radial-gradient(820px 640px at 70% 108%, rgb(244 114 182 / 0.38), transparent 62%),
+    radial-gradient(620px 520px at 0% 92%, rgb(129 140 248 / 0.35), transparent 62%),
+    linear-gradient(180deg, #f7f5ff 0%, #e9e7ff 100%);
+}
+
+/* Phones: slightly lighter blur on the many scrolling cards keeps scrolling
+   smooth on low-end GPUs; the look is the same at that size. */
+@media (max-width: 767px) {
+  [data-theme="glassmorphism"][data-mode] {
+    --panel-blur: 16px;
+  }
+}
+
+/* ---------------------------- MATERIAL (M3) ----------------------------
+   Tonal palette generated from the accent (= M3 seed / primary): every
+   surface is neutral tinted with a little of the primary colour, exactly
+   like Material You. No blur, no glow, tonal elevation, M3 shape scale. */
+[data-theme="material"] {
+  --app-font: "Roboto", "Google Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --glow: transparent;
   --glow-strength: 0;
+  --slider-fill: var(--c-accent);
+
+  --panel-backdrop: none;
+  --panel-backdrop-raised: none;
+  --panel-sheen: none;
+  --panel-border: 0 solid transparent;
+  --panel-radius: 16px; /* M3 shape: large */
+  --panel-shadow: 0 0 #0000; /* elevation level 0 — filled card */
+  --panel-highlight: 0 0 #0000;
+  --panel-hover-lift: 0px;
+
+  --shell-backdrop: none;
+  --shell-border: 0 solid transparent;
+  --shell-shadow: 0 0 #0000;
+  --shell-radius: 28px; /* M3 shape: extra large */
+  --bar-radius: 16px;
   --app-bg-image: none;
 }
 
-/* ---------------------------- MODERN / DARK ---------------------------- */
-[data-theme="modern"][data-mode="dark"] {
-  --c-base: #06060e;
-  --c-elev: #0d0d1a;
-  --c-elev2: #16162a;
-  --c-line: #22223a;
-  --c-ink: #f6f6fc;
-  --c-ink2: #aaaacc;
-  --c-ink3: #68687e;
-  --panel-alpha: 1;
-  --panel-blur: 0px;
-  --panel-border: 1px solid var(--c-line);
-  --panel-radius: 14px;
-  --glow-strength: 0.25;
-  --app-bg-image:
-    radial-gradient(ellipse 800px 500px at 10% 0%, color-mix(in oklab, var(--c-accent) 10%, transparent), transparent 60%),
-    radial-gradient(ellipse 600px 400px at 90% 5%, color-mix(in oklab, var(--c-accent2) 8%, transparent), transparent 55%),
-    radial-gradient(ellipse 700px 600px at 50% 100%, color-mix(in oklab, #ff0080 6%, transparent), transparent 65%);
+[data-theme="material"][data-mode="dark"] {
+  --c-base: color-mix(in oklab, var(--c-accent) 4%, #0f0f13); /* surface dim */
+  --shell-bg: color-mix(in oklab, var(--c-accent) 5%, #141418); /* surface */
+  --c-elev: color-mix(in oklab, var(--c-accent) 8%, #1d1d22); /* surface container */
+  --c-elev-strong: color-mix(in oklab, var(--c-accent) 10%, #27272d); /* container high */
+  --c-elev2: color-mix(in oklab, var(--c-accent) 12%, #313138); /* container highest */
+  --c-line: color-mix(in oklab, var(--c-accent) 14%, #46464f); /* outline variant */
+  --c-ink: color-mix(in oklab, var(--c-accent) 4%, #e6e5ec); /* on surface */
+  --c-ink2: color-mix(in oklab, var(--c-accent) 8%, #c6c5d0); /* on surface variant */
+  --c-ink3: color-mix(in oklab, var(--c-accent) 8%, #91909a); /* outline */
+  --m-secondary-container: color-mix(in oklab, var(--c-accent) 30%, #24242a);
+  --m-on-secondary-container: color-mix(in oklab, var(--c-accent) 12%, #f1f0f6);
+  --bar-shadow: 0 3px 6px -1px rgb(0 0 0 / 0.45), 0 2px 4px rgb(0 0 0 / 0.3); /* level 2 */
 }
 
-/* ---------------------------- MODERN / LIGHT --------------------------- */
-[data-theme="modern"][data-mode="light"] {
-  --c-base: #fafaff;
-  --c-elev: #f2f2fa;
-  --c-elev2: #e8e8f5;
-  --c-line: #d8d8ee;
-  --c-ink: #0a0a18;
-  --c-ink2: #52526a;
-  --c-ink3: #8a8aa4;
-  --panel-alpha: 1;
-  --panel-blur: 0px;
-  --panel-border: 1px solid var(--c-line);
-  --panel-radius: 14px;
-  --glow-strength: 0.15;
-  --app-bg-image:
-    radial-gradient(ellipse 700px 500px at 5% 0%, color-mix(in oklab, var(--c-accent) 8%, transparent), transparent 55%),
-    radial-gradient(ellipse 600px 400px at 95% 5%, color-mix(in oklab, var(--c-accent2) 7%, transparent), transparent 52%),
-    linear-gradient(180deg, #f8f7ff 0%, #f2f0ff 100%);
-}
-
-/* ------------------------------- GLASSY -------------------------------- */
-[data-theme="glassy"][data-mode="dark"] {
-  --c-base: #06030f;
-  --c-elev: rgb(14 9 30 / 0.78);
-  --c-elev2: rgb(255 255 255 / 0.11);
-  --c-line: rgb(255 255 255 / 0.11);
-  --c-ink: #faf6ff;
-  --c-ink2: #cfc4ee;
-  --c-ink3: #9a8ec4;
-  --panel-alpha: 1;
-  --panel-blur: 20px;
-  --panel-border: 1px solid rgb(255 255 255 / 0.12);
-  --panel-radius: 24px;
-  --glow-strength: 1.3;
-  --app-bg-image:
-    radial-gradient(1000px 700px at 8% -10%, color-mix(in oklab, var(--c-accent) 50%, transparent), transparent 56%),
-    radial-gradient(900px 650px at 94% 0%, color-mix(in oklab, var(--c-accent2) 38%, transparent), transparent 58%),
-    radial-gradient(800px 700px at 50% 115%, rgb(255 0 160 / 0.22), transparent 62%),
-    radial-gradient(600px 400px at 60% 40%, color-mix(in oklab, var(--c-accent) 12%, transparent), transparent 70%),
-    linear-gradient(160deg, #100520 0%, #06030f 55%, #0a0318 100%);
-}
-
-[data-theme="glassy"][data-mode="light"] {
-  --c-base: #f2eeff;
-  --c-elev: rgb(255 255 255 / 0.80);
-  --c-elev2: rgb(255 255 255 / 0.94);
-  --c-line: rgb(200 190 255 / 0.5);
-  --c-ink: #140c28;
-  --c-ink2: #4e4568;
-  --c-ink3: #7e76a0;
-  --panel-alpha: 1;
-  --panel-blur: 20px;
-  --panel-border: 1px solid rgb(200 190 255 / 0.55);
-  --panel-radius: 24px;
-  --glow-strength: 0.9;
-  --app-bg-image:
-    radial-gradient(1000px 660px at 8% -12%, color-mix(in oklab, var(--c-accent) 42%, transparent), transparent 58%),
-    radial-gradient(860px 640px at 96% 2%, color-mix(in oklab, var(--c-accent2) 36%, transparent), transparent 56%),
-    radial-gradient(900px 700px at 55% 115%, rgb(255 100 200 / 0.26), transparent 60%),
-    linear-gradient(180deg, #f8f4ff 0%, #ede6ff 100%);
+[data-theme="material"][data-mode="light"] {
+  --c-base: color-mix(in oklab, var(--c-accent) 6%, #f1f1f6);
+  --shell-bg: color-mix(in oklab, var(--c-accent) 2%, #fdfcff);
+  --c-elev: color-mix(in oklab, var(--c-accent) 7%, #f1f0f5);
+  --c-elev-strong: color-mix(in oklab, var(--c-accent) 9%, #ebeaf0);
+  --c-elev2: color-mix(in oklab, var(--c-accent) 11%, #e4e3ea);
+  --c-line: color-mix(in oklab, var(--c-accent) 14%, #c7c6d0);
+  --c-ink: color-mix(in oklab, var(--c-accent) 4%, #1b1b21);
+  --c-ink2: color-mix(in oklab, var(--c-accent) 6%, #46464f);
+  --c-ink3: color-mix(in oklab, var(--c-accent) 6%, #77767f);
+  --m-secondary-container: color-mix(in oklab, var(--c-accent) 22%, #f4f3f8);
+  --m-on-secondary-container: color-mix(in oklab, var(--c-accent) 25%, #15151b);
+  --bar-shadow: 0 2px 6px -1px rgb(0 0 0 / 0.18), 0 1px 3px rgb(0 0 0 / 0.12);
 }
 
 * {
@@ -171,7 +231,7 @@ body {
   background-color: var(--c-base);
   background-image: var(--app-bg-image);
   color: var(--c-ink);
-  font-family: var(--font-display);
+  font-family: var(--app-font);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -181,11 +241,11 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* Force hardware acceleration on main scrolling areas */
+/* Scroll containers. No transform here on purpose: a transformed ancestor
+   becomes the containing block of every position:fixed descendant, which
+   trapped menus and modals inside the scroll area. */
 .scroll-area {
   -webkit-overflow-scrolling: touch;
-  transform: translate3d(0,0,0);
-  will-change: scroll-position;
 }
 
 /* Global smooth transitions for UI states */
@@ -200,21 +260,28 @@ button, a, .blur-panel, .chip {
   transition: none !important;
 }
 
-/* --- Optimized Static Aurora Background (Zero GPU Lag) --- */
+/* --- Static aurora orbs (no animation, zero GPU cost) ---
+   Glassmorphism only: these defined colour blobs are what the frosted
+   panels refract; a flat background would make the glass invisible. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: 
-    radial-gradient(ellipse 60% 50% at 12% 25%, color-mix(in oklab, var(--c-accent) 22%, transparent) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 45% at 88% 65%, color-mix(in oklab, var(--c-accent2) 18%, transparent) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 55% at 50% 105%, color-mix(in oklab, #ff0080 13%, transparent) 0%, transparent 65%);
+  background:
+    radial-gradient(circle 260px at 18% 32%, color-mix(in oklab, var(--c-accent) 42%, transparent) 0%, transparent 70%),
+    radial-gradient(circle 300px at 86% 62%, color-mix(in oklab, var(--c-accent2) 34%, transparent) 0%, transparent 70%),
+    radial-gradient(circle 240px at 48% 96%, rgb(236 72 153 / 0.28) 0%, transparent 70%),
+    radial-gradient(circle 200px at 62% 14%, rgb(129 140 248 / 0.22) 0%, transparent 70%);
 }
 
 [data-mode="light"] body::before {
-  opacity: 0.45;
+  opacity: 0.6;
+}
+
+[data-theme="material"] body::before {
+  display: none;
 }
 
 ::selection {
@@ -258,42 +325,75 @@ body::before {
   border: var(--panel-border);
   border-radius: var(--panel-radius);
 }
+/* Shadow layers compose instead of overwriting each other: blur-panel,
+   glass-inset and glow-ring each fill their own slot, so an element can use
+   any combination regardless of utility order. Non-inheriting, so a parent's
+   ring never leaks into its children. */
+@property --ab-ring {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --ab-inset {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --ab-drop {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+
+/* Content card / surface. Glass: frosted translucent tint + sheen + edge
+   highlight. Material: filled tonal card. No transform / contain / perspective
+   here — those trapped fixed-position children (menus, modals), clipped
+   tooltips and made text blurry. */
 @utility blur-panel {
-  background: var(--c-elev);
+  background-color: var(--panel-fill, var(--c-elev));
+  background-image: var(--panel-sheen, none);
   border: var(--panel-border);
   border-radius: var(--panel-radius);
-  backdrop-filter: blur(var(--panel-blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(160%);
-  box-shadow:
-    0 12px 40px -14px rgb(0 0 0 / 0.55),
-    0 2px 8px -2px rgb(0 0 0 / 0.25),
-    inset 0 1px 0 rgb(255 255 255 / 0.10);
-  /* 
-     GPU Acceleration & FPS Stability 
-     - force 3D layer for composite smoothness
-     - backface-visibility prevents flicker on resize
-     - contain prevents expensive layout thrashing
-  */
-  contain: layout style paint;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  perspective: 1000px;
+  /* -webkit- first: the minifier keeps only the LAST of the two, and Chrome /
+     Android WebView need the unprefixed one (the old order shipped only the
+     prefixed property, so glass never blurred outside Safari). */
+  -webkit-backdrop-filter: var(--panel-backdrop, none);
+  backdrop-filter: var(--panel-backdrop, none);
+  --ab-drop: var(--panel-shadow);
+  --ab-inset: var(--panel-highlight);
+  box-shadow: var(--ab-ring), var(--ab-inset), var(--ab-drop);
+}
+/* Floating surfaces that sit over moving content (player bar, nav bar, menus,
+   dialogs): denser fill so text stays readable. Glass: stronger frost.
+   Material: surface-container-high. */
+@utility surface-raised {
+  --panel-fill: var(--c-elev-strong, var(--c-elev));
+  --panel-backdrop: var(--panel-backdrop-raised, none);
+}
+/* App frame: the sidebar and the content column. */
+@utility shell-panel {
+  background: var(--shell-bg);
+  border: var(--shell-border);
+  border-radius: var(--shell-radius);
+  -webkit-backdrop-filter: var(--shell-backdrop);
+  backdrop-filter: var(--shell-backdrop);
+  box-shadow: var(--shell-shadow);
 }
 @utility glass-inset {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
-    inset 0 -1px 0 rgb(255 255 255 / 0.03);
+  --ab-inset: var(--panel-highlight);
+  box-shadow: var(--ab-ring), var(--ab-inset), var(--ab-drop);
 }
 @utility glow-ring {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--c-accent) 45%, transparent),
-    0 0 calc(28px * var(--glow-strength) + 0px) color-mix(in oklab, var(--c-accent) 30%, transparent),
-    0 18px 50px -28px color-mix(in oklab, var(--c-accent) 40%, transparent);
+  --ab-ring: 0 0 0 1.5px color-mix(in oklab, var(--c-accent) 70%, transparent),
+    0 0 calc(24px * var(--glow-strength)) color-mix(in oklab, var(--glow) 30%, transparent);
+  box-shadow: var(--ab-ring), var(--ab-inset), var(--ab-drop);
 }
 @utility text-glow {
-  text-shadow: 0 0 calc(18px * var(--glow-strength)) color-mix(in oklab, var(--c-accent) 55%, transparent);
+  text-shadow: 0 0 calc(18px * var(--glow-strength)) color-mix(in oklab, var(--glow) 50%, transparent);
 }
 @utility glow-soft {
-  box-shadow: 0 8px 40px -12px color-mix(in oklab, var(--c-accent) 55%, transparent);
+  --ab-drop: 0 8px 32px -12px color-mix(in oklab, var(--glow) 55%, transparent);
+  box-shadow: var(--ab-ring), var(--ab-inset), var(--ab-drop);
 }
 
 /* ------------------------------ animations ----------------------------- */
@@ -401,8 +501,11 @@ body::before {
 .animate-pulse-glow {
   animation: ab-pulse-glow 3.2s ease-in-out infinite;
 }
+/* fill-mode backwards (not both): once finished, no transform is left behind
+   on the route wrapper, so it stops being a containing block for fixed
+   children and a backdrop root for the glass panels inside it. */
 .animate-fade-up {
-  animation: ab-fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: ab-fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 .animate-fade-in {
   animation: ab-fade-in 0.35s ease both;
@@ -488,5 +591,147 @@ input[type="range"].ab-range::-moz-range-thumb {
   88%,
   100% {
     transform: translateX(calc(-100% + var(--mq-w, 200px)));
+  }
+}
+
+/* ==========================================================================
+   Material UI component layer
+   Plain (unlayered) rules, so they win over Tailwind utilities without
+   !important. Components expose small hooks (ab-*, data-active) and this
+   layer reshapes them into Material 3 patterns.
+   ========================================================================== */
+
+/* Compact screens: the content pane is edge-to-edge, like a native M3 app. */
+@media (max-width: 639px) {
+  [data-theme="material"][data-mode] {
+    --shell-radius: 0px;
+  }
+}
+
+/* Typography: M3 type scale tops out at bold; 900 weights look off in Roboto. */
+[data-theme="material"] :is(.font-black, .font-extrabold) {
+  font-weight: 700;
+}
+[data-theme="material"] .tracking-tight {
+  letter-spacing: 0;
+}
+
+/* Feedback comes from state layers + ripple, not from shrinking. */
+[data-theme="material"] :is(button, a, [role="button"]):active {
+  scale: none;
+}
+[data-theme="material"] .blur-panel[class*="hover:-translate-y"]:hover {
+  translate: none;
+}
+
+/* Decorative blurred colour blobs belong to the glass look only. */
+[data-theme="material"] .ab-decor {
+  display: none;
+}
+
+/* Top app bar: sits on the surface colour, no divider. */
+[data-theme="material"] .ab-topbar {
+  --panel-fill: var(--shell-bg);
+}
+
+/* Filter chips: 8dp corners; selected = secondary container. */
+[data-theme="material"] .ab-chip {
+  border-radius: 8px;
+}
+[data-theme="material"] .ab-chip[data-active="true"] {
+  background-color: var(--m-secondary-container);
+  color: var(--m-on-secondary-container);
+  border-color: transparent;
+}
+
+/* Navigation drawer items: full pill, active indicator = secondary container. */
+[data-theme="material"] .ab-nav-item {
+  border-radius: 9999px;
+}
+[data-theme="material"] .ab-nav-item[data-active="true"] {
+  background-color: var(--m-secondary-container);
+  color: var(--m-on-secondary-container);
+}
+[data-theme="material"] .ab-nav-mark,
+[data-theme="material"] .ab-navline {
+  display: none;
+}
+
+/* Navigation bar: label under an icon that sits in a pill indicator. */
+[data-theme="material"] .ab-navbar {
+  border-top-color: transparent;
+  border-radius: 0;
+}
+[data-theme="material"] .ab-navbtn {
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--c-ink2);
+  font-weight: 500;
+}
+[data-theme="material"] .ab-navbtn[data-active="true"] {
+  color: var(--c-ink);
+  font-weight: 700;
+}
+[data-theme="material"] .ab-navicon {
+  isolation: isolate;
+}
+[data-theme="material"] .ab-navicon::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 3.5rem;
+  height: 2rem;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+[data-theme="material"] .ab-navbtn:hover .ab-navicon::before {
+  background-color: color-mix(in oklab, var(--c-ink) 8%, transparent);
+}
+[data-theme="material"] .ab-navbtn[data-active="true"] .ab-navicon::before {
+  background-color: var(--m-secondary-container);
+}
+[data-theme="material"] .ab-navbtn[data-active="true"] .ab-navicon > svg {
+  color: var(--m-on-secondary-container);
+  scale: none;
+}
+
+/* Ripple (see src/utils/ripple.ts). */
+.ab-ripple-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+.ab-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background-color: currentColor;
+  opacity: 0;
+  scale: 0;
+  pointer-events: none;
+  animation: ab-ripple 0.55s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+@keyframes ab-ripple {
+  0% {
+    scale: 0;
+    opacity: 0.16;
+  }
+  60% {
+    opacity: 0.12;
+  }
+  100% {
+    scale: 1;
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ab-ripple {
+    display: none;
   }
 }

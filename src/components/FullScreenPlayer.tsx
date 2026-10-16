@@ -161,7 +161,7 @@ export function FullScreenPlayer() {
                 className={cn(
                   "rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all",
                   romanized
-                    ? "bg-accent text-white shadow-[0_0_12px_var(--c-accent)]"
+                    ? "bg-accent text-white shadow-[0_0_12px_var(--glow)]"
                     : "bg-white/10 text-white/70 backdrop-blur-xl hover:bg-white/20 hover:text-white"
                 )}
               >
@@ -171,14 +171,14 @@ export function FullScreenPlayer() {
             <IconButton 
               onClick={() => { setShowLyrics((v) => !v); if (showLyrics) setRomanized(false); }}
               aria-label="Show lyrics" 
-              className={cn("bg-white/10 backdrop-blur-xl hover:bg-white/20 hover:text-white transition-colors", showLyrics ? "text-accent bg-white/20 shadow-[0_0_15px_var(--c-accent)]" : "text-white/80")}
+              className={cn("bg-white/10 backdrop-blur-xl hover:bg-white/20 hover:text-white transition-colors", showLyrics ? "text-accent bg-white/20 shadow-[0_0_15px_var(--glow)]" : "text-white/80")}
             >
               <AlignLeft className="h-4 w-4" />
             </IconButton>
             <IconButton 
               onClick={() => setShowTimerMenu((v) => !v)} 
               aria-label="Sleep timer" 
-              className={cn("bg-white/10 backdrop-blur-xl hover:bg-white/20 hover:text-white transition-colors", settings.sleepTimer ? "text-accent bg-white/20 shadow-[0_0_15px_var(--c-accent)]" : "text-white/80")}
+              className={cn("bg-white/10 backdrop-blur-xl hover:bg-white/20 hover:text-white transition-colors", settings.sleepTimer ? "text-accent bg-white/20 shadow-[0_0_15px_var(--glow)]" : "text-white/80")}
             >
               <Moon className="h-4 w-4" />
             </IconButton>
@@ -284,7 +284,7 @@ export function FullScreenPlayer() {
               <div className="flex items-center justify-center gap-3 sm:gap-5">
                 <IconButton active={shuffle} onClick={toggleShuffle} aria-label="Shuffle" className="text-white/70 hover:text-white"><Shuffle className="h-[18px] w-[18px]" /></IconButton>
                 <IconButton onClick={previous} aria-label="Previous" className="text-white hover:bg-white/10"><SkipBack className="h-7 w-7 fill-current" /></IconButton>
-                <button type="button" onClick={toggle} aria-label={isPlaying ? "Pause" : "Play"} className={cn("focus-ring flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-2xl transition-transform hover:scale-105 active:scale-95", isPlaying && "shadow-[0_0_44px_-6px_var(--c-accent)]")}>
+                <button type="button" onClick={toggle} aria-label={isPlaying ? "Pause" : "Play"} className={cn("focus-ring flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-2xl transition-transform hover:scale-105 active:scale-95", isPlaying && "shadow-[0_0_44px_-6px_var(--glow)]")}>
                   {isBuffering ? <Loader2 className="h-7 w-7 animate-spin" /> : isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 translate-x-[2px] fill-current" />}
                 </button>
                 <IconButton onClick={next} aria-label="Next" className="text-white hover:bg-white/10"><SkipForward className="h-7 w-7 fill-current" /></IconButton>
@@ -363,7 +363,7 @@ export function QueuePanel() {
       {queueOpen && <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setQueueOpen(false)} />}
       <aside
         className={cn(
-          "blur-panel fixed top-0 right-0 z-[61] flex h-full w-[min(92vw,22rem)] flex-col rounded-none! border-y-0! border-r-0! pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] shadow-2xl transition-transform duration-300",
+          "blur-panel surface-raised fixed top-0 right-0 z-[61] flex h-full w-[min(92vw,22rem)] flex-col rounded-none! border-y-0! border-r-0! pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] shadow-2xl transition-transform duration-300",
           queueOpen ? "translate-x-0" : "translate-x-full",
         )}
       >

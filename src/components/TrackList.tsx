@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -139,10 +140,13 @@ function TrackMenu({
         <MoreHorizontal className="h-4 w-4" />
       </IconButton>
 
-      {open && (
+      {/* Portalled to <body>: the menu is placed with viewport coordinates,
+          which only hold when no ancestor is transformed or clips it. */}
+      {open && createPortal(
         <div
-          className="blur-panel fixed z-[80] w-[210px] animate-scale-in overflow-hidden p-1.5 shadow-2xl"
+          className="blur-panel surface-raised fixed z-[80] w-[210px] animate-scale-in overflow-hidden p-1.5 shadow-2xl"
           style={{ top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
         >
           {items.map((it) => (
             <button
@@ -162,7 +166,8 @@ function TrackMenu({
               </div>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
 
       <PlaylistPicker
@@ -503,7 +508,7 @@ export function HeroCard({ track, context, eager = false }: { track: Track; cont
   return (
     <div className="blur-panel relative overflow-hidden p-5 sm:p-7">
       <div
-        className="pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full opacity-40 blur-3xl gradient-drift"
+        className="ab-decor pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full opacity-40 blur-3xl gradient-drift"
         style={{ backgroundImage: gradientFrom(track.title) }}
       />
       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">

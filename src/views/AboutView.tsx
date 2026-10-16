@@ -154,7 +154,7 @@ export function AboutView() {
             href="https://github.com/jakariatanjim-svg/aurabeats"
             target="_blank"
             rel="noopener noreferrer"
-            className="focus-ring rounded-full border border-line bg-white/[0.05] px-8 py-3 text-sm font-bold text-ink transition hover:border-accent hover:text-accent"
+            className="focus-ring rounded-full border border-line bg-ink/[0.05] px-8 py-3 text-sm font-bold text-ink transition hover:border-accent hover:text-accent"
           >
             GitHub Repository
           </a>

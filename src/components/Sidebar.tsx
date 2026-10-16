@@ -67,15 +67,15 @@ const NavItemButton = memo(function NavItemButton({
       type="button"
       onClick={() => onNavigate(item.key)}
       title={item.label}
-      style={{ contain: "layout style paint", transform: "translateZ(0)" }}
+      data-active={active ? "true" : undefined}
       className={cn(
-        "focus-ring relative flex items-center gap-3 rounded-2xl text-sm font-semibold transition-colors duration-150",
-        active ? "bg-accent/15 text-accent" : "text-ink2 hover:bg-[rgba(255,255,255,0.05)] hover:text-ink",
+        "ab-nav-item focus-ring relative flex items-center gap-3 rounded-2xl text-sm font-semibold transition-colors duration-150",
+        active ? "bg-accent/15 text-accent" : "text-ink2 hover:bg-ink/[0.06] hover:text-ink",
         collapsed ? "mx-auto h-12 w-12 justify-center p-0" : "w-full px-4 py-3"
       )}
     >
-      {active && !collapsed && <span className="absolute top-1/2 left-1 h-5 w-1 -translate-y-1/2 rounded-full bg-accent" />}
-      <Icon className={cn("h-5 w-5 shrink-0", active && "drop-shadow-[0_0_8px_var(--c-accent)]")} />
+      {active && !collapsed && <span className="ab-nav-mark absolute top-1/2 left-1 h-5 w-1 -translate-y-1/2 rounded-full bg-accent" />}
+      <Icon className={cn("h-5 w-5 shrink-0", active && "drop-shadow-[0_0_8px_var(--glow)]")} />
       {!collapsed && (
         <>
           <span className="flex-1 truncate text-left">{item.label}</span>
@@ -109,10 +109,9 @@ export const Sidebar = memo(function Sidebar({
   return (
     <aside
       className={cn(
-        "blur-panel glass-inset relative z-30 hidden h-full shrink-0 flex-col rounded-[2rem] border border-white/5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.5)] transition-[width] duration-300 md:flex",
+        "shell-panel relative z-30 hidden h-full shrink-0 flex-col transition-[width] duration-300 md:flex",
         collapsed ? "w-[5rem]" : "w-[17.5rem]",
       )}
-      style={{ contain: "layout style paint" }}
     >
       <div className={cn("relative flex items-center pt-6 pb-4", collapsed ? "justify-center px-0" : "justify-between px-5")}>
         <div className={cn("flex items-center gap-3 min-w-0", collapsed && "hidden")}>
@@ -147,7 +146,7 @@ export const Sidebar = memo(function Sidebar({
       </div>
 
       {!collapsed && (
-        <div className="mx-3 mb-6 animate-fade-in rounded-[1.4rem] border border-line/80 bg-white/[0.03] p-3.5 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+        <div className="blur-panel mx-3 mb-6 animate-fade-in rounded-[1.4rem] p-3.5">
           <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
             <ListMusic className="h-3.5 w-3.5 text-accent" /> Sound Engine
           </p>
@@ -157,7 +156,7 @@ export const Sidebar = memo(function Sidebar({
         </div>
       )}
 
-      <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")} style={{ contain: "layout style paint" }}>
+      <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>
         <div className="space-y-1">
           {MAIN.map((item) => (
             <NavItemButton
@@ -226,10 +225,10 @@ export const Sidebar = memo(function Sidebar({
                   key={p.id}
                   type="button"
                   onClick={() => onNavigate(`playlist:${p.id}` as RouteKey)}
-                  style={{ contain: "layout style paint", transform: "translateZ(0)" }}
+                  data-active={route === `playlist:${p.id}` ? "true" : undefined}
                   className={cn(
-                    "focus-ring flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors duration-150 hover:bg-[rgba(255,255,255,0.05)]",
-                    route === `playlist:${p.id}` && "bg-[rgba(255,255,255,0.05)]",
+                    "ab-nav-item focus-ring flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors duration-150 hover:bg-ink/[0.06]",
+                    route === `playlist:${p.id}` && "bg-ink/[0.08]",
                   )}
                 >
                   <Artwork alt={p.name} src={p.tracks[0]?.artwork} className="h-8 w-8 shrink-0" rounded="rounded-lg" />

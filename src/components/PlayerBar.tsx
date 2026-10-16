@@ -43,7 +43,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
 
   return (
     <div className="fixed inset-x-0 bottom-[calc(4.85rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
-      <div className="blur-panel glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[1.6rem]! px-4 pt-1.5 pb-[calc(var(--sa-bottom)+0.55rem)] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)] md:rounded-[2rem]! md:px-6 md:py-3 md:pb-3">
+      <div className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[calc(var(--sa-bottom)+0.55rem)] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
         {/* mobile progress line - moved to absolute top for better layout */}
         <div className="absolute top-0 left-0 right-0 md:hidden">
           <Slider
@@ -71,7 +71,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               src={current?.artwork || undefined}
               fallbackSrc={current?.artworkFallback}
               alt={current?.title ?? "AuraBeats"}
-              className={cn("h-full w-full", isPlaying && "shadow-[0_0_20px_-4px_var(--c-accent)]")}
+              className={cn("h-full w-full", isPlaying && "shadow-[0_0_20px_-4px_var(--glow)]")}
               rounded={isPlaying ? "rounded-full" : "rounded-lg"}
             />
             {isPlaying && (
@@ -135,7 +135,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               aria-label={isPlaying ? "Pause" : "Play"}
               className={cn(
                 "focus-ring relative flex h-9 w-9 items-center justify-center rounded-full bg-ink text-base transition-all duration-200 hover:scale-105 active:scale-95 sm:h-11 sm:w-11",
-                isPlaying && "bg-accent text-white shadow-[0_0_20px_-4px_var(--c-accent)]",
+                isPlaying && "bg-accent text-white shadow-[0_0_20px_-4px_var(--glow)]",
               )}
             >
               {isBuffering ? (

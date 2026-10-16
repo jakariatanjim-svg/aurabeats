@@ -20,7 +20,7 @@ export function MobileNav({
   favoritesCount: number;
 }) {
   return (
-    <nav className="blur-panel fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! pb-[calc(var(--sa-bottom)+0.35rem)] pl-[calc(var(--sa-left)+0.5rem)] pr-[calc(var(--sa-right)+0.5rem)] pt-2 md:hidden">
+    <nav className="ab-navbar blur-panel surface-raised fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! pb-[calc(var(--sa-bottom)+0.35rem)] pl-[calc(var(--sa-left)+0.5rem)] pr-[calc(var(--sa-right)+0.5rem)] pt-2 md:hidden">
       <div className="grid grid-cols-5 gap-1.5">
         {ITEMS.map(({ key, label, icon: Icon }) => {
           const active = route === key;
@@ -29,12 +29,14 @@ export function MobileNav({
               key={key}
               type="button"
               onClick={() => onNavigate(key)}
+              data-active={active ? "true" : undefined}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "focus-ring relative flex min-h-[4.1rem] flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-semibold transition-all",
-                active ? "bg-accent/14 text-accent shadow-[0_12px_28px_-20px_var(--c-accent)]" : "text-ink3 hover:bg-white/[0.04] hover:text-ink",
+                "ab-navbtn focus-ring relative flex min-h-[4.1rem] flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-semibold transition-all",
+                active ? "bg-accent/14 text-accent shadow-[0_12px_28px_-20px_var(--glow)]" : "text-ink3 hover:bg-ink/[0.05] hover:text-ink",
               )}
             >
-              <span className="relative">
+              <span className="ab-navicon relative">
                 <Icon className={cn("h-[18px] w-[18px] transition-all", active ? "scale-110 text-accent" : "text-current")} />
                 {key === "favorites" && favoritesCount > 0 && (
                   <span className="absolute -top-1.5 -right-2 min-w-[14px] rounded-full bg-accent px-1 text-[9px] leading-[14px] font-bold text-white">
@@ -43,7 +45,7 @@ export function MobileNav({
                 )}
               </span>
               <span className="max-w-full truncate px-1">{label}</span>
-              {active && <span className="absolute inset-x-4 top-0 h-[2px] rounded-full bg-accent" />}
+              {active && <span className="ab-navline absolute inset-x-4 top-0 h-[2px] rounded-full bg-accent" />}
             </button>
           );
         })}

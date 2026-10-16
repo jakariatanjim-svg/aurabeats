@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Moon, Palette, Search, Settings, Sparkles, Sun, Wifi } from "lucide-react";
+import { Check, ChevronDown, Moon, Palette, Search, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
 import { routeLabel, type RouteKey } from "@/routes";
@@ -12,8 +12,8 @@ function ThemeSwitch({ className }: { className?: string }) {
     <div className={cn("blur-panel flex items-center gap-0.5 p-1", className)}>
       {(
         [
-          { key: "glassy", label: "Glassy", icon: Sparkles },
-          { key: "modern", label: "Modern", icon: Palette },
+          { key: "glassmorphism", label: "Glassmorphism", icon: Sparkles },
+          { key: "material", label: "Material UI", icon: Shapes },
         ] as const
       ).map(({ key, label, icon: Icon }) => (
         <button
@@ -22,7 +22,7 @@ function ThemeSwitch({ className }: { className?: string }) {
           onClick={() => setTheme(key)}
           className={cn(
             "focus-ring flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition-all duration-200 sm:px-3 sm:text-[11px]",
-            theme === key ? "bg-accent text-white shadow-[0_4px_18px_-6px_var(--c-accent)]" : "text-ink3 hover:text-ink",
+            theme === key ? "bg-accent text-white shadow-[0_4px_18px_-6px_var(--glow)]" : "text-ink3 hover:text-ink",
           )}
         >
           <Icon className="h-3.5 w-3.5" />
@@ -65,7 +65,7 @@ function AccentPicker() {
         />
       </IconButton>
       {open && (
-        <div className="blur-panel absolute top-12 right-0 z-[70] w-[15rem] animate-scale-in p-3.5 shadow-2xl">
+        <div className="blur-panel surface-raised absolute top-12 right-0 z-[70] w-[15rem] animate-scale-in p-3.5 shadow-2xl">
           <p className="mb-2.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">
             <Palette className="h-3 w-3" /> Accent colour
           </p>
@@ -118,7 +118,7 @@ export function TopBar({
   const live = route === "radio";
 
   return (
-    <header className="blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
+    <header className="ab-topbar blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
       <button
         type="button"
         onClick={() => onNavigate("home")}
@@ -137,7 +137,7 @@ export function TopBar({
       <div className="hidden min-w-0 flex-1 md:block">
         <p className="truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl">{routeLabel(route)}</p>
         <p className="mt-0.5 hidden items-center gap-1.5 text-[11px] font-medium text-ink3 sm:flex sm:text-xs">
-          <Wifi className="h-3.5 w-3.5 shrink-0 text-accent drop-shadow-[0_0_8px_var(--c-accent)]" />
+          <Wifi className="h-3.5 w-3.5 shrink-0 text-accent drop-shadow-[0_0_8px_var(--glow)]" />
           {failoverNote ? (
             <span className="truncate text-accent">{failoverNote}</span>
           ) : live ? (
@@ -151,7 +151,7 @@ export function TopBar({
       <button
         type="button"
         onClick={() => onNavigate("search")}
-        className="focus-ring glass-inset hidden items-center gap-2 rounded-full border border-line/80 bg-white/[0.03] px-4 py-2.5 text-xs text-ink3 transition hover:border-accent hover:text-accent lg:flex"
+        className="focus-ring glass-inset hidden items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] px-4 py-2.5 text-xs text-ink3 transition hover:border-accent hover:text-accent lg:flex"
       >
         <Search className="h-3.5 w-3.5" />
         Search millions of tracks

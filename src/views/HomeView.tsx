@@ -284,7 +284,7 @@ function QuickAction({
     <button
       type="button"
       onClick={onClick}
-      className="blur-panel glass-inset flex items-center gap-3 rounded-[1.35rem] p-3 text-left transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-26px_var(--c-accent)] sm:p-3.5"
+      className="blur-panel glass-inset flex items-center gap-3 rounded-[1.35rem] p-3 text-left transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-26px_var(--glow)] sm:p-3.5"
     >
       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tint}`}>{icon}</span>
       <span className="min-w-0">
