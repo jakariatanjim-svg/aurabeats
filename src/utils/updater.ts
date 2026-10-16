@@ -18,8 +18,14 @@ import { compareVersions, formatVersion, parseVersion, type Version } from "@/ut
 export const GITHUB_REPO = "jakariatanjim-svg/aurabeats";
 
 const LATEST_RELEASE_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
-/** Stable asset name the APK workflow uploads (see .github/workflows). */
+/** Asset name the release workflow prefers; a versioned name is also accepted. */
 export const APK_ASSET_NAME = "AuraBeats.apk";
+/**
+ * Matches every name the pipeline has used for the Android package, so renaming
+ * the release asset can never break the update check: `AuraBeats.apk`,
+ * `AuraBeats-1.4.apk`, `aurabeats.apk`.
+ */
+const APK_ASSET_PATTERN = /^aurabeats(?:[-_.][\w.-]*)?\.apk$/i;
 const APK_CONTENT_TYPE = "application/vnd.android.package-archive";
 const APK_FILE_NAME = "AuraBeats-update.apk";
 
@@ -80,6 +86,14 @@ function readCommitSha(body: unknown): string {
 }
 
 /** Fetches the release GitHub marks as "latest"; null when there is none. */
+/** Finds the Android package in a release, tolerating either asset name. */
+function findApkAsset(assets: ReleaseAsset[]): ReleaseAsset | undefined {
+  return (
+    assets.find((asset) => asset?.name === APK_ASSET_NAME) ??
+    assets.find((asset) => typeof asset?.name === "string" && APK_ASSET_PATTERN.test(asset.name))
+  );
+}
+
 export async function fetchLatestRelease(): Promise<LatestRelease | null> {
   const response = await fetch(LATEST_RELEASE_URL, {
     headers: { Accept: "application/vnd.github+json" },
@@ -94,7 +108,7 @@ export async function fetchLatestRelease(): Promise<LatestRelease | null> {
   };
 
   const assets = Array.isArray(data.assets) ? data.assets : [];
-  const apk = assets.find((asset) => asset?.name === APK_ASSET_NAME);
+  const apk = findApkAsset(assets);
   const tag = data.tag_name || data.name || "";
 
   return {

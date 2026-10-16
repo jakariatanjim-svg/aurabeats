@@ -58,7 +58,7 @@ No builds, no installs — AuraBeats is already live:
 
 1. **Website** — open [aurabeats.pages.dev](https://aurabeats.pages.dev) in any browser, on PC or mobile.
 2. **PWA** — install it from the browser menu for a native-app feel (see below).
-3. **Android APK** — grab `AuraBeats.apk` from the [latest GitHub Release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest); afterwards the app updates itself from Settings.
+3. **Android APK** — grab the APK from the [latest GitHub Release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest); afterwards the app updates itself from Settings.
 
 Nothing is published automatically: every release is a deliberate **Run workflow** press in the Actions tab (see [GitHub Actions](#-github-actions)).
 
@@ -67,25 +67,40 @@ Nothing is published automatically: every release is a deliberate **Run workflow
 ## 📦 Distribution
 
 - **Website / PWA** — the primary target, hosted as a standard live website: download `aurabeats-web.zip` from a release and upload its contents to Cloudflare Pages. Installable as a PWA on Android, iOS, or any desktop browser, with no offline cache layer in between.
-- **Android APK** — built by `Manual: APK Build` and attached to the latest GitHub Release as `AuraBeats.apk`; the in-app **Check App Update** button picks new versions up.
+- **Android APK** — built by **APK — Release** and attached to the latest GitHub Release as `AuraBeats-<version>.apk`; the in-app **Check App Update** button picks new versions up.
 - **No desktop installer** — the project is web-first by design. On PC, use the website directly or install the PWA from Chrome/Edge.
 
 ---
 
 ## 🔄 GitHub Actions
 
-Two manual workflows and nothing else — there are no push triggers, so a commit
-(or an agent session) can never publish anything by itself. Both live in
-`.github/workflows/`:
+Four manual workflows and nothing else — there are no push triggers, so a commit
+(or an agent session) can never publish anything by itself. All four live in
+`.github/workflows/`, and all four can be run from any branch using the **"Use
+workflow from"** dropdown at the top of the run dialog.
 
-| Workflow | On the **default branch** (`main`) | On **any other branch** |
-| --- | --- | --- |
-| `manual-web.yml` — **Manual: Website Build** | mints the next version, creates the tag **and** the GitHub Release, attaches `aurabeats-web.zip` (the `dist/` bundle for Cloudflare Pages) | builds the same ZIP and uploads it as a run **artifact** only — no tag, no release |
-| `manual-apk.yml` — **Manual: APK Build** | builds and signs the APK, stamps it with the latest release's version and pushes `AuraBeats.apk` into **that** release | builds the same APK and uploads it as a run **artifact** only — no release is touched |
+**Release pipelines** — these publish:
 
-The branch is picked with the **"Use workflow from"** dropdown at the top of the
-run dialog: default branch = production release, any other branch = a test run
-you can sideload and inspect before releasing it for real.
+| Workflow | What a run does |
+| --- | --- |
+| `manual-web.yml` — **Website — Release** | mints the next version, creates the tag **and** the GitHub Release, attaches `aurabeats-web.zip` (the `dist/` bundle for Cloudflare Pages). Has the optional version override. |
+| `manual-apk.yml` — **APK — Release** | builds and signs the APK, stamps it with the version of the release marked *latest*, and uploads `AuraBeats-<version>.apk` into **that** release. Creates no tag, no release and no version. |
+
+**Test pipelines** — these only build, and publish nothing (no tag, no release,
+no upload):
+
+| Workflow | Artifact you get |
+| --- | --- |
+| `artifact-web.yml` — **Website — Test Build** | the built site itself — unzip it to inspect locally, or upload it straight to Cloudflare Pages |
+| `artifact-apk.yml` — **APK — Test Build** | the signed APK, ready to sideload |
+
+Test builds run on any branch and never ask anything. The two release pipelines
+also run on any branch, but selecting a branch other than the default requires
+ticking a confirmation box in the run dialog; without it the run stops with an
+error that names the default branch and the matching test workflow. Artifacts are
+kept for 7 days. GitHub wraps every artifact download in a ZIP container: the
+website artifact holds the site files directly, the APK artifact holds only
+`AuraBeats-<version>.apk`.
 
 ### Versioning
 
@@ -95,7 +110,7 @@ Versions are automatic and monotonic — no dates, no run counters:
 1.0 → 1.1 → 1.2 → … → 1.9 → 2.0 → 2.1 → …
 ```
 
-**Manual: Website Build** reads the highest existing `vX.Y` tag and mints the
+**Website — Release** reads the highest existing `vX.Y` tag and mints the
 next one (the very first run gives `v1.0`), then tags the release `v1.4` and
 titles it `AuraBeats — v1.4`.
 
@@ -106,17 +121,18 @@ published as an ordinary tag, so it becomes the **new baseline**: override
 never falls back to `v1.6`. Overriding *downwards* is allowed but prints a
 warning, because the sequence still continues after the highest tag: versions
 have to stay monotonic or installed apps stop seeing updates. Overrides only
-matter on a production run — a test-branch run creates no tag, so it can neither
-consume nor move a version.
+matter on a release run — the two test pipelines create no tag, so they can
+neither consume nor move a version; the number they stamp into a test build is
+only a label.
 
-**Manual: APK Build** never mints a version. It stamps the APK with the version
+**APK — Release** never mints a version. It stamps the APK with the version
 of the release marked *latest* and pushes the APK into that same release, so the
 package always agrees with the release it lives in. Android receives
 `versionName 1.4` / `versionCode 14` (`MAJOR × 10 + MINOR`), which keeps updates
 from ever looking like a downgrade.
 
-A normal release is therefore two runs: **Website Build** (creates `v1.4`) then
-**APK Build** (fills `v1.4` with `AuraBeats.apk`).
+A normal release is therefore two runs: **Website — Release** (creates `v1.4`)
+then **APK — Release** (fills `v1.4` with `AuraBeats-1.4.apk`).
 
 ### Signing
 

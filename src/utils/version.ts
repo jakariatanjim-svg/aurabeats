@@ -2,8 +2,8 @@
  * Version handling for the release pipeline and the in-app updater.
  *
  * AuraBeats versions are `MAJOR.MINOR` where the minor only ever runs 0-9:
- * 1.0 -> 1.1 -> ... -> 1.9 -> 2.0 -> 2.1 ... Each "Manual: Website Build" run
- * on the default branch mints exactly one new version and tags it `vX.Y`.
+ * 1.0 -> 1.1 -> ... -> 1.9 -> 2.0 -> 2.1 ... Each "Website — Release" run
+ * mints exactly one new version and tags it `vX.Y`.
  *
  * Everything is compared numerically — never as a string — because "1.10" would
  * otherwise sort before "1.9" and a device would be told to downgrade.

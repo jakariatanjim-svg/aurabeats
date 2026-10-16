@@ -1,40 +1,27 @@
-# Manual website build — the only pipeline that creates releases.
+# Website release pipeline. Computes the next version, builds the site, creates
+# the tag and the GitHub Release, and attaches the Cloudflare Pages bundle.
+# Versions are minted here only; "APK — Release" fills the release afterwards.
 #
-# Nothing runs automatically: every release is a deliberate "Run workflow".
-# The branch dropdown at the top of the run dialog ("Use workflow from") is the
-# build selector, and it decides what the run is allowed to do:
-#
-#   default branch (main) -> PRODUCTION. The next version is computed, a git
-#                            tag + GitHub Release are created and the Cloudflare
-#                            Pages bundle is attached as `aurabeats-web.zip`.
-#   any other branch      -> TEST. Same build, same version label, but nothing
-#                            is published: no tag, no release. The ZIP is
-#                            uploaded as a run artifact so it can be inspected
-#                            and only then released from the default branch.
-#
-# Version scheme (shared with manual-apk.yml): 1.0 -> 1.1 -> ... -> 1.9 -> 2.0
-# -> 2.1 ... The number is derived from the highest existing `vX.Y` tag, so one
-# run on the default branch produces exactly one new version. No dates, no run
-# counters.
-#
-# An override is published as an ordinary tag, so it becomes the new baseline:
-# override v3.0 at a time when v1.5 is the newest, and the next automatic run
-# mints v3.1 — it never falls back to v1.6. Overriding downwards is allowed but
-# warns, because the sequence still continues after the highest tag (versions
-# must stay monotonic or installed apps stop seeing updates).
-name: "Manual: Website Build"
+# Version scheme: 1.0 -> 1.1 -> ... -> 1.9 -> 2.0, derived from the highest
+# existing vX.Y tag. An override is published as an ordinary tag and therefore
+# becomes the baseline for the next automatic run.
+name: "Website — Release"
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version override (e.g. 3 or 1.4) — leave empty for the next automatic version. An override becomes the new baseline: the next auto run continues after it (v3.0 → v3.1), never back at the old sequence."
+        description: "Version override (e.g. 3 or 1.4). Leave empty for the next automatic version."
         required: false
         default: ""
         type: string
+      confirm:
+        description: "Release from a non-default branch — required only when such a branch is selected"
+        required: false
+        default: false
+        type: boolean
 
-# Serialized on purpose: two parallel runs would compute the same "next
-# version" and race for the same tag. Queued runs simply wait.
+# Parallel runs would compute the same version and race for the same tag.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -43,30 +30,26 @@ permissions:
   contents: write
 
 jobs:
-  web:
-    name: Website build (${{ github.ref_name }})
+  release:
+    name: Website release (${{ github.ref_name }})
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      # main (or whatever the repo's default branch is) -> publish a release.
-      # Anything else -> artifact only.
-      - name: Resolve build mode
-        id: mode
+      - name: Check branch
+        env:
+          CONFIRMED: ${{ inputs.confirm }}
         run: |
           DEFAULT_BRANCH=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.default_branch')
-          BRANCH="$GITHUB_REF_NAME"
-          if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
-            MODE="release"
-          else
-            MODE="artifact"
+          if [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ]; then
+            echo "Default branch selected: $GITHUB_REF_NAME"
+            exit 0
           fi
-          {
-            echo "default_branch=$DEFAULT_BRANCH"
-            echo "branch=$BRANCH"
-            echo "mode=$MODE"
-          } >> "$GITHUB_OUTPUT"
-          echo "Branch '$BRANCH' (default '$DEFAULT_BRANCH') -> mode: $MODE"
+          if [ "$CONFIRMED" != "true" ]; then
+            echo "::error::$GITHUB_REF_NAME is not the default branch ($DEFAULT_BRANCH), and this workflow publishes a tag and a release. Re-run it with \"Release from a non-default branch\" enabled to continue, or use \"Website — Test Build\" for an artifact-only build."
+            exit 1
+          fi
+          echo "::warning::Publishing a release from $GITHUB_REF_NAME. The default branch is $DEFAULT_BRANCH."
 
       - uses: actions/checkout@v4
 
@@ -74,22 +57,16 @@ jobs:
         id: version
         env:
           VERSION_OVERRIDE: ${{ inputs.version }}
-          MODE: ${{ steps.mode.outputs.mode }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
 
-          # Python writes $GITHUB_OUTPUT itself on purpose: the version must
-          # never share a captured stdout stream with ::warning::/::error::
-          # annotations, or the annotation text ends up inside the value.
+          # Python writes $GITHUB_OUTPUT directly so that annotation text can
+          # never end up inside a captured value.
           python3 - /tmp/tags.txt <<'PY'
           import os, re, subprocess, sys
 
           override = os.environ.get("VERSION_OVERRIDE", "").strip()
-          mode = os.environ.get("MODE", "")
 
-          # Highest existing vX.Y tag wins; the minor only ever runs 0-9, so
-          # 1.9 rolls over to 2.0. Unrelated tags (legacy date stamps) are
-          # ignored, and the raw set is kept for collision checks.
           raw = set()
           highest = None
           with open(sys.argv[1], encoding="utf-8") as fh:
@@ -110,46 +87,32 @@ jobs:
               return (major, minor + 1) if minor < 9 else (major + 1, 0)
 
           def fail(message):
-              # Workflow commands are only parsed from stdout.
               print("::error::" + message)
               raise SystemExit(1)
 
           if override:
-              # "3" means 3.0; "3.7" and "v3.7" work too.
               m = re.fullmatch(r"v?(\d+)(?:\.(\d+))?", override)
               if not m:
                   fail("Version override '%s' must look like 3 or 1.4." % override)
               chosen = (int(m.group(1)), int(m.group(2) or 0))
               if highest and chosen < highest:
-                  # Allowed, but spell out the consequence: the sequence always
-                  # continues after the HIGHEST tag, never after a lower
-                  # override. Versions have to stay monotonic or installed apps
-                  # stop seeing updates.
-                  print("::warning::v%d.%d is older than the highest published v%d.%d — "
-                        "the next automatic run continues from v%d.%d, not from this override."
+                  print("::warning::v%d.%d is older than the highest published v%d.%d. The next automatic run continues from v%d.%d."
                         % (chosen + highest + after(highest)))
               version = "%d.%d" % chosen
           else:
-              # Automatic. A published override is an ordinary tag, so the next
-              # run simply continues after it: override v3.0 -> next auto v3.1.
-              # It never falls back to the pre-override sequence.
               version = "%d.%d" % (after(highest) if highest else (1, 0))
 
-          # Only a production run publishes anything, so only a production run
-          # can collide. Test-branch runs just label an artifact.
-          if mode == "release":
-              for existing in ("v" + version, version):
-                  if existing in raw:
-                      fail("Tag %s already exists — leave the override empty to auto-advance, or pick a free version." % existing)
-              published = subprocess.run(
-                  ["gh", "release", "view", "v" + version],
-                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-              if published:
-                  fail("Release v%s already exists — leave the override empty to auto-advance, or pick a free version." % version)
+          for existing in ("v" + version, version):
+              if existing in raw:
+                  fail("Tag %s already exists. Leave the override empty to auto-advance, or choose a free version." % existing)
+          published = subprocess.run(["gh", "release", "view", "v" + version],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+          if published:
+              fail("Release v%s already exists. Leave the override empty to auto-advance, or choose a free version." % version)
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write("version=%s\ntag=v%s\n" % (version, version))
-          print("Version for this run: v%s" % version)
+          print("Version: v%s" % version)
           PY
 
       - uses: actions/setup-node@v4
@@ -160,22 +123,18 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
 
-      # APP_VERSION is baked into the bundle (see vite.config.ts) so the app can
-      # tell which release it came from.
-      - name: Build web bundle
+      # APP_VERSION is baked into the bundle (see vite.config.ts).
+      - name: Build
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: npm run build
 
-      # One artifact only: the dist/ ZIP that gets uploaded to Cloudflare Pages.
-      - name: Package dist
+      - name: Package
         run: |
-          cd dist && zip -r ../aurabeats-web.zip . && cd ..
-          ls -lh aurabeats-web.zip
+          cd dist && zip -qr ../aurabeats-web.zip .
+          ls -lh ../aurabeats-web.zip
 
-      # ---------------- production: publish the release ----------------
-      - name: Create release + tag
-        if: steps.mode.outputs.mode == 'release'
+      - name: Create release
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
@@ -186,8 +145,8 @@ jobs:
           AuraBeats v$VERSION
 
           - Website bundle: built from \`$SHORT_SHA\` on $BUILT_AT
-          - \`aurabeats-web.zip\` holds the \`dist/\` output — unzip it and upload the contents to Cloudflare Pages.
-          - Android: run **Manual: APK Build** on the default branch to attach \`AuraBeats.apk\` (stamped v$VERSION) to this release.
+          - \`aurabeats-web.zip\` holds the \`dist/\` output. Unzip it and upload the contents to Cloudflare Pages.
+          - Android: run **APK — Release** to attach \`AuraBeats-$VERSION.apk\` to this release.
           EOF
           )
 
@@ -196,44 +155,16 @@ jobs:
             --title "AuraBeats — v$VERSION" \
             --notes "$NOTES" \
             --latest
-          echo "Published $TAG"
-
-      # ---------------- test branch: artifact only ----------------
-      # Branch names may contain characters that are invalid in artifact names
-      # (slash, colon, ...), so derive a safe label first.
-      - name: Prepare artifact label
-        if: steps.mode.outputs.mode == 'artifact'
-        id: label
-        run: |
-          SAFE_REF=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'a-zA-Z0-9._-' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//')
-          {
-            echo "ref=$SAFE_REF"
-            echo "sha=${GITHUB_SHA::7}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Upload test artifact
-        if: steps.mode.outputs.mode == 'artifact'
-        uses: actions/upload-artifact@v4
-        with:
-          name: aurabeats-web-${{ steps.label.outputs.ref }}-${{ steps.label.outputs.sha }}-v${{ steps.version.outputs.version }}
-          path: aurabeats-web.zip
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Summary
         if: always()
         run: |
           {
-            echo "### AuraBeats website build"
+            echo "### Website release"
             echo ""
             echo "| | |"
             echo "| --- | --- |"
             echo "| Branch | \`$GITHUB_REF_NAME\` |"
-            echo "| Mode | \`${{ steps.mode.outputs.mode }}\` |"
             echo "| Version | \`v${{ steps.version.outputs.version }}\` |"
-            if [ "${{ steps.mode.outputs.mode }}" = "release" ]; then
-              echo "| Published | [${{ steps.version.outputs.tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}) |"
-            else
-              echo "| Published | nothing — test branch, download the ZIP from **Artifacts** |"
-            fi
+            echo "| Release | [${{ steps.version.outputs.tag }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}) |"
           } >> "$GITHUB_STEP_SUMMARY"
