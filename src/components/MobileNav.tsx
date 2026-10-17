@@ -1,6 +1,7 @@
-import { Heart, Home, Library, Radio, Search } from "lucide-react";
+import { useState } from "react";
+import { Heart, Home, Library, Radio, Rss, Search } from "lucide-react";
 import { cn } from "@/utils/cn";
-import type { RouteKey } from "@/routes";
+import { isVideoRoute, type RouteKey } from "@/routes";
 
 const ITEMS: { key: RouteKey; label: string; icon: typeof Home }[] = [
   { key: "home", label: "Home", icon: Home },
@@ -8,6 +9,13 @@ const ITEMS: { key: RouteKey; label: string; icon: typeof Home }[] = [
   { key: "radio", label: "Radio", icon: Radio },
   { key: "library", label: "Library", icon: Library },
   { key: "favorites", label: "Saved", icon: Heart },
+];
+
+const VIDEO_ITEMS: { key: RouteKey; label: string; icon: typeof Home }[] = [
+  { key: "video", label: "Home", icon: Home },
+  { key: "video-search", label: "Search", icon: Search },
+  { key: "video-subs", label: "Following", icon: Rss },
+  { key: "video-library", label: "Library", icon: Library },
 ];
 
 export function MobileNav({
@@ -19,10 +27,15 @@ export function MobileNav({
   onNavigate: (r: RouteKey) => void;
   favoritesCount: number;
 }) {
+  const [lastMode, setLastMode] = useState<"music" | "video">(isVideoRoute(route) ? "video" : "music");
+  const shared = route === "settings" || route === "about" || route === "privacy";
+  const mode = shared ? lastMode : isVideoRoute(route) ? "video" : "music";
+  if (!shared && mode !== lastMode) setLastMode(mode);
+  const items = mode === "video" ? VIDEO_ITEMS : ITEMS;
   return (
     <nav className="ab-navbar blur-panel surface-raised fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! pb-[calc(var(--sa-bottom)+0.35rem)] pl-[calc(var(--sa-left)+0.5rem)] pr-[calc(var(--sa-right)+0.5rem)] pt-2 md:hidden">
-      <div className="grid grid-cols-5 gap-1.5">
-        {ITEMS.map(({ key, label, icon: Icon }) => {
+      <div className={cn("grid gap-1.5", items.length === 4 ? "grid-cols-4" : "grid-cols-5")}>
+        {items.map(({ key, label, icon: Icon }) => {
           const active = route === key;
           return (
             <button

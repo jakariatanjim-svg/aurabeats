@@ -12,7 +12,14 @@ import {
   Search,
   Settings,
   DownloadCloud,
+  Rss,
+  Tv,
 } from "lucide-react";
+import { AppModeSwitch } from "@/components/video/AppModeSwitch";
+import { Avatar } from "@/components/video/VideoCards";
+import { useVideoLibrary } from "@/hooks/useVideoLibrary";
+import { playbackMethodLabel } from "@/services/video/net";
+import { isVideoRoute } from "@/routes";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, WaveformLogo } from "@/components/ui";
@@ -29,6 +36,18 @@ const MAIN: NavItem[] = [
   { key: "search", label: "Search", icon: Search },
   { key: "radio", label: "Live Radio", icon: Radio },
   { key: "library", label: "Your Library", icon: Library },
+];
+
+const VIDEO_MAIN: NavItem[] = [
+  { key: "video", label: "Home", icon: Home },
+  { key: "video-search", label: "Search", icon: Search },
+  { key: "video-subs", label: "Following", icon: Rss },
+  { key: "video-library", label: "Library", icon: Library },
+];
+
+const VIDEO_COLLECTION: NavItem[] = [
+  { key: "settings", label: "Settings", icon: Settings },
+  { key: "about", label: "About", icon: Info },
 ];
 
 const COLLECTION: NavItem[] = [
@@ -100,6 +119,12 @@ export const Sidebar = memo(function Sidebar({
   onToggleCollapse: () => void;
 }) {
   const { playlists, createPlaylist, favorites, history } = usePlayer();
+  const { follows } = useVideoLibrary();
+  // Settings / About are shared: keep the mode you came from.
+  const [lastMode, setLastMode] = useState<"music" | "video">(isVideoRoute(route) ? "video" : "music");
+  const shared = route === "settings" || route === "about" || route === "privacy";
+  const video = shared ? lastMode === "video" : isVideoRoute(route);
+  if (!shared && (isVideoRoute(route) ? "video" : "music") !== lastMode) setLastMode(isVideoRoute(route) ? "video" : "music");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -121,7 +146,7 @@ export const Sidebar = memo(function Sidebar({
           </div>
           <div className="min-w-0">
             <p className="truncate text-base leading-tight font-black tracking-tight text-ink drop-shadow-sm">AuraBeats</p>
-            <p className="truncate text-[10px] font-bold tracking-widest text-ink3 uppercase opacity-80">Pure Sound</p>
+            <p className="truncate text-[10px] font-bold tracking-widest text-ink3 uppercase opacity-80">Music &amp; Video</p>
           </div>
         </div>
 
@@ -145,20 +170,41 @@ export const Sidebar = memo(function Sidebar({
         </div>
       </div>
 
+      <AppModeSwitch
+        route={shared ? (video ? "video" : "home") : route}
+        onNavigate={onNavigate}
+        compact={collapsed}
+        vertical={collapsed}
+        className={cn("mb-4", collapsed ? "mx-auto w-12" : "mx-3")}
+      />
+
       {!collapsed && (
         <div className="blur-panel mx-3 mb-6 animate-fade-in rounded-[1.4rem] p-3.5">
-          <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
-            <ListMusic className="h-3.5 w-3.5 text-accent" /> Sound Engine
-          </p>
-          <p className="mt-1 text-[10px] leading-relaxed text-ink3">
-            Aggregating YouTube Music, JioSaavn, Audius, Jamendo, Archive and live radio in one player.
-          </p>
+          {video ? (
+            <>
+              <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
+                <Tv className="h-3.5 w-3.5 text-accent" /> Video Engine
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-ink3">
+                Ad-free YouTube in every quality, no account. {playbackMethodLabel()}.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
+                <ListMusic className="h-3.5 w-3.5 text-accent" /> Sound Engine
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-ink3">
+                Aggregating YouTube Music, JioSaavn, Audius, Jamendo, Archive and live radio in one player.
+              </p>
+            </>
+          )}
         </div>
       )}
 
       <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>
         <div className="space-y-1">
-          {MAIN.map((item) => (
+          {(video ? VIDEO_MAIN : MAIN).map((item) => (
             <NavItemButton
               key={item.key}
               item={item}
@@ -170,7 +216,34 @@ export const Sidebar = memo(function Sidebar({
           ))}
         </div>
 
-        {!collapsed && (
+        {!collapsed && video && (
+          <div>
+            <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Channels you follow</p>
+            {follows.length === 0 ? (
+              <p className="px-3 text-xs leading-relaxed text-ink3">Tap Follow on any channel — no account needed.</p>
+            ) : (
+              <div className="space-y-0.5">
+                {follows.slice(0, 12).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onNavigate(`channel:${c.id}`)}
+                    data-active={route === `channel:${c.id}` ? "true" : undefined}
+                    className={cn(
+                      "ab-nav-item focus-ring flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors duration-150 hover:bg-ink/[0.06]",
+                      route === `channel:${c.id}` && "bg-ink/[0.08]",
+                    )}
+                  >
+                    <Avatar name={c.name} src={c.avatar} className="h-7 w-7" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink2">{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!collapsed && !video && (
           <div>
             <div className="mb-2 flex items-center justify-between px-3">
               <p className="text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Your playlists</p>
@@ -246,7 +319,7 @@ export const Sidebar = memo(function Sidebar({
           {!collapsed && (
             <p className="mb-1 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Collection</p>
           )}
-          {COLLECTION.map((item) => (
+          {(video ? VIDEO_COLLECTION : COLLECTION).map((item) => (
             <NavItemButton
               key={item.key}
               item={item}

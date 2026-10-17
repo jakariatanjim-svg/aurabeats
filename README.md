@@ -1,6 +1,6 @@
 # AuraBeats
 
-A free music streaming app that brings songs, radio and more together in one simple player. No account, no subscription and no API key needed — just open it and listen.
+A free music **and video** app: songs, live radio and ad-free YouTube videos (every quality, up to 4K) in one simple player. No account, no subscription, no ads and no API key needed — just open it and play.
 
 **Website:** [aurabeats.pages.dev](https://aurabeats.pages.dev/)
 **Download for Android:** [Latest release (APK)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
@@ -23,12 +23,13 @@ A free music streaming app that brings songs, radio and more together in one sim
 
 ## What is AuraBeats?
 
-AuraBeats is a music player for the web, Android and desktop. It collects full-length songs from several public music sources in one place, so you can search once and play without switching between apps or websites.
+AuraBeats is a music and video player for the web, Android and desktop. It collects full-length songs from several public music sources in one place, and plays YouTube videos without ads in every quality — so you can search once and play without switching between apps or websites.
 
 ## What you can do with it
 
 - Search and play full-length songs
 - Listen to live radio from around the world
+- Watch YouTube videos with no ads, in any quality (up to 4K), follow channels and keep a watch history — all saved on your device, no account
 - Save your favourite songs and build your own collection
 - Discover new music based on your favourites
 - Download supported tracks for offline listening inside the app
@@ -37,9 +38,10 @@ AuraBeats is a music player for the web, Android and desktop. It collects full-l
 ## Features
 
 - **Many music sources in one search** — YouTube Music, JioSaavn, SoundCloud, Audius, Jamendo, Internet Archive and Radio Browser
+- **Ad-free video mode** — switch between Music and Video at any time. On Android the app streams straight from YouTube (like NewPipe); on the website and PWA it uses public ad-free servers (Invidious / Piped) with automatic failover. Quality picker, playback speed, audio-only, picture-in-picture and background listening
 - **Simple player** — play, pause, seek and volume controls, a full-screen player and a mini player
 - **Favourites and discovery** — a "For You" section based on the songs you favourite
-- **Themes** — two looks (Glassy and Modern), dark/light mode and your choice of accent colour
+- **Themes** — three looks (Glassmorphism, Material UI and Liquid Glass), dark/light mode and your choice of accent colour
 - **Keyboard shortcuts** on PC — for example `Space` to play/pause and `Shift` + arrow keys to change track
 
 ---

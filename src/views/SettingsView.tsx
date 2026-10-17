@@ -25,6 +25,7 @@ import { installedVersionLabel } from "@/utils/updater";
 import { storage } from "@/utils/storage";
 import { Button, SectionHeader } from "@/components/ui";
 import type { ThemeName } from "@/types";
+import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
 
 /** Environment detection */
 const isCapacitor = typeof window !== "undefined" && Boolean((window as any).Capacitor?.isNativePlatform?.());
@@ -311,6 +312,8 @@ export function SettingsView() {
           </div>
         </div>
       </section>
+
+      <VideoSettingsSection />
 
       <section>
         <SectionHeader title="Preferences" subtitle="Customize your experience" icon={<Shield className="h-4 w-4 text-accent" />} />

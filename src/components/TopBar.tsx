@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Droplets, Moon, Palette, Search, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
-import { routeLabel, type RouteKey } from "@/routes";
+import { isVideoRoute, routeLabel, type RouteKey } from "@/routes";
+import { AppModeSwitch } from "@/components/video/AppModeSwitch";
+import { playbackMethodLabel } from "@/services/video/net";
 import { IconButton, WaveformLogo } from "@/components/ui";
 import { usePlayer } from "@/hooks/usePlayer";
 
@@ -119,12 +121,13 @@ export function TopBar({
 }) {
   const { failoverNote } = usePlayer();
   const live = route === "radio";
+  const video = isVideoRoute(route);
 
   return (
     <header className="ab-topbar blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
       <button
         type="button"
-        onClick={() => onNavigate("home")}
+        onClick={() => onNavigate(video ? "video" : "home")}
         className="focus-ring flex min-w-0 shrink items-center gap-2.5 rounded-2xl md:hidden"
         aria-label="AuraBeats — go to home"
       >
@@ -145,6 +148,8 @@ export function TopBar({
             <span className="truncate text-accent">{failoverNote}</span>
           ) : live ? (
             "Open radio archive · live streams"
+          ) : video ? (
+            `Ad-free YouTube · ${playbackMethodLabel()}`
           ) : (
             "Multi-source streaming engine"
           )}
@@ -153,15 +158,16 @@ export function TopBar({
 
       <button
         type="button"
-        onClick={() => onNavigate("search")}
+        onClick={() => onNavigate(video ? "video-search" : "search")}
         className="focus-ring glass-inset hidden items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] px-4 py-2.5 text-xs text-ink3 transition hover:border-accent hover:text-accent lg:flex"
       >
         <Search className="h-3.5 w-3.5" />
-        Search millions of tracks
+        {video ? "Search YouTube, ad-free" : "Search millions of tracks"}
         <ChevronDown className="h-3 w-3 -rotate-90 opacity-60" />
       </button>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-2.5">
+        <AppModeSwitch route={route} onNavigate={onNavigate} compact className="md:hidden" />
         <IconButton
           onClick={() => onNavigate("settings")}
           aria-label="Open settings"
