@@ -13,5 +13,15 @@ jobs:
         with: { node-version: 22 }
       - run: npm i --no-save playwright@1 && npx playwright install --with-deps chromium
         working-directory: .github/probe
-      - run: node probe.mjs
+      - run: node probe.mjs > out.txt 2>&1 || true
         working-directory: .github/probe
+      - name: Publish results as annotations
+        working-directory: .github/probe
+        run: |
+          python3 - <<'PY'
+          t = open("out.txt").read()
+          chunks = [t[i:i+3800] for i in range(0, len(t), 3800)][:9]
+          for n, c in enumerate(chunks):
+              c = c.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+              print(f"::notice title=part{n}::{c}")
+          PY
