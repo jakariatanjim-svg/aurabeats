@@ -43,16 +43,19 @@ function PlayOverlay({ playing, onClick, size = "md" }: { playing: boolean; onCl
   );
 }
 
-function TrackMenu({
+export function TrackMenu({
   track,
   context,
   onRemove,
   removeLabel,
+  triggerClassName,
 }: {
   track: Track;
   context?: Track[];
   onRemove?: () => void;
   removeLabel?: string;
+  /** replaces the default hover-only trigger styling (e.g. always visible on cards) */
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -129,7 +132,7 @@ function TrackMenu({
       <IconButton
         ref={btnRef}
         size="sm"
-        className="opacity-0 group-hover/row:opacity-100 focus:opacity-100 data-[open=true]:opacity-100"
+        className={triggerClassName ?? "opacity-0 group-hover/row:opacity-100 focus:opacity-100 data-[open=true]:opacity-100"}
         data-open={open}
         aria-label="Track options"
         onClick={(e) => {

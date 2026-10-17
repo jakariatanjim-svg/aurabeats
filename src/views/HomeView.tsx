@@ -1,296 +1,192 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Flame,
-  Heart,
-  Radio,
-  RefreshCw,
-  Search,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Heart, Loader2, Play, RefreshCw, Sparkles, TrendingUp } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
-import {
-  fetchForYou,
-  fetchFresh,
-  fetchGenre,
-  fetchPopular,
-  GENRE_CHIPS,
-} from "@/services/catalog";
-import { CardSkeleton, Carousel, HeroCard, TrackCard, TrackRow, TrackRowSkeleton } from "@/components/TrackList";
-import { Chip, IconButton, SectionHeader } from "@/components/ui";
-import { EmptyState, ErrorState } from "@/components/states";
+import { useDiscoverFeed } from "@/hooks/useDiscoverFeed";
+import { fetchPopular } from "@/services/catalog";
+import { fetchTrendingMusic } from "@/services/youtube";
+import { looksLikeMusic, trackKey } from "@/services/discover";
+import { FeedCard, FeedCardSkeleton } from "@/components/FeedCard";
+import { IconButton } from "@/components/ui";
+import { ErrorState } from "@/components/states";
 import { usePlayer } from "@/hooks/usePlayer";
 import type { Track } from "@/types";
 
-function useEnteredViewport<T extends HTMLElement>(rootMargin = "560px 0px") {
-  const ref = useRef<T | null>(null);
-  const [entered, setEntered] = useState(false);
+/** One column on phones (like the YouTube app), more as the screen grows. */
+const GRID = "grid grid-cols-1 gap-x-4 gap-y-7 min-[560px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
+const TRENDING_COUNT = 8;
 
-  useEffect(() => {
-    if (entered) return;
-    const node = ref.current;
-    if (!node) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setEntered(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setEntered(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin },
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [entered, rootMargin]);
-
-  return [ref, entered] as const;
+/** YouTube's music chart first; the multi-source popular list if that is unavailable. */
+async function fetchTrendingSongs(): Promise<Track[]> {
+  const yt = await fetchTrendingMusic(30).catch(() => [] as Track[]);
+  const list = yt.filter(looksLikeMusic);
+  if (list.length >= TRENDING_COUNT) return list;
+  const popular = await fetchPopular({ limit: 30 }).catch(() => [] as Track[]);
+  const seen = new Set(list.map(trackKey));
+  return [...list, ...popular.filter((t) => !seen.has(trackKey(t)))];
 }
 
-export function HomeView({ onNavigate }: { onNavigate: (r: "radio" | "search") => void }) {
-  const { playAll, toast, favorites } = usePlayer();
-  const [genre, setGenre] = useState<string>(GENRE_CHIPS[0].value);
+export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void }) {
+  const { playAll, favorites, history } = usePlayer();
 
-  const [forYouRef, forYouReady] = useEnteredViewport<HTMLElement>();
-  const [freshRef, freshReady] = useEnteredViewport<HTMLElement>();
-  const [genreRef, genreReady] = useEnteredViewport<HTMLElement>();
+  const trending = useFeed<Track[]>("cat:trending-v2", () => fetchTrendingSongs(), { ttl: 20 * 60 * 1000 });
+  const trendingTop = useMemo(() => (trending.data ?? []).slice(0, TRENDING_COUNT), [trending.data]);
 
-  // Personalized "For You" — derived from favourites
-  const forYouKey = useMemo(
-    () => favorites.slice(0, 10).map((t) => t.artist).join("|"),
-    [favorites],
-  );
-  const forYou = useFeed<Track[]>(
-    `cat:foryou:${forYouKey}`,
-    () => fetchForYou(favorites),
-    { enabled: favorites.length > 0 && forYouReady },
-  );
+  const feed = useDiscoverFeed(favorites, history, trendingTop);
+  const hasFavourites = favorites.length > 0;
 
-  const popular = useFeed<Track[]>("cat:popular", (signal) => fetchPopular({ limit: 18, signal }));
-  const fresh = useFeed<Track[]>("cat:fresh", (signal) => fetchFresh({ limit: 14, signal }), { enabled: freshReady });
-  const genreFeed = useFeed<Track[]>(`cat:genre:${genre}`, (signal) => fetchGenre(genre, { limit: 14, signal }), {
-    enabled: genreReady,
-  });
-
-  const hero = useMemo(() => {
-    const list = popular.data ?? [];
-    if (list.length === 0) return null;
-    const slot = Math.floor(Date.now() / (1000 * 60 * 20)) % Math.min(6, list.length);
-    return list[slot];
-  }, [popular.data]);
-
-  const playSection = (tracks: Track[] | null, label: string) => {
-    if (!tracks || tracks.length === 0) {
-      toast("Still loading — try again in a second", "info");
-      return;
-    }
-    playAll(tracks, 0);
-    toast(`Playing ${label}`, "success");
-  };
+  // Infinite scroll: load the next page when the end of the feed comes near.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef(feed.loadMore);
+  loadMoreRef.current = feed.loadMore;
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMoreRef.current();
+      },
+      { rootMargin: "900px 0px" },
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [feed.done]);
 
   return (
-    <div className="space-y-10 pb-12 sm:space-y-14">
-      {/* 1. Primary Chart (Spotify Style) */}
-      <section id="home-popular" className="animate-fade-in pt-2">
-        <SectionHeader
-          title="Trending Songs"
-          subtitle="Top tracks across all platforms"
+    <div className="space-y-10 pb-12">
+      {/* What this app is — one glance, no clutter */}
+      <header className="animate-fade-in pt-1">
+        <h1 className="text-[22px] leading-tight font-black tracking-tight text-ink sm:text-3xl">
+          Play any song, free.
+        </h1>
+        <p className="mt-1.5 text-sm text-ink3 sm:text-[15px]">
+          Millions of songs from YouTube Music and more. No sign-up. Tap a song to play it.
+        </p>
+      </header>
+
+      {/* Trending */}
+      <section className="animate-fade-in">
+        <FeedHeader
           icon={<TrendingUp className="h-5 w-5 text-accent" />}
-          action={
-            <IconButton onClick={popular.refresh} aria-label="Refresh">
-              <RefreshCw className="h-4 w-4" />
-            </IconButton>
-          }
+          title="Trending now"
+          subtitle="What everyone is listening to"
+          onPlayAll={trendingTop.length ? () => playAll(trending.data ?? trendingTop, 0) : undefined}
+          onRefresh={trending.refresh}
         />
-        {popular.loading && !popular.data ? (
-          <CardSkeleton />
-        ) : popular.error && !popular.data ? (
-          <ErrorState message={popular.error} onRetry={popular.refresh} />
+        {trending.loading && !trending.data ? (
+          <div className={GRID}>
+            {Array.from({ length: 4 }).map((_, i) => <FeedCardSkeleton key={i} />)}
+          </div>
+        ) : trending.error && !trending.data ? (
+          <ErrorState message={trending.error} onRetry={trending.refresh} />
         ) : (
-          <Carousel>
-            {(popular.data ?? []).map((t) => (
-              <TrackCard key={t.id} track={t} context={popular.data ?? undefined} />
-            ))}
-          </Carousel>
-        )}
-      </section>
-
-      {/* 2. Featured Right Now */}
-      {hero && !popular.loading && (
-        <section className="animate-fade-up">
-           <HeroCard track={hero} context={popular.data ?? [hero]} />
-        </section>
-      )}
-
-      {/* 3. Quick Navigation Tiles */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <QuickAction
-          title="Popular Mix"
-          hint="Hottest hits"
-          tint="bg-accent/15 text-accent"
-          icon={<TrendingUp className="h-5 w-5" />}
-          onClick={() => playSection(popular.data, "trending hits")}
-        />
-        <QuickAction
-          title="Fresh Drops"
-          hint="Newly released"
-          tint="bg-cyan-500/15 text-cyan-400"
-          icon={<Flame className="h-5 w-5" />}
-          onClick={() => playSection(fresh.data, "fresh releases")}
-        />
-        <QuickAction
-          title="Live Radio"
-          hint="Global streams"
-          tint="bg-rose-500/15 text-rose-400"
-          icon={<Radio className="h-5 w-5" />}
-          onClick={() => onNavigate("radio")}
-        />
-        <QuickAction
-          title="Deep Search"
-          hint="Find anything"
-          tint="bg-violet-500/15 text-violet-300"
-          icon={<Search className="h-5 w-5" />}
-          onClick={() => onNavigate("search")}
-        />
-      </div>
-
-      {/* 4. For You (Dynamic) */}
-      {favorites.length > 0 && (
-        <section ref={forYouRef}>
-          <SectionHeader
-            title="For You"
-            subtitle="Based on your favourites"
-            icon={<Heart className="h-4 w-4 text-rose-400" />}
-            action={
-              <div className="flex items-center gap-2">
-                <IconButton onClick={forYou.refresh} aria-label="Refresh">
-                  <RefreshCw className="h-4 w-4" />
-                </IconButton>
-                <button
-                  type="button"
-                  onClick={() => playSection(forYou.data, "your personalised mix")}
-                  className="rounded-full border border-line px-3.5 py-1.5 text-[11px] font-bold text-ink3 transition hover:border-accent hover:text-accent"
-                >
-                  Play all
-                </button>
-              </div>
-            }
-          />
-          {!forYouReady ? (
-            <div className="h-40 rounded-3xl border border-dashed border-line" />
-          ) : forYou.loading && !forYou.data ? (
-            <CardSkeleton />
-          ) : forYou.error && !forYou.data ? (
-            <ErrorState message={forYou.error} onRetry={forYou.refresh} />
-          ) : forYou.data && forYou.data.length > 0 ? (
-            <Carousel>
-              {forYou.data.map((t) => (
-                <TrackCard key={t.id} track={t} context={forYou.data ?? undefined} />
-              ))}
-            </Carousel>
-          ) : null}
-        </section>
-      )}
-
-      {/* 5. Fresh Releases (On Demand) */}
-      <section ref={freshRef}>
-        <SectionHeader
-          title="Fresh Releases"
-          subtitle="New tracks discovered live"
-          icon={<Flame className="h-4 w-4 text-accent2" />}
-          action={
-            <IconButton onClick={fresh.refresh} aria-label="Refresh">
-              <RefreshCw className="h-4 w-4" />
-            </IconButton>
-          }
-        />
-        {!freshReady ? (
-          <div className="h-40 rounded-3xl border border-dashed border-line" />
-        ) : fresh.loading && !fresh.data ? (
-          <CardSkeleton />
-        ) : fresh.error && !fresh.data ? (
-          <ErrorState message={fresh.error} onRetry={fresh.refresh} />
-        ) : (
-          <Carousel>
-            {(fresh.data ?? []).map((t) => (
-              <TrackCard key={t.id} track={t} context={fresh.data ?? undefined} />
-            ))}
-          </Carousel>
-        )}
-      </section>
-
-      {/* 6. Genre Rows (On Demand) */}
-      <section id="home-genres" ref={genreRef}>
-        <SectionHeader
-          title="Browse by Genre"
-          subtitle="Explore the audio web"
-          icon={<Sparkles className="h-4 w-4 text-accent" />}
-          action={
-            <button
-              type="button"
-              onClick={() => playSection(genreFeed.data, `${genre} selection`)}
-              className="rounded-full border border-line px-3.5 py-1.5 text-[11px] font-bold text-ink3 transition hover:border-accent hover:text-accent"
-            >
-              Play all
-            </button>
-          }
-        />
-        <div className="no-scrollbar -mx-2 mb-3.5 flex gap-2.5 overflow-x-auto px-2 pb-1.5">
-          {GENRE_CHIPS.map((g) => (
-            <Chip key={g.value} active={genre === g.value} onClick={() => setGenre(g.value)}>
-              {g.label}
-            </Chip>
-          ))}
-        </div>
-        {!genreReady ? (
-          <div className="h-60 rounded-3xl border border-dashed border-line" />
-        ) : genreFeed.loading && !genreFeed.data ? (
-          <TrackRowSkeleton rows={6} />
-        ) : genreFeed.error && !genreFeed.data ? (
-          <ErrorState message={genreFeed.error} onRetry={genreFeed.refresh} />
-        ) : (genreFeed.data ?? []).length === 0 ? (
-          <EmptyState title="No tracks found" hint="Try another genre chip." />
-        ) : (
-          <div className="blur-panel overflow-hidden rounded-[1.4rem] p-1.5 sm:p-2.5">
-            {(genreFeed.data ?? []).slice(0, 8).map((t, i) => (
-              <TrackRow key={t.id} track={t} context={genreFeed.data ?? undefined} index={i} />
+          <div className={GRID}>
+            {trendingTop.map((t) => (
+              <FeedCard key={t.id} track={t} context={trending.data ?? trendingTop} />
             ))}
           </div>
+        )}
+      </section>
+
+      {/* For you — infinite, from favourites (= subscriptions) + listening */}
+      <section>
+        <FeedHeader
+          icon={hasFavourites ? <Heart className="h-5 w-5 fill-current text-rose-500" /> : <Sparkles className="h-5 w-5 text-accent" />}
+          title={hasFavourites ? "For you" : "More to explore"}
+          subtitle={hasFavourites ? "More from artists you love, and songs like them" : "Fresh picks from across YouTube Music"}
+          onPlayAll={feed.items.length ? () => playAll(feed.items, 0) : undefined}
+          onRefresh={feed.refresh}
+        />
+
+        {!hasFavourites && (
+          <div className="blur-panel glass-inset mb-6 flex items-center gap-3 p-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/12 text-rose-500">
+              <Heart className="h-5 w-5" />
+            </span>
+            <p className="text-[13px] leading-snug text-ink2 sm:text-sm">
+              Tap <Heart className="inline h-3.5 w-3.5 -translate-y-px text-rose-500" /> on songs you like. Discover then fills up with
+              more from those artists and songs like them.
+            </p>
+          </div>
+        )}
+
+        {feed.error && feed.items.length === 0 ? (
+          <ErrorState message={feed.error} onRetry={feed.refresh} />
+        ) : (
+          <>
+            <div className={GRID}>
+              {feed.items.map((t) => (
+                <FeedCard key={t.id} track={t} context={feed.items} />
+              ))}
+              {feed.loading && Array.from({ length: feed.items.length ? 3 : 6 }).map((_, i) => <FeedCardSkeleton key={`s${i}`} />)}
+            </div>
+            <div ref={sentinelRef} className="h-px" />
+            {!feed.loading && !feed.done && feed.items.length > 0 && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void feed.loadMore()}
+                  className="rounded-full border border-line px-5 py-2 text-sm font-semibold text-ink2 transition hover:border-accent hover:text-accent"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
+            {feed.loading && feed.items.length > 0 && (
+              <div className="mt-6 flex justify-center text-ink3">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            )}
+            {feed.done && feed.items.length > 0 && (
+              <p className="mt-10 text-center text-xs text-ink3">
+                You're all caught up. Add more favourites for new recommendations.
+              </p>
+            )}
+          </>
         )}
       </section>
     </div>
   );
 }
 
-function QuickAction({
-  title,
-  hint,
+function FeedHeader({
   icon,
-  tint,
-  onClick,
+  title,
+  subtitle,
+  onPlayAll,
+  onRefresh,
 }: {
-  title: string;
-  hint: string;
   icon: ReactNode;
-  tint: string;
-  onClick: () => void;
+  title: string;
+  subtitle: string;
+  onPlayAll?: () => void;
+  onRefresh?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="blur-panel glass-inset flex items-center gap-3 rounded-[1.35rem] p-3 text-left transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-26px_var(--glow)] sm:p-3.5"
-    >
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tint}`}>{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-xs font-bold text-ink sm:text-sm">{title}</span>
-        <span className="block truncate text-[10px] text-ink3 sm:text-[11px]">{hint}</span>
-      </span>
-    </button>
+    <div className="mb-4 flex items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="flex items-center gap-2 text-xl font-black tracking-tight text-ink sm:text-2xl">
+          {icon}
+          {title}
+        </h2>
+        <p className="mt-0.5 truncate text-[13px] text-ink3 sm:text-sm">{subtitle}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {onRefresh && (
+          <IconButton onClick={onRefresh} aria-label={`Refresh ${title}`} size="sm">
+            <RefreshCw className="h-4 w-4" />
+          </IconButton>
+        )}
+        {onPlayAll && (
+          <button
+            type="button"
+            onClick={onPlayAll}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-xs font-bold text-[var(--c-base)] transition hover:opacity-90 active:scale-95"
+          >
+            <Play className="h-3 w-3 fill-current" />
+            Play all
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

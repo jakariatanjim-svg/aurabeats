@@ -142,7 +142,7 @@ function SourceCard({ icon, title, body, tags }: { icon: React.ReactNode; title:
 
 /** Theme cores shown in Settings. `key: null` = announced, not built yet. */
 const THEME_CORES: { key: ThemeName | null; name: string; desc: string; icon: typeof Sparkles }[] = [
-  { key: "glassmorphism", name: "Glassmorphism", desc: "Frosted translucent glass over a vivid aurora.", icon: Sparkles },
+  { key: "glassmorphism", name: "Glassmorphism", desc: "Frosted translucent glass, clean in light, glowing in dark.", icon: Sparkles },
   { key: "material", name: "Material UI", desc: "Material 3 — tonal colour, clean shapes, ripples.", icon: Shapes },
   { key: null, name: "Liquid Glass", desc: "Fluid, refractive glass. Arrives in a future update.", icon: Droplets },
 ];
