@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Moon, Palette, Search, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
+import { Check, ChevronDown, Droplets, Moon, Palette, Search, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
 import { routeLabel, type RouteKey } from "@/routes";
@@ -9,24 +9,27 @@ import { usePlayer } from "@/hooks/usePlayer";
 function ThemeSwitch({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
   return (
-    <div className={cn("blur-panel flex items-center gap-0.5 p-1", className)}>
+    <div className={cn("ab-seg blur-panel flex items-center gap-0.5 p-1", className)}>
       {(
         [
           { key: "glassmorphism", label: "Glassmorphism", icon: Sparkles },
           { key: "material", label: "Material UI", icon: Shapes },
+          { key: "liquid", label: "Liquid Glass", icon: Droplets },
         ] as const
       ).map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           type="button"
           onClick={() => setTheme(key)}
+          title={label}
+          aria-pressed={theme === key}
           className={cn(
             "focus-ring flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition-all duration-200 sm:px-3 sm:text-[11px]",
             theme === key ? "bg-accent text-white shadow-[0_4px_18px_-6px_var(--glow)]" : "text-ink3 hover:text-ink",
           )}
         >
           <Icon className="h-3.5 w-3.5" />
-          <span className="hidden lg:inline">{label}</span>
+          <span className={cn("hidden", theme === key ? "lg:inline" : "2xl:inline")}>{label}</span>
         </button>
       ))}
     </div>

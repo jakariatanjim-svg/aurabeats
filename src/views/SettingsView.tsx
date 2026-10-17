@@ -140,19 +140,19 @@ function SourceCard({ icon, title, body, tags }: { icon: React.ReactNode; title:
   );
 }
 
-/** Theme cores shown in Settings. `key: null` = announced, not built yet. */
-const THEME_CORES: { key: ThemeName | null; name: string; desc: string; icon: typeof Sparkles }[] = [
+/** Theme cores shown in Settings. */
+const THEME_CORES: { key: ThemeName; name: string; desc: string; icon: typeof Sparkles }[] = [
   { key: "glassmorphism", name: "Glassmorphism", desc: "Frosted translucent glass, clean in light, glowing in dark.", icon: Sparkles },
   { key: "material", name: "Material UI", desc: "Material 3 — tonal colour, clean shapes, ripples.", icon: Shapes },
-  { key: null, name: "Liquid Glass", desc: "Fluid, refractive glass. Arrives in a future update.", icon: Droplets },
+  { key: "liquid", name: "Liquid Glass", desc: "Apple's iOS 26 look — clear glass bars over clean iOS surfaces.", icon: Droplets },
 ];
 
 /** Announcement for the current UI update, shown under the theme picker. */
 function UiUpdateBanner() {
   const items = [
-    { icon: Sparkles, title: "Glassmorphism, rebuilt", body: "Real frosted glass everywhere, and the odd blur / glow effects are gone." },
-    { icon: Shapes, title: "Modern is now Material UI", body: "Material 3 tonal colours from your accent, M3 shapes, Roboto and ripples." },
-    { icon: Droplets, title: "Liquid Glass", body: "A third theme core is in the works — coming soon." },
+    { icon: Droplets, title: "Liquid Glass is here", body: "iPhone-style iOS 26 design: floating glass tab bar, mini player and menus, SF typography." },
+    { icon: Sun, title: "Polished light mode", body: "Soft tinted shadows instead of black, accent-coloured controls, cleaner surfaces." },
+    { icon: Shapes, title: "Three design languages", body: "Glassmorphism, Material UI and Liquid Glass — switch any time, in light or dark." },
   ];
   return (
     <div className="blur-panel relative mt-4 overflow-hidden p-4 sm:p-5">
@@ -207,40 +207,29 @@ export function SettingsView() {
       </div>
 
       <section>
-        <SectionHeader title="Theme core" subtitle="Glassmorphism, Material UI — and Liquid Glass on the way" />
+        <SectionHeader title="Theme core" subtitle="Glassmorphism, Material UI and Liquid Glass" />
         <div className="grid gap-3 sm:grid-cols-3">
           {THEME_CORES.map((opt) => {
             const Icon = opt.icon;
-            const selected = opt.key !== null && theme === opt.key;
-            const soon = opt.key === null;
+            const selected = theme === opt.key;
             return (
               <button
                 key={opt.name}
                 type="button"
-                disabled={soon}
-                aria-pressed={soon ? undefined : selected}
-                onClick={() => opt.key && setTheme(opt.key)}
-                className={cn(
-                  "blur-panel p-4 text-left transition-all",
-                  selected && "glow-ring",
-                  soon && "cursor-not-allowed opacity-70",
-                )}
+                aria-pressed={selected}
+                onClick={() => setTheme(opt.key)}
+                className={cn("blur-panel p-4 text-left transition-all", selected && "glow-ring")}
               >
                 <div className="flex items-start justify-between gap-3">
                   <span
                     className={cn(
                       "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                      soon ? "bg-ink/[0.07] text-ink3" : "bg-accent/15 text-accent",
+                      "bg-accent/15 text-accent",
                     )}
                   >
                     <Icon className="h-4 w-4" />
                   </span>
                   {selected && <Check className="h-4 w-4 text-accent" />}
-                  {soon && (
-                    <span className="shrink-0 rounded-full border border-line bg-ink/[0.05] px-2 py-0.5 text-[9px] font-bold tracking-[0.12em] text-ink2 uppercase">
-                      Coming soon
-                    </span>
-                  )}
                 </div>
                 <p className="mt-3 text-sm font-bold text-ink">{opt.name}</p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">{opt.desc}</p>

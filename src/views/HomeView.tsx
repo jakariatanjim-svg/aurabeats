@@ -76,8 +76,8 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
           <div className={GRID}>
             {Array.from({ length: 4 }).map((_, i) => <FeedCardSkeleton key={i} />)}
           </div>
-        ) : trending.error && !trending.data ? (
-          <ErrorState message={trending.error} onRetry={trending.refresh} />
+        ) : (trending.error && !trending.data) || (trending.data && trending.data.length === 0) ? (
+          <ErrorState message={trending.error || "Couldn't load trending songs right now."} onRetry={trending.refresh} />
         ) : (
           <div className={GRID}>
             {trendingTop.map((t) => (
@@ -180,7 +180,7 @@ function FeedHeader({
           <button
             type="button"
             onClick={onPlayAll}
-            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-xs font-bold text-[var(--c-base)] transition hover:opacity-90 active:scale-95"
+            className="inline-flex items-center gap-1.5 ab-primary rounded-full px-3.5 py-1.5 text-xs font-bold transition hover:opacity-90 active:scale-95"
           >
             <Play className="h-3 w-3 fill-current" />
             Play all

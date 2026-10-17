@@ -1,5 +1,5 @@
 /**
- * Theme engine — Glassmorphism or Material UI (Material 3) cores, plus dark and
+ * Theme engine — Glassmorphism, Material UI (Material 3) or Liquid Glass (iOS 26) cores, plus dark and
  * light modes and a live accent colour system. Everything is written to CSS
  * custom properties on <html> so the whole UI re-tints instantly with zero
  * re-render cost, and persisted to localStorage.
@@ -96,12 +96,14 @@ export function accentRgbString(hex: string): string {
 export const THEMES: { key: ThemeName; name: string }[] = [
   { key: "glassmorphism", name: "Glassmorphism" },
   { key: "material", name: "Material UI" },
+  { key: "liquid", name: "Liquid Glass" },
 ];
 
 /** Reads the saved core, migrating the old "glassy" / "modern" keys. */
 function loadTheme(): ThemeName {
   const saved = storage.get<string>("theme", "glassmorphism");
   if (saved === "material" || saved === "modern") return "material";
+  if (saved === "liquid") return "liquid";
   return "glassmorphism";
 }
 
@@ -140,7 +142,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((t: ThemeName) => setThemeState(t), []);
   const setMode = useCallback((m: ThemeMode) => setModeState(m), []);
   const setAccent = useCallback((hex: string) => setAccentState(hex), []);
-  const toggleTheme = useCallback(() => setThemeState((t) => (t === "glassmorphism" ? "material" : "glassmorphism")), []);
+  const toggleTheme = useCallback(() => setThemeState((t) => {
+    const i = THEMES.findIndex((x) => x.key === t);
+    return THEMES[(i + 1) % THEMES.length].key;
+  }), []);
   const toggleMode = useCallback(() => setModeState((m) => (m === "dark" ? "light" : "dark")), []);
 
   const value = useMemo(

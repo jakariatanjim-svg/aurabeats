@@ -270,7 +270,7 @@ export function FullScreenPlayer() {
                         src={art || undefined}
                         fallbackSrc={current.artworkFallback}
                         alt={current.title}
-                        className="aspect-square w-full shadow-[0_24px_60px_-24px_rgb(0_0_0/0.7)]"
+                        className="aspect-square w-full shadow-(--art-shadow)"
                         rounded="rounded-[1.5rem]"
                       />
                     </div>
@@ -305,7 +305,7 @@ export function FullScreenPlayer() {
                   onClick={toggle}
                   aria-label={isPlaying ? "Pause" : "Play"}
                   className={cn(
-                    "focus-ring flex h-16 w-16 items-center justify-center rounded-full bg-ink text-base shadow-xl transition-all duration-200 hover:scale-105 active:scale-95",
+                    "focus-ring flex h-16 w-16 items-center justify-center rounded-full ab-primary shadow-xl transition-all duration-200 hover:scale-105 active:scale-95",
                     isPlaying && "bg-accent text-white shadow-[0_0_40px_-6px_var(--glow)]",
                   )}
                 >

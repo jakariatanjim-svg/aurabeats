@@ -109,7 +109,7 @@ export const Sidebar = memo(function Sidebar({
   return (
     <aside
       className={cn(
-        "shell-panel relative z-30 hidden h-full shrink-0 flex-col transition-[width] duration-300 md:flex",
+        "ab-sidebar shell-panel relative z-30 hidden h-full shrink-0 flex-col transition-[width] duration-300 md:flex",
         collapsed ? "w-[5rem]" : "w-[17.5rem]",
       )}
     >

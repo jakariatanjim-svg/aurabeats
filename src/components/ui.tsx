@@ -382,7 +382,7 @@ export function Modal({
   // opened the dialog (React bubbles portal events through the tree).
   return createPortal(
     <div onClick={(e) => e.stopPropagation()} className="fixed inset-0 z-[90] flex items-end justify-center pt-[var(--sa-top)] sm:items-center sm:p-6 sm:pt-[calc(var(--sa-top)+1.5rem)] sm:pb-[calc(var(--sa-bottom)+1.5rem)]">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div className="ab-scrim absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div
         className={cn(
           "blur-panel surface-raised relative z-10 w-full animate-slide-up p-5 pb-[calc(var(--sa-bottom)+1.25rem)] shadow-2xl sm:animate-scale-in sm:pb-5",

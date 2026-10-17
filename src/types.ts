@@ -64,8 +64,8 @@ export interface UserPlaylist {
   tracks: Track[];
 }
 
-/** Selectable theme cores. "liquid-glass" is announced but not built yet. */
-export type ThemeName = "glassmorphism" | "material";
+/** Selectable theme cores. */
+export type ThemeName = "glassmorphism" | "material" | "liquid";
 export type ThemeMode = "dark" | "light";
 
 export interface ViewDescriptor {

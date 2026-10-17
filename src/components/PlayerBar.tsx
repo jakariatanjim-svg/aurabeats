@@ -42,7 +42,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
   if (!current) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.85rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
+    <div className="ab-playerbar-wrap fixed inset-x-0 bottom-[calc(4.85rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
       <div className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[calc(var(--sa-bottom)+0.55rem)] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
         {/* mobile progress line - moved to absolute top for better layout */}
         <div className="absolute top-[3px] left-6 right-6 md:hidden">
@@ -134,7 +134,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               onClick={toggle}
               aria-label={isPlaying ? "Pause" : "Play"}
               className={cn(
-                "focus-ring relative flex h-9 w-9 items-center justify-center rounded-full bg-ink text-base transition-all duration-200 hover:scale-105 active:scale-95 sm:h-11 sm:w-11",
+                "focus-ring relative flex h-9 w-9 items-center justify-center rounded-full ab-primary transition-all duration-200 hover:scale-105 active:scale-95 sm:h-11 sm:w-11",
                 isPlaying && "bg-accent text-white shadow-[0_0_20px_-4px_var(--glow)]",
               )}
             >
