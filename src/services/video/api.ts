@@ -12,6 +12,7 @@
 import { devicePlayer, deviceExtractionAvailable } from "./innertube";
 import { http, isNative } from "./net";
 import {
+  EmptyChannelError,
   providerChannel,
   providerDetails,
   providerKey,
@@ -29,11 +30,11 @@ export type { SearchPage };
 
 /* --------------------------- tiny TTL cache ----------------------------- */
 const cache = new Map<string, { at: number; value: unknown }>();
-async function cached<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T> {
+async function cached<T>(key: string, ttl: number, fn: () => Promise<T>, keep: (v: T) => boolean = () => true): Promise<T> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.value as T;
   const value = await fn();
-  cache.set(key, { at: Date.now(), value });
+  if (keep(value)) cache.set(key, { at: Date.now(), value });
   return value;
 }
 
@@ -58,6 +59,31 @@ export async function getVideo(id: string, exclude: string[] = []): Promise<Vide
     }
     const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700 });
     return value;
+  });
+}
+
+/**
+ * Title + channel name only, from YouTube's oEmbed. Used for the YouTube-player
+ * fallback when no ad-free server answered at all.
+ */
+export async function getVideoMeta(id: string): Promise<VideoDetails> {
+  return cached(`meta:${id}`, 60 * 60 * 1000, async () => {
+    const watch = `https://www.youtube.com/watch?v=${id}`;
+    const o = await http<{ title?: string; author_name?: string }>(
+      `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watch)}`,
+      { timeout: 8000 },
+    );
+    if (!o?.title) throw new Error("no info");
+    return {
+      id,
+      title: o.title,
+      author: o.author_name || "",
+      duration: 0,
+      thumbnail: thumbFor(id),
+      description: "",
+      related: [],
+      streams: { source: "embed", video: [], audio: [], muxed: [], live: false },
+    };
   });
 }
 
@@ -106,17 +132,38 @@ export async function getChannel(id: string, cursor?: string, source?: string): 
     if (cursor && source && lastChannelProvider && providerKey(lastChannelProvider) === source) {
       return { ...(await providerChannel(lastChannelProvider, id, cursor)), source };
     }
+    // Servers that know the channel but return no videos still give us the
+    // header (banner, avatar, description) — keep the richest one.
+    let partial: ChannelPage | null = null;
+    const keep = (c: ChannelPage) => {
+      const filled = (x: ChannelPage) => [x.avatar, x.banner, x.description, x.subscribers].filter(Boolean).length;
+      if (!partial || filled(c) > filled(partial)) partial = c;
+    };
+    const withHeader = (c: ChannelPage): ChannelPage => {
+      const h = partial as ChannelPage | null;
+      return h
+        ? { ...c, name: c.name || h.name, avatar: c.avatar || h.avatar, banner: c.banner || h.banner, description: c.description || h.description, subscribers: c.subscribers || h.subscribers }
+        : c;
+    };
     try {
-      const { value, provider } = await race((p) => providerChannel(p, id), { stagger: 800, max: 6 });
+      const { value, provider } = await race(
+        (p) =>
+          providerChannel(p, id).catch((e: unknown) => {
+            if (e instanceof EmptyChannelError) keep(e.partial);
+            throw e;
+          }),
+        { stagger: 800, max: 6 },
+      );
       lastChannelProvider = provider;
-      return { ...value, source: providerKey(provider) };
+      return { ...withHeader(value), source: providerKey(provider) };
     } catch (err) {
-      // Servers down: the channel's RSS still gives the latest 15 uploads.
+      // No server had videos: the channel's RSS still gives the latest uploads.
       const rss = await channelRss(id).catch(() => null);
-      if (!rss?.videos.length) throw err;
-      return { id, name: rss.name, videos: rss.videos, source: "rss" };
+      if (rss?.videos.length) return { ...withHeader({ id, name: rss.name, videos: rss.videos }), source: "rss" };
+      if (partial) return { ...(partial as ChannelPage), source: "partial" };
+      throw err;
     }
-  });
+  }, (c) => c.videos.length > 0);
 }
 
 /* --------------------------- following feed ----------------------------- */

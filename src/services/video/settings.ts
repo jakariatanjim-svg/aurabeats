@@ -6,10 +6,12 @@ export interface VideoSettings {
   autoplayNext: boolean;
   /** Your own Invidious or Piped API URL; empty = automatic public servers */
   customServer: string;
+  /** When no ad-free server can play a video, use the official YouTube player */
+  embedFallback: boolean;
 }
 
 const KEY = "videoSettings";
-const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "" };
+const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "", embedFallback: true };
 
 type Listener = () => void;
 const listeners = new Set<Listener>();

@@ -29,7 +29,7 @@ export function VideoSettingsSection() {
             Playback on this device: <b className="text-ink">{playbackMethodLabel()}</b>.{" "}
             {appEnv === "apk"
               ? "The app fetches streams straight from YouTube, like NewPipe. If that fails it switches to ad-free servers."
-              : "The browser can't talk to YouTube directly, so streams come through public ad-free servers (Invidious / Piped) with automatic failover. For the fastest, most reliable playback use the Android app."}
+              : "YouTube blocks browsers from fetching videos directly, so streams come through free public ad-free servers (Invidious / Piped) with automatic failover. Few of them work today and they usually offer 360p only. For every quality without ads, use the Android app."}
           </span>
         </p>
 
@@ -53,25 +53,19 @@ export function VideoSettingsSection() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
-          <div>
-            <p className="text-sm font-bold text-ink">Autoplay next video</p>
-            <p className="mt-0.5 text-[11px] text-ink3">Play the first suggestion when a video ends.</p>
-          </div>
-          <button
-            type="button"
-            aria-pressed={s.autoplayNext}
-            onClick={() => setVideoSettings({ autoplayNext: !s.autoplayNext })}
-            className={cn("relative h-6 w-11 shrink-0 rounded-full transition", s.autoplayNext ? "bg-emerald-500" : "bg-ink/15")}
-          >
-            <span
-              className={cn(
-                "absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition",
-                s.autoplayNext ? "translate-x-5" : "translate-x-0",
-              )}
-            />
-          </button>
-        </div>
+        <Toggle
+          title="Autoplay next video"
+          hint="Play the first suggestion when a video ends."
+          on={s.autoplayNext}
+          onChange={() => setVideoSettings({ autoplayNext: !s.autoplayNext })}
+        />
+
+        <Toggle
+          title="YouTube player fallback"
+          hint="If no ad-free server can play a video, use the official YouTube player instead of showing an error. It has every quality, but YouTube may show ads in it (an ad-blocker extension removes them)."
+          on={s.embedFallback}
+          onChange={() => setVideoSettings({ embedFallback: !s.embedFallback })}
+        />
 
         <form
           onSubmit={(e) => {
@@ -101,5 +95,30 @@ export function VideoSettingsSection() {
         </form>
       </div>
     </section>
+  );
+}
+
+function Toggle({ title, hint, on, onChange }: { title: string; hint: string; on: boolean; onChange: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
+      <div>
+        <p className="text-sm font-bold text-ink">{title}</p>
+        <p className="mt-0.5 text-[11px] text-ink3">{hint}</p>
+      </div>
+      <button
+        type="button"
+        aria-pressed={on}
+        aria-label={title}
+        onClick={onChange}
+        className={cn("relative h-6 w-11 shrink-0 rounded-full transition", on ? "bg-emerald-500" : "bg-ink/15")}
+      >
+        <span
+          className={cn(
+            "absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition",
+            on ? "translate-x-5" : "translate-x-0",
+          )}
+        />
+      </button>
+    </div>
   );
 }

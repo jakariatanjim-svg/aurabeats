@@ -93,6 +93,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   cbs.current = { onTime, onEnded, onFatal, onPlayStart };
 
   const quality = plan?.qualities[qIndex];
+  const qIndexRef = useRef(qIndex);
+  qIndexRef.current = qIndex;
   const videoSrc = plan?.mode === "hls" ? plan.hls : dual ? (audioOnly ? undefined : quality?.video?.url) : quality?.muxed?.url;
 
   /* ----------------------------- transport ------------------------------ */
@@ -205,7 +207,18 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       videoRef.current?.pause();
       cbs.current.onEnded?.();
     };
-    const onError = () => cbs.current.onFatal(dual ? "audio failed" : "video failed", m.currentTime || startAt);
+    const onError = () => {
+      // Single (muxed) mode: try another quality before giving up on the server.
+      if (!dual && plan?.mode === "single") {
+        badQualities.current.add(qIndexRef.current);
+        const next = plan.qualities.findIndex((_, i) => !badQualities.current.has(i));
+        if (next !== -1) {
+          setQIndex(next);
+          return;
+        }
+      }
+      cbs.current.onFatal(dual ? "audio failed" : "video failed", m.currentTime || startAt);
+    };
     m.addEventListener("loadedmetadata", onLoaded);
     m.addEventListener("play", onPlay);
     m.addEventListener("pause", onPause);

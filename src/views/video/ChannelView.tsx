@@ -6,7 +6,7 @@ import { getChannel } from "@/services/video/api";
 import type { ChannelPage } from "@/services/video/types";
 import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton } from "@/components/video/VideoCards";
 import { Button, Skeleton, Spinner } from "@/components/ui";
-import { ErrorState } from "@/components/states";
+import { EmptyState, ErrorState } from "@/components/states";
 
 export function ChannelView({ id }: { id: string }) {
   useVideoLibrary(); // re-render on follow changes
@@ -98,7 +98,13 @@ export function ChannelView({ id }: { id: string }) {
         </button>
       )}
 
-      {page ? (
+      {page && !page.videos.length ? (
+        <EmptyState
+          title="Videos aren't available right now"
+          hint="The ad-free servers couldn't list this channel's uploads. Try again in a moment."
+          action={<Button variant="outline" onClick={() => setNonce((n) => n + 1)}>Try again</Button>}
+        />
+      ) : page ? (
         <>
           <VideoGrid>
             {page.videos.map((v) => (

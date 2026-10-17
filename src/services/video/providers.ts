@@ -21,19 +21,22 @@ export interface Provider {
   base: string; // API base, no trailing slash
 }
 
+// Ordered by what actually played in a real browser (checked Oct 2026).
+// Many big instances have since disabled their API or stream proxy, so the
+// list is short; runtime discovery + scoring keeps it up to date.
 const BUILTIN: Provider[] = [
-  { kind: "invidious", base: "https://inv.nadeko.net" },
-  { kind: "piped", base: "https://pipedapi.kavin.rocks" },
+  { kind: "piped", base: "https://pipedapi.ducks.party" },
   { kind: "invidious", base: "https://invidious.f5.si" },
   { kind: "piped", base: "https://api.piped.private.coffee" },
-  { kind: "invidious", base: "https://yewtu.be" },
-  { kind: "piped", base: "https://pipedapi.adminforge.de" },
-  { kind: "invidious", base: "https://invidious.nerdvpn.de" },
-  { kind: "invidious", base: "https://invidious.tiekoetter.com" },
   { kind: "piped", base: "https://pipedapi.reallyaweso.me" },
-  { kind: "invidious", base: "https://iv.melmac.space" },
-  { kind: "piped", base: "https://pipedapi.leptons.xyz" },
+  { kind: "piped", base: "https://pipedapi.darkness.services" },
+  { kind: "piped", base: "https://pipedapi.orangenet.cc" },
+  { kind: "piped", base: "https://pipedapi.drgns.space" },
+  { kind: "piped", base: "https://api.piped.yt" },
 ];
+
+/** Instances that answer but have their API / streams disabled. */
+const BLOCKED = /inv\.nadeko\.net|nadeko\.ygg|yewtu\.be|nerdvpn|tiekoetter|chocolatemoo53|thepixora|pipedapi\.kavin\.rocks|adminforge|leptons/;
 
 const DISCOVERY_KEY = "video:instances";
 const SCORE_KEY = "video:instanceScore";
@@ -61,7 +64,7 @@ function discover(): Promise<void> {
     ]);
     if (inv.status === "fulfilled" && Array.isArray(inv.value)) {
       for (const [, info] of inv.value) {
-        if (info?.type === "https" && info.api && info.uri) found.push({ kind: "invidious", base: clean(info.uri) });
+        if (info?.type === "https" && info.api && info.cors !== false && info.uri) found.push({ kind: "invidious", base: clean(info.uri) });
       }
     }
     if (piped.status === "fulfilled" && Array.isArray(piped.value)) {
@@ -101,16 +104,26 @@ export async function providers(): Promise<Provider[]> {
   const custom = customProvider();
   if (custom) push(custom);
   [...BUILTIN, ...discovered]
+    .filter((p) => !BLOCKED.test(p.base))
     .map((p, i) => ({ p, s: (score[keyOf(p)] ?? 0) - i * 0.01 }))
     .sort((a, b) => b.s - a.s)
     .forEach(({ p }) => push(p));
   return all;
 }
 
-function mark(p: Provider, ok: boolean) {
-  const k = keyOf(p);
-  score[k] = Math.max(-5, Math.min(10, (score[k] ?? 0) + (ok ? 2 : -1)));
+function bump(k: string, delta: number) {
+  score[k] = Math.max(-8, Math.min(12, (score[k] ?? 0) + delta));
   storage.set(SCORE_KEY, score);
+}
+const mark = (p: Provider, ok: boolean) => bump(keyOf(p), ok ? 1 : -1);
+
+/**
+ * The player reports whether a source's streams actually played. This counts
+ * far more than answering the API: several servers return video info fine but
+ * their stream proxy is broken.
+ */
+export function reportPlayback(source: string, ok: boolean) {
+  if (source.includes(":") && source !== "device") bump(source, ok ? 3 : -4);
 }
 
 /**
@@ -340,7 +353,9 @@ async function pipedDetails(p: Provider, id: string): Promise<VideoDetails> {
   if (d.error || !d.title) throw new Error(d.message || d.error || "bad response");
   const mime = (s: PS) => (s.mimeType ? (s.codec ? `${s.mimeType}; codecs="${s.codec}"` : s.mimeType) : "video/mp4");
   const height = (s: PS) => s.height || parseInt(s.quality || "0", 10) || 0;
-  const vids = d.videoStreams ?? [];
+  // Skip "LBRY" (Odysee) entries: Piped's YouTube→Odysee mapping is often
+  // wrong and points at an unrelated video.
+  const vids = (d.videoStreams ?? []).filter((s) => !/^LBRY/i.test(s.quality || "") && !/odycdn|lbry/i.test(s.url || ""));
   const streams: StreamSet = {
     source: keyOf(p),
     live: Boolean(d.livestream),
@@ -443,6 +458,19 @@ export async function providerSearch(p: Provider, q: string, cursor?: string): P
   return { items: out, next: out.length ? String(page + 1) : undefined };
 }
 
+/**
+ * Thrown when a server knows the channel but returns no videos (Piped's new
+ * tabbed channel format often leaves `relatedStreams` empty). The race moves
+ * on to the next server; the header info is kept as a last resort.
+ */
+export class EmptyChannelError extends Error {
+  constructor(public partial: ChannelPage) {
+    super("No videos from this server");
+  }
+}
+
+const compact = (n: number) => Intl.NumberFormat("en", { notation: "compact" }).format(n);
+
 export async function providerChannel(p: Provider, id: string, cursor?: string): Promise<ChannelPage> {
   if (p.kind === "piped") {
     if (cursor) {
@@ -451,39 +479,45 @@ export async function providerChannel(p: Provider, id: string, cursor?: string):
     }
     const r = await http<{ name?: string; avatarUrl?: string; bannerUrl?: string; description?: string; subscriberCount?: number; relatedStreams?: PipedStream[]; nextpage?: string }>(`${p.base}/channel/${id}`, { timeout: 9000 });
     if (!r.name) throw new Error("bad response");
-    return {
+    const page: ChannelPage = {
       id,
       name: r.name,
       avatar: r.avatarUrl,
       banner: r.bannerUrl,
       description: r.description,
-      subscribers: r.subscriberCount && r.subscriberCount > 0 ? `${Intl.NumberFormat("en", { notation: "compact" }).format(r.subscriberCount)} subscribers` : undefined,
+      subscribers: r.subscriberCount && r.subscriberCount > 0 ? `${compact(r.subscriberCount)} subscribers` : undefined,
       videos: items((r.relatedStreams ?? []).map((s) => pipedItem({ ...s, uploaderName: s.uploaderName || r.name, uploaderUrl: s.uploaderUrl || `/channel/${id}`, uploaderAvatar: s.uploaderAvatar || r.avatarUrl }))),
       next: r.nextpage || undefined,
     };
+    if (!page.videos.length) throw new EmptyChannelError({ ...page, next: undefined });
+    return page;
   }
-  const vids = await http<{ videos?: InvVideo[]; continuation?: string }>(
-    `${p.base}/api/v1/channels/${id}/videos${cursor ? `?continuation=${encodeURIComponent(cursor)}` : ""}`,
-    { timeout: 9000 },
-  );
-  if (cursor) return { id, name: "", videos: items((vids.videos ?? []).map(invItem)), next: vids.continuation || undefined };
-  const info = await http<{ author?: string; authorThumbnails?: { url: string; width?: number }[]; authorBanners?: { url: string; width?: number }[]; subCount?: number; description?: string }>(
-    `${p.base}/api/v1/channels/${id}`,
-    { timeout: 9000 },
-  ).catch(() => ({}) as Record<string, never>);
+  const videosUrl = `${p.base}/api/v1/channels/${id}/videos${cursor ? `?continuation=${encodeURIComponent(cursor)}` : ""}`;
+  if (cursor) {
+    const vids = await http<{ videos?: InvVideo[]; continuation?: string }>(videosUrl, { timeout: 9000 });
+    return { id, name: "", videos: items((vids.videos ?? []).map(invItem)), next: vids.continuation || undefined };
+  }
+  type Info = { author?: string; authorThumbnails?: { url: string; width?: number }[]; authorBanners?: { url: string; width?: number }[]; subCount?: number; description?: string; error?: string };
+  const [vidsR, infoR] = await Promise.allSettled([
+    http<{ videos?: InvVideo[]; continuation?: string }>(videosUrl, { timeout: 9000 }),
+    http<Info>(`${p.base}/api/v1/channels/${id}`, { timeout: 9000 }),
+  ]);
+  const vids = vidsR.status === "fulfilled" ? vidsR.value : {};
+  const info: Info = infoR.status === "fulfilled" ? infoR.value : {};
   const name = info.author || vids.videos?.[0]?.author || "";
   if (!name) throw new Error("bad response");
-  const avatar = bestThumb(info.authorThumbnails, 176);
-  return {
+  const page: ChannelPage = {
     id,
     name,
-    avatar,
+    avatar: bestThumb(info.authorThumbnails, 176),
     banner: bestThumb(info.authorBanners, 1280),
     description: info.description,
-    subscribers: info.subCount ? `${Intl.NumberFormat("en", { notation: "compact" }).format(info.subCount)} subscribers` : undefined,
+    subscribers: info.subCount ? `${compact(info.subCount)} subscribers` : undefined,
     videos: items((vids.videos ?? []).map((v) => invItem({ ...v, authorThumbnails: v.authorThumbnails ?? info.authorThumbnails }))),
     next: vids.continuation || undefined,
   };
+  if (!page.videos.length) throw new EmptyChannelError({ ...page, next: undefined });
+  return page;
 }
 
 export type { ChannelItem };

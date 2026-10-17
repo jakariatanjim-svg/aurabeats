@@ -186,7 +186,7 @@ function Shell() {
               {route === "video-search" && <VideoSearchView onNavigate={navigate} />}
               {route === "video-subs" && <VideoSubsView onNavigate={navigate} />}
               {route === "video-library" && <VideoLibraryView />}
-              {route.startsWith("watch:") && <WatchView id={route.slice("watch:".length)} onNavigate={navigate} />}
+              {route.startsWith("watch:") && <WatchView key={route} id={route.slice("watch:".length)} onNavigate={navigate} />}
               {route.startsWith("channel:") && <ChannelView id={route.slice("channel:".length)} />}
             </div>
           </Suspense>
