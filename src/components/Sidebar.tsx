@@ -12,7 +12,14 @@ import {
   Search,
   Settings,
   DownloadCloud,
+  Rss,
+  Tv,
 } from "lucide-react";
+import { AppModeSwitch } from "@/components/video/AppModeSwitch";
+import { Avatar } from "@/components/video/VideoCards";
+import { useVideoLibrary } from "@/hooks/useVideoLibrary";
+import { playbackMethodLabel } from "@/services/video/net";
+import { isVideoRoute } from "@/routes";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, WaveformLogo } from "@/components/ui";
@@ -29,6 +36,18 @@ const MAIN: NavItem[] = [
   { key: "search", label: "Search", icon: Search },
   { key: "radio", label: "Live Radio", icon: Radio },
   { key: "library", label: "Your Library", icon: Library },
+];
+
+const VIDEO_MAIN: NavItem[] = [
+  { key: "video", label: "Home", icon: Home },
+  { key: "video-search", label: "Search", icon: Search },
+  { key: "video-subs", label: "Following", icon: Rss },
+  { key: "video-library", label: "Library", icon: Library },
+];
+
+const VIDEO_COLLECTION: NavItem[] = [
+  { key: "settings", label: "Settings", icon: Settings },
+  { key: "about", label: "About", icon: Info },
 ];
 
 const COLLECTION: NavItem[] = [
@@ -67,15 +86,15 @@ const NavItemButton = memo(function NavItemButton({
       type="button"
       onClick={() => onNavigate(item.key)}
       title={item.label}
-      style={{ contain: "layout style paint", transform: "translateZ(0)" }}
+      data-active={active ? "true" : undefined}
       className={cn(
-        "focus-ring relative flex items-center gap-3 rounded-2xl text-sm font-semibold transition-colors duration-150",
-        active ? "bg-accent/15 text-accent" : "text-ink2 hover:bg-[rgba(255,255,255,0.05)] hover:text-ink",
+        "ab-nav-item focus-ring relative flex items-center gap-3 rounded-2xl text-sm font-semibold transition-colors duration-150",
+        active ? "bg-accent/15 text-accent" : "text-ink2 hover:bg-ink/[0.06] hover:text-ink",
         collapsed ? "mx-auto h-12 w-12 justify-center p-0" : "w-full px-4 py-3"
       )}
     >
-      {active && !collapsed && <span className="absolute top-1/2 left-1 h-5 w-1 -translate-y-1/2 rounded-full bg-accent" />}
-      <Icon className={cn("h-5 w-5 shrink-0", active && "drop-shadow-[0_0_8px_var(--c-accent)]")} />
+      {active && !collapsed && <span className="ab-nav-mark absolute top-1/2 left-1 h-5 w-1 -translate-y-1/2 rounded-full bg-accent" />}
+      <Icon className={cn("h-5 w-5 shrink-0", active && "drop-shadow-[0_0_8px_var(--glow)]")} />
       {!collapsed && (
         <>
           <span className="flex-1 truncate text-left">{item.label}</span>
@@ -100,6 +119,12 @@ export const Sidebar = memo(function Sidebar({
   onToggleCollapse: () => void;
 }) {
   const { playlists, createPlaylist, favorites, history } = usePlayer();
+  const { follows } = useVideoLibrary();
+  // Settings / About are shared: keep the mode you came from.
+  const [lastMode, setLastMode] = useState<"music" | "video">(isVideoRoute(route) ? "video" : "music");
+  const shared = route === "settings" || route === "about" || route === "privacy";
+  const video = shared ? lastMode === "video" : isVideoRoute(route);
+  if (!shared && (isVideoRoute(route) ? "video" : "music") !== lastMode) setLastMode(isVideoRoute(route) ? "video" : "music");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -109,10 +134,9 @@ export const Sidebar = memo(function Sidebar({
   return (
     <aside
       className={cn(
-        "blur-panel glass-inset relative z-30 hidden h-full shrink-0 flex-col rounded-[2rem] border border-white/5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.5)] transition-[width] duration-300 md:flex",
+        "ab-sidebar shell-panel relative z-30 hidden h-full shrink-0 flex-col transition-[width] duration-300 md:flex",
         collapsed ? "w-[5rem]" : "w-[17.5rem]",
       )}
-      style={{ contain: "layout style paint" }}
     >
       <div className={cn("relative flex items-center pt-6 pb-4", collapsed ? "justify-center px-0" : "justify-between px-5")}>
         <div className={cn("flex items-center gap-3 min-w-0", collapsed && "hidden")}>
@@ -122,7 +146,7 @@ export const Sidebar = memo(function Sidebar({
           </div>
           <div className="min-w-0">
             <p className="truncate text-base leading-tight font-black tracking-tight text-ink drop-shadow-sm">AuraBeats</p>
-            <p className="truncate text-[10px] font-bold tracking-widest text-ink3 uppercase opacity-80">Pure Sound</p>
+            <p className="truncate text-[10px] font-bold tracking-widest text-ink3 uppercase opacity-80">Music &amp; Video</p>
           </div>
         </div>
 
@@ -146,20 +170,41 @@ export const Sidebar = memo(function Sidebar({
         </div>
       </div>
 
+      <AppModeSwitch
+        route={shared ? (video ? "video" : "home") : route}
+        onNavigate={onNavigate}
+        compact={collapsed}
+        vertical={collapsed}
+        className={cn("mb-4", collapsed ? "mx-auto w-12" : "mx-3")}
+      />
+
       {!collapsed && (
-        <div className="mx-3 mb-6 animate-fade-in rounded-[1.4rem] border border-line/80 bg-white/[0.03] p-3.5 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.6)] backdrop-blur-xl">
-          <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
-            <ListMusic className="h-3.5 w-3.5 text-accent" /> Sound Engine
-          </p>
-          <p className="mt-1 text-[10px] leading-relaxed text-ink3">
-            Aggregating YouTube Music, JioSaavn, Audius, Jamendo, Archive and live radio in one player.
-          </p>
+        <div className="blur-panel mx-3 mb-6 animate-fade-in rounded-[1.4rem] p-3.5">
+          {video ? (
+            <>
+              <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
+                <Tv className="h-3.5 w-3.5 text-accent" /> Video Engine
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-ink3">
+                Ad-free YouTube in every quality, no account. {playbackMethodLabel()}.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
+                <ListMusic className="h-3.5 w-3.5 text-accent" /> Sound Engine
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-ink3">
+                Aggregating YouTube Music, JioSaavn, Audius, Jamendo, Archive and live radio in one player.
+              </p>
+            </>
+          )}
         </div>
       )}
 
-      <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")} style={{ contain: "layout style paint" }}>
+      <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>
         <div className="space-y-1">
-          {MAIN.map((item) => (
+          {(video ? VIDEO_MAIN : MAIN).map((item) => (
             <NavItemButton
               key={item.key}
               item={item}
@@ -171,7 +216,34 @@ export const Sidebar = memo(function Sidebar({
           ))}
         </div>
 
-        {!collapsed && (
+        {!collapsed && video && (
+          <div>
+            <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Channels you follow</p>
+            {follows.length === 0 ? (
+              <p className="px-3 text-xs leading-relaxed text-ink3">Tap Follow on any channel — no account needed.</p>
+            ) : (
+              <div className="space-y-0.5">
+                {follows.slice(0, 12).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onNavigate(`channel:${c.id}`)}
+                    data-active={route === `channel:${c.id}` ? "true" : undefined}
+                    className={cn(
+                      "ab-nav-item focus-ring flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors duration-150 hover:bg-ink/[0.06]",
+                      route === `channel:${c.id}` && "bg-ink/[0.08]",
+                    )}
+                  >
+                    <Avatar name={c.name} src={c.avatar} className="h-7 w-7" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink2">{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!collapsed && !video && (
           <div>
             <div className="mb-2 flex items-center justify-between px-3">
               <p className="text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Your playlists</p>
@@ -226,10 +298,10 @@ export const Sidebar = memo(function Sidebar({
                   key={p.id}
                   type="button"
                   onClick={() => onNavigate(`playlist:${p.id}` as RouteKey)}
-                  style={{ contain: "layout style paint", transform: "translateZ(0)" }}
+                  data-active={route === `playlist:${p.id}` ? "true" : undefined}
                   className={cn(
-                    "focus-ring flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors duration-150 hover:bg-[rgba(255,255,255,0.05)]",
-                    route === `playlist:${p.id}` && "bg-[rgba(255,255,255,0.05)]",
+                    "ab-nav-item focus-ring flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors duration-150 hover:bg-ink/[0.06]",
+                    route === `playlist:${p.id}` && "bg-ink/[0.08]",
                   )}
                 >
                   <Artwork alt={p.name} src={p.tracks[0]?.artwork} className="h-8 w-8 shrink-0" rounded="rounded-lg" />
@@ -247,7 +319,7 @@ export const Sidebar = memo(function Sidebar({
           {!collapsed && (
             <p className="mb-1 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Collection</p>
           )}
-          {COLLECTION.map((item) => (
+          {(video ? VIDEO_COLLECTION : COLLECTION).map((item) => (
             <NavItemButton
               key={item.key}
               item={item}

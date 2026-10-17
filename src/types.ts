@@ -64,7 +64,8 @@ export interface UserPlaylist {
   tracks: Track[];
 }
 
-export type ThemeName = "glassy" | "modern";
+/** Selectable theme cores. */
+export type ThemeName = "glassmorphism" | "material" | "liquid";
 export type ThemeMode = "dark" | "light";
 
 export interface ViewDescriptor {

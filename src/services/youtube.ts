@@ -161,18 +161,102 @@ export async function searchTracks(query: string, limit = 60): Promise<Track[]> 
   });
 }
 
+/* ----------------------- recommendations (Discover) ----------------------- */
+
+interface InvRelated {
+  videoId: string;
+  title: string;
+  author: string;
+  lengthSeconds: number;
+  viewCount?: number;
+  viewCountText?: string;
+}
+
+function parseViews(text?: string): number | undefined {
+  if (!text) return undefined;
+  const m = text.replace(/,/g, "").match(/([\d.]+)\s*([KMB])?/i);
+  if (!m) return undefined;
+  const n = parseFloat(m[1]);
+  const mult = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] || "").toUpperCase() as "K" | "M" | "B"] ?? 1;
+  return Math.round(n * mult);
+}
+
+/** First host that answers wins (same staggered race as search). */
+function raceHosts<T>(path: string, parse: (data: unknown) => T[], timeout = 10000): Promise<T[]> {
+  return new Promise<T[]>((resolve) => {
+    let settled = false;
+    let fails = 0;
+    INVIDIOUS_HOSTS.forEach((host, i) => {
+      setTimeout(() => {
+        if (settled) return;
+        fetchJSON<unknown>(`${host}${path}`, 9000)
+          .then((data) => {
+            const items = parse(data);
+            if (settled || items.length === 0) throw new Error("empty");
+            settled = true;
+            resolve(items);
+          })
+          .catch(() => {
+            fails++;
+            if (fails >= INVIDIOUS_HOSTS.length && !settled) {
+              settled = true;
+              resolve([]);
+            }
+          });
+      }, i * 400);
+    });
+    setTimeout(() => {
+      if (!settled) { settled = true; resolve([]); }
+    }, timeout);
+  });
+}
+
+/**
+ * YouTube's own "related videos" for a video — the same recommendation graph
+ * YouTube uses for its Up next / home suggestions.
+ */
+export async function fetchRelated(videoId: string, limit = 20): Promise<Track[]> {
+  if (!videoId) return [];
+  const tracks = await raceHosts<Track>(
+    `/api/v1/videos/${encodeURIComponent(videoId)}?fields=recommendedVideos`,
+    (data) => {
+      const list = (data as { recommendedVideos?: InvRelated[] })?.recommendedVideos ?? [];
+      return list
+        .map((v) => toTrack({
+          type: "video",
+          videoId: v.videoId,
+          title: v.title,
+          author: v.author ?? "",
+          lengthSeconds: v.lengthSeconds,
+          viewCount: v.viewCount ?? parseViews(v.viewCountText) ?? 0,
+        }))
+        .filter((t): t is Track => t !== null);
+    },
+  );
+  return tracks.slice(0, limit);
+}
+
+/** YouTube's music trending chart. */
+export async function fetchTrendingMusic(limit = 30): Promise<Track[]> {
+  const tracks = await raceHosts<Track>(`/api/v1/trending?type=music`, (data) =>
+    (Array.isArray(data) ? (data as InvItem[]) : [])
+      .map((v) => toTrack({ ...v, type: "video" }))
+      .filter((t): t is Track => t !== null),
+  );
+  return tracks.slice(0, limit);
+}
+
 export async function fetchTrending(): Promise<Track[]> {
   return searchTracks("top songs 2026", 20);
 }
 
 export async function fetchSuggestions(query: string): Promise<string[]> {
-  try {
-    const url = `${INVIDIOUS_HOSTS[0]}/api/v1/suggestions?q=${encodeURIComponent(query)}`;
-    const data = await fetchJSON<{ suggestions: string[] }>(url);
-    return data.suggestions?.slice(0, 8) ?? [];
-  } catch {
-    return [];
-  }
+  // Race every host — a single dead instance used to mean no suggestions at all.
+  return raceHosts<string>(
+    `/api/v1/suggestions?q=${encodeURIComponent(query)}`,
+    (data) => ((data as { suggestions?: unknown[] })?.suggestions ?? []).filter((x): x is string => typeof x === "string").slice(0, 10),
+    4000,
+  );
 }
 
 // Playback is now handled natively via the hidden YouTube IFrame player 

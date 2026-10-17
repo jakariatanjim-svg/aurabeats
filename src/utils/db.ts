@@ -18,11 +18,28 @@ interface OfflineEntry {
   savedAt: number;
 }
 
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+/** One shared connection (re-opened if it is ever closed or fails). */
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      dbPromise = null;
+      reject(request.error);
+    };
+    request.onsuccess = () => {
+      const conn = request.result;
+      conn.onversionchange = () => {
+        conn.close();
+        dbPromise = null;
+      };
+      conn.onclose = () => {
+        dbPromise = null;
+      };
+      resolve(conn);
+    };
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -30,6 +47,7 @@ function openDB(): Promise<IDBDatabase> {
       }
     };
   });
+  return dbPromise;
 }
 
 export const db = {

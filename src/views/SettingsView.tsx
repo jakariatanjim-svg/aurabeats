@@ -12,6 +12,10 @@ import {
   Volume2,
   Check,
   Smartphone,
+  Sparkles,
+  Shapes,
+  Droplets,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
@@ -20,6 +24,8 @@ import { useAppUpdate } from "@/hooks/useAppUpdate";
 import { installedVersionLabel } from "@/utils/updater";
 import { storage } from "@/utils/storage";
 import { Button, SectionHeader } from "@/components/ui";
+import type { ThemeName } from "@/types";
+import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
 
 /** Environment detection */
 const isCapacitor = typeof window !== "undefined" && Boolean((window as any).Capacitor?.isNativePlatform?.());
@@ -41,7 +47,7 @@ function StatusItem({ name, status, latency }: { name: string; status: "Online" 
   const isOffline = status === "Offline";
   
   return (
-    <div className="flex items-center justify-between rounded-xl border border-line bg-white/[0.02] px-3.5 py-2.5">
+    <div className="flex items-center justify-between rounded-xl border border-line bg-ink/[0.02] px-3.5 py-2.5">
       <div className="flex items-center gap-3">
         <span className="relative flex h-2 w-2">
           {!isOffline && !isTesting && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>}
@@ -135,6 +141,49 @@ function SourceCard({ icon, title, body, tags }: { icon: React.ReactNode; title:
   );
 }
 
+/** Theme cores shown in Settings. */
+const THEME_CORES: { key: ThemeName; name: string; desc: string; icon: typeof Sparkles }[] = [
+  { key: "glassmorphism", name: "Glassmorphism", desc: "Frosted translucent glass, clean in light, glowing in dark.", icon: Sparkles },
+  { key: "material", name: "Material UI", desc: "Material 3 — tonal colour, clean shapes, ripples.", icon: Shapes },
+  { key: "liquid", name: "Liquid Glass", desc: "Apple's iOS 26 look — clear glass bars over clean iOS surfaces.", icon: Droplets },
+];
+
+/** Announcement for the current UI update, shown under the theme picker. */
+function UiUpdateBanner() {
+  const items = [
+    { icon: Droplets, title: "Liquid Glass is here", body: "iPhone-style iOS 26 design: floating glass tab bar, mini player and menus, SF typography." },
+    { icon: Sun, title: "Polished light mode", body: "Soft tinted shadows instead of black, accent-coloured controls, cleaner surfaces." },
+    { icon: Shapes, title: "Three design languages", body: "Glassmorphism, Material UI and Liquid Glass — switch any time, in light or dark." },
+  ];
+  return (
+    <div className="blur-panel relative mt-4 overflow-hidden p-4 sm:p-5">
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ background: "linear-gradient(180deg, var(--c-accent2), var(--c-accent))" }}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-white uppercase">
+          <Megaphone className="h-3 w-3" /> New UI update
+        </span>
+        <span className="text-[11px] font-semibold text-ink3">What changed in this version</span>
+      </div>
+      <h3 className="mt-3 text-base font-black tracking-tight text-ink sm:text-lg">A fresh look for AuraBeats</h3>
+      <ul className="mt-3 grid gap-2.5 sm:grid-cols-3">
+        {items.map(({ icon: Icon, title, body }) => (
+          <li key={title} className="flex gap-2.5 rounded-xl bg-ink/[0.04] p-3">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+            <span className="min-w-0">
+              <span className="block text-xs font-bold text-ink">{title}</span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-ink3">{body}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function SettingsView() {
   const { volume, setVolume, toast, favorites, history, playlists, settings, updateSettings, clearOffline } = usePlayer();
   const { theme, setTheme, mode, toggleMode, accent, setAccent } = useTheme();
@@ -152,38 +201,45 @@ export function SettingsView() {
     <div className="space-y-8 pb-4">
       <div className="blur-panel p-5">
         <p className="text-[10px] font-bold tracking-[0.2em] text-accent uppercase">Appearance</p>
-        <h2 className="mt-1 text-2xl font-black tracking-tight text-ink">Dual core engine</h2>
+        <h2 className="mt-1 text-2xl font-black tracking-tight text-ink">Theme engine</h2>
         <p className="mt-1 max-w-xl text-xs leading-relaxed text-ink3">
-          Switch instantly between two completely different rendering cores. Your choice, mode and accent are remembered on this device.
+          Switch instantly between completely different design languages. Your choice, mode and accent are remembered on this device.
         </p>
       </div>
 
       <section>
-        <SectionHeader title="Theme core" subtitle="Glassmorphism or premium flat" />
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            { key: "glassy" as const, name: "Glassy", desc: "Translucent panels, glowing gradients." },
-            { key: "modern" as const, name: "Modern", desc: "Flat, high contrast premium feel." }
-          ].map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setTheme(opt.key)}
-              className={cn(
-                "blur-panel p-4 text-left transition-all",
-                theme === opt.key && "glow-ring border-accent/50"
-              )}
-            >
-              <div className="flex items-start justify-between">
-                 <div>
-                    <p className="text-sm font-bold text-ink">{opt.name}</p>
-                    <p className="text-[11px] text-ink3">{opt.desc}</p>
-                 </div>
-                 {theme === opt.key && <Check className="h-4 w-4 text-accent" />}
-              </div>
-            </button>
-          ))}
+        <SectionHeader title="Theme core" subtitle="Glassmorphism, Material UI and Liquid Glass" />
+        <div className="grid gap-3 sm:grid-cols-3">
+          {THEME_CORES.map((opt) => {
+            const Icon = opt.icon;
+            const selected = theme === opt.key;
+            return (
+              <button
+                key={opt.name}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setTheme(opt.key)}
+                className={cn("blur-panel p-4 text-left transition-all", selected && "glow-ring")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                      "bg-accent/15 text-accent",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  {selected && <Check className="h-4 w-4 text-accent" />}
+                </div>
+                <p className="mt-3 text-sm font-bold text-ink">{opt.name}</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">{opt.desc}</p>
+              </button>
+            );
+          })}
         </div>
+
+        <UiUpdateBanner />
       </section>
 
       <section>
@@ -257,10 +313,12 @@ export function SettingsView() {
         </div>
       </section>
 
+      <VideoSettingsSection />
+
       <section>
         <SectionHeader title="Preferences" subtitle="Customize your experience" icon={<Shield className="h-4 w-4 text-accent" />} />
         <div className="blur-panel space-y-4 p-4">
-          <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-4">
+          <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
             <div>
               <p className="text-sm font-bold text-ink flex items-center gap-2">Auto-load last Search tab</p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">Remember if you left off on YT Music or Other Sources.</p>
@@ -272,7 +330,7 @@ export function SettingsView() {
                 settings.rememberSearchTab ? "bg-emerald-500" : "bg-ink/15"
               )}
             >
-              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white transition", settings.rememberSearchTab ? "translate-x-5" : "translate-x-0")} />
+              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition", settings.rememberSearchTab ? "translate-x-5" : "translate-x-0")} />
             </button>
           </div>
           <div className="flex items-center justify-between gap-4">
@@ -287,7 +345,7 @@ export function SettingsView() {
                 settings.queueEnabled ? "bg-emerald-500" : "bg-ink/15"
               )}
             >
-              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white transition", settings.queueEnabled ? "translate-x-5" : "translate-x-0")} />
+              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition", settings.queueEnabled ? "translate-x-5" : "translate-x-0")} />
             </button>
           </div>
         </div>
@@ -298,7 +356,7 @@ export function SettingsView() {
         <div className="blur-panel p-4 space-y-5">
           <div className="grid grid-cols-3 gap-3">
             {stats.map((s) => (
-              <div key={s.label} className="rounded-2xl border border-line bg-white/[0.02] p-3 text-center">
+              <div key={s.label} className="rounded-2xl border border-line bg-ink/[0.02] p-3 text-center">
                 <p className="text-xl font-black text-ink">{s.value}</p>
                 <p className="text-[10px] tracking-wide text-ink3 uppercase">{s.label}</p>
               </div>
@@ -335,7 +393,7 @@ export function SettingsView() {
                   {update.label}
                 </Button>
                 {update.progress !== null && (
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10 sm:col-span-2">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-ink/10 sm:col-span-2">
                     <div
                       className="h-full rounded-full bg-sky-400 transition-all duration-200"
                       style={{ width: `${Math.round(update.progress * 100)}%` }}

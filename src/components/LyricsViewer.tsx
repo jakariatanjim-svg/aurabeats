@@ -97,14 +97,14 @@ export function LyricsViewer({ trackName, artistName, currentTime: _currentTime,
   if (loading) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
-        <Loader2 className="h-6 w-6 animate-spin text-white/50" />
-        <p className="text-xs text-white/40">Searching lyrics...</p>
+        <Loader2 className="h-6 w-6 animate-spin text-ink3" />
+        <p className="text-xs text-ink3">Searching lyrics...</p>
       </div>
     );
   }
 
   if (notFound || (plainLines.length === 0 && syncLines.length === 0)) {
-    return <div className="flex h-full items-center justify-center text-sm text-white/40">No lyrics found.</div>;
+    return <div className="flex h-full items-center justify-center text-sm text-ink3">No lyrics found.</div>;
   }
 
   return (
@@ -124,10 +124,10 @@ export function LyricsViewer({ trackName, artistName, currentTime: _currentTime,
                       "transition-all duration-500 ease-out select-none",
                       "text-[1.15rem] sm:text-[1.35rem] leading-[1.65] tracking-[0.01em]",
                       active
-                        ? "font-bold text-white scale-[1.07] drop-shadow-[0_0_22px_rgba(255,255,255,0.55)]"
+                        ? "font-bold text-ink scale-[1.07] drop-shadow-[0_0_22px_rgba(255,255,255,0.55)]"
                         : past
-                        ? "font-semibold text-white/30 scale-[0.97]"
-                        : "font-semibold text-white/18 scale-[0.95] blur-[0.3px]",
+                        ? "font-semibold text-ink/35 scale-[0.97]"
+                        : "font-semibold text-ink/20 scale-[0.95] blur-[0.3px]",
                     )}
                   >
                     {transform(line.text)}
@@ -138,7 +138,7 @@ export function LyricsViewer({ trackName, artistName, currentTime: _currentTime,
                 <p
                   key={i}
                   style={{ fontFamily: "'Plus Jakarta Sans', 'Outfit', sans-serif" }}
-                  className="text-[1.1rem] sm:text-[1.3rem] font-semibold text-white/85 leading-[1.8] tracking-[0.012em]"
+                  className="text-[1.1rem] sm:text-[1.3rem] font-semibold text-ink/85 leading-[1.8] tracking-[0.012em]"
                 >
                   {transform(text)}
                 </p>

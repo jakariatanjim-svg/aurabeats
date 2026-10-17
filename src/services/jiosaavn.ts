@@ -84,19 +84,19 @@ export async function fetchTrending(limit = 12): Promise<Track[]> {
   return searchTracks("top hindi songs 2026", limit);
 }
 
-export async function fetchSuggestions(query: string, limit = 8): Promise<string[]> {
+/** Song names (title + primary artist) for a query — used as a last-resort suggestion source. */
+export async function fetchSuggestionItems(query: string, limit = 8): Promise<{ title: string; artist: string }[]> {
   try {
     const json = await raceFetch<Record<string, unknown>>(
       `/api/search/songs?query=${encodeURIComponent(query)}&limit=${limit}`
     );
     const results = (json.data as { results?: Record<string, unknown>[] } | undefined)?.results ?? [];
     return results
-      .map((r) => {
-        const title = ((r.name || r.title) as string)?.replace(/&quot;/g, '"') || "";
-        const artist = (r.artists as { primary?: { name: string }[] } | undefined)?.primary?.[0]?.name || "";
-        return artist ? `${title} - ${artist}` : title;
-      })
-      .filter(Boolean)
+      .map((r) => ({
+        title: ((r.name || r.title) as string) || "",
+        artist: (r.artists as { primary?: { name: string }[] } | undefined)?.primary?.[0]?.name || "",
+      }))
+      .filter((r) => r.title)
       .slice(0, limit);
   } catch {
     return [];

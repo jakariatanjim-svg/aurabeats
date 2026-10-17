@@ -15,4 +15,8 @@ export const CLEAN_PATHS: string[] = [
   "/about",
   "/privacy",
   "/downloads",
+  "/video",
+  "/video/search",
+  "/video/subs",
+  "/video/library",
 ];

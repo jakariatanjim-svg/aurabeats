@@ -7,6 +7,7 @@ import {
   type Ref,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { X, Loader2, Music2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { gradientFrom, initials } from "@/utils/format";
@@ -106,7 +107,7 @@ export function IconButton({
       type="button"
       aria-pressed={active}
       className={cn(
-        "focus-ring glass-inset inline-flex shrink-0 items-center justify-center rounded-full text-ink2 transition-all duration-200",
+        "focus-ring inline-flex shrink-0 items-center justify-center rounded-full text-ink2 transition-all duration-200",
         "hover:bg-ink/[0.08] hover:text-ink active:scale-90 active:brightness-110",
         active && "bg-accent/12 text-accent hover:text-accent",
         sizes[size],
@@ -136,8 +137,8 @@ export function Button({
       type="button"
       className={cn(
         "focus-ring inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-40",
-        variant === "solid" && "bg-accent text-white hover:brightness-110 glow-soft shadow-[0_14px_34px_-18px_var(--c-accent)]",
-        variant === "outline" && "glass-inset border border-line bg-white/[0.02] text-ink hover:border-accent hover:text-accent",
+        variant === "solid" && "bg-accent text-white hover:brightness-110 glow-soft shadow-[0_14px_34px_-18px_var(--glow)]",
+        variant === "outline" && "glass-inset border border-line bg-ink/[0.03] text-ink hover:border-accent hover:text-accent",
         variant === "ghost" && "text-ink2 hover:bg-ink/[0.08] hover:text-ink",
         className,
       )}
@@ -193,11 +194,12 @@ export function Chip({
   return (
     <button
       type="button"
+      data-active={active ? "true" : undefined}
       className={cn(
-        "focus-ring glass-inset shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200",
+        "ab-chip focus-ring glass-inset shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-all duration-200",
         active
-          ? "border-transparent bg-accent text-white shadow-[0_8px_26px_-10px_var(--c-accent)]"
-          : "border-line bg-white/[0.02] text-ink2 hover:border-accent/60 hover:text-ink",
+          ? "border-transparent bg-accent text-white shadow-[0_8px_26px_-10px_var(--glow)]"
+          : "border-line bg-ink/[0.03] text-ink2 hover:border-accent/60 hover:text-ink",
         className,
       )}
       {...rest}
@@ -334,8 +336,8 @@ export function Slider({
           className="absolute inset-y-0 left-0 rounded-full"
           style={{
             width: `${pct}%`,
-            background: "linear-gradient(90deg, var(--c-accent2), var(--c-accent))",
-            boxShadow: "0 0 12px color-mix(in oklab, var(--c-accent) 60%, transparent)",
+            background: "var(--slider-fill)",
+            boxShadow: "0 0 12px color-mix(in oklab, var(--glow) 60%, transparent)",
           }}
         />
       </div>
@@ -374,12 +376,16 @@ export function Modal({
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-6">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+  // Portalled to <body>: rendered inline, the dialog lived inside the scroll
+  // area / content panel and was positioned and clipped relative to them.
+  // Clicks are stopped at the root so they never reach the row/card that
+  // opened the dialog (React bubbles portal events through the tree).
+  return createPortal(
+    <div onClick={(e) => e.stopPropagation()} className="fixed inset-0 z-[90] flex items-end justify-center pt-[var(--sa-top)] sm:items-center sm:p-6 sm:pt-[calc(var(--sa-top)+1.5rem)] sm:pb-[calc(var(--sa-bottom)+1.5rem)]">
+      <div className="ab-scrim absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div
         className={cn(
-          "blur-panel relative z-10 w-full animate-slide-up p-5 shadow-2xl sm:animate-scale-in",
+          "blur-panel surface-raised relative z-10 w-full animate-slide-up p-5 pb-[calc(var(--sa-bottom)+1.25rem)] shadow-2xl sm:animate-scale-in sm:pb-5",
           maxWidth,
           "rounded-b-none sm:rounded-[var(--panel-radius)]",
         )}
@@ -392,7 +398,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -400,13 +407,13 @@ export function Modal({
 export function Toaster() {
   const { toasts, dismissToast } = usePlayer();
   return (
-    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] left-1/2 z-[95] flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col gap-2 sm:bottom-[calc(env(safe-area-inset-bottom)+6rem)] sm:left-6 sm:translate-x-0">
+    <div className="pointer-events-none fixed bottom-[calc(var(--sa-bottom)+6.5rem)] left-1/2 z-[95] flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col gap-2 sm:bottom-[calc(var(--sa-bottom)+6rem)] sm:left-6 sm:translate-x-0">
       {toasts.map((t) => (
         <button
           key={t.id}
           onClick={() => dismissToast(t.id)}
           className={cn(
-            "blur-panel pointer-events-auto flex animate-fade-up items-center gap-2.5 px-4 py-2.5 text-left text-xs font-medium shadow-xl",
+            "blur-panel surface-raised pointer-events-auto flex animate-fade-up items-center gap-2.5 px-4 py-2.5 text-left text-xs font-medium shadow-xl",
             t.tone === "error" ? "text-rose-300" : t.tone === "success" ? "text-accent" : "text-ink",
           )}
         >
