@@ -2,24 +2,28 @@
  * Singleton YouTube IFrame player — the engine behind every YouTube /
  * YouTube Music track.
  *
- * First-launch reliability is the whole point of this module. On a cold start
- * (empty HTTP cache, no YouTube cookies yet) the player can take many seconds
- * to boot, and the old implementation had no way to recover if anything in
- * that chain went wrong — the first session stayed silent until a restart:
+ * ── Why the first launch used to stay silent ────────────────────────────────
+ * The player iframe was created the moment the app loaded — before the user
+ * had touched the page. Browsers refuse audible autoplay on a page with no
+ * user interaction yet, and the YouTube player settles into that "autoplay
+ * blocked" state when it boots. Every later `loadVideoById` / `playVideo`
+ * then just sat "unstarted" until the watchdog skipped the track, for every
+ * track, for the whole session.
  *
- *  • A failed / stalled `iframe_api` or player load was never retried, so the
- *    ready promise could hang for the whole session.
- *  • The player lived 9999px off-screen. Browsers deprioritise and throttle
- *    off-screen cross-origin iframes, and YouTube wants a visible ≥200×200
- *    player, so a cold boot could stall there.
- *  • The boot player (no video yet) could emit an error that was blamed on the
- *    track the user had just tapped, which then got paused.
- *  • `loadVideoById` issued straight from `onReady` can leave a cold player
- *    "unstarted" without ever playing.
- *  • Volume / mute were never pushed into the player.
+ * A reload "fixed" it because browsers carry the earlier click over to the
+ * reloaded page (same-origin navigation), so the new player booted already
+ * allowed to play. That is why it failed even in a fresh incognito window
+ * and only ever on the first load.
  *
- * Every one of those is handled below.
- */
+ * ── What happens now ────────────────────────────────────────────────────────
+ *  1. The IFrame API script is still fetched at startup (warm cache), with
+ *     retries if it fails.
+ *  2. The player itself is only created once the user has interacted with
+ *     the page (first tap / click / key), so it boots in the "allowed" state.
+ *  3. If a loaded track still does not start, the player is torn down and
+ *     rebuilt for that track automatically, which is exactly what a manual
+ *     restart used to do.
+ * ------------------------------------------------------------------------- */
 
 type YTPlayer = {
   loadVideoById: (o: { videoId: string; startSeconds?: number }) => void;
@@ -48,26 +52,37 @@ const STATE = { UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CU
 const SCRIPT_ID = "yt-iframe-api";
 const CONTAINER_ID = "yt-hidden-player-container";
 const PLAYER_ID = "yt-hidden-player";
-/** How long one boot attempt (script + player) may take before it is rebuilt. */
-const BOOT_TIMEOUT_MS = 15000;
+/** How long the API script may take before it is re-fetched. */
+const SCRIPT_TIMEOUT_MS = 15000;
+/** How long a created player may take to report ready before it is rebuilt. */
+const PLAYER_TIMEOUT_MS = 15000;
 const MAX_BACKOFF_MS = 20000;
+/** A loaded track that has not started after this long gets a fresh player. */
+const STUCK_REBUILD_MS = 7000;
+/** Rebuilds allowed per requested track (then the watchdog takes over). */
+const MAX_REBUILDS_PER_TRACK = 2;
 
 let ytPlayer: YTPlayer | null = null;
 let ytReady = false;
 let readyPromise: Promise<void> | null = null;
 let resolveReady: (() => void) | null = null;
 
-let bootAttempt = 0;
-let bootTimer: number | null = null;
-let retryTimer: number | null = null;
-let onlineHooked = false;
+let scriptAttempt = 0;
+let scriptTimer: number | null = null;
+let scriptRetryTimer: number | null = null;
+let playerTimer: number | null = null;
 let apiReadyHandler: (() => void) | null = null;
+let started = false;
+
+/** True once the user has interacted with the page (tap / click / key). */
+let activated = false;
 
 /** Video currently loaded in the player (null after an error, so a retry reloads). */
 let currentVideoId: string | null = null;
 /** The video the app last asked for — survives until the player can take it. */
 let requestedVideoId: string | null = null;
 let requestedAutoplay = true;
+let rebuildsForRequest = 0;
 let kickTimers: number[] = [];
 
 /** Desired output level, applied whenever a player (re)appears. */
@@ -79,40 +94,64 @@ let desiredMuted = false;
 /* ------------------------------------------------------------------------ */
 
 /**
- * Starts (or joins) the player boot. Safe to call any number of times; the
- * returned promise resolves once the player is ready — after however many
- * automatic retries that takes.
+ * Starts the boot (idempotent). The returned promise resolves once a player
+ * is ready, which needs a first user interaction.
  */
 export function initYouTubePlayer(): Promise<void> {
   if (!readyPromise) {
     readyPromise = new Promise<void>((resolve) => {
       resolveReady = resolve;
     });
-    hookOnline();
-    boot();
+  }
+  if (!started) {
+    started = true;
+    watchActivation();
+    window.addEventListener("online", () => {
+      if (!yt()?.Player) {
+        clearScriptTimers();
+        removeScript();
+        loadScript();
+      } else ensurePlayer();
+    });
+    loadScript();
   }
   return readyPromise;
 }
 
-function boot() {
-  if (ytReady) return;
-  clearTimer("boot");
-  ensureContainer();
+/* ---- user activation ---------------------------------------------------- */
 
-  // Each attempt gets a deadline; a stalled script or a player that never
-  // reports ready is torn down and rebuilt instead of hanging forever.
-  bootTimer = window.setTimeout(() => {
-    console.warn("[YT Player] boot timed out — rebuilding");
-    scheduleRetry();
-  }, BOOT_TIMEOUT_MS);
+function hasBeenActive() {
+  const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  return Boolean(ua?.hasBeenActive);
+}
 
+function watchActivation() {
+  if (activated || hasBeenActive()) {
+    activated = true;
+    return;
+  }
+  // These are the events that grant user activation. Listen in the capture
+  // phase so the player starts booting on the very first tap, even when that
+  // tap is the one that picks a track.
+  const events = ["pointerup", "click", "keydown", "touchend"] as const;
+  const onActivate = () => {
+    if (activated) return;
+    activated = true;
+    events.forEach((e) => window.removeEventListener(e, onActivate, true));
+    ensurePlayer();
+  };
+  events.forEach((e) => window.addEventListener(e, onActivate, { capture: true, passive: true }));
+}
+
+/* ---- API script --------------------------------------------------------- */
+
+function loadScript() {
   if (yt()?.Player) {
-    createPlayer();
+    ensurePlayer();
     return;
   }
 
-  // Chain onto any foreign handler rather than replace it (once — retries
-  // must not stack wrappers).
+  // Chain onto any foreign handler rather than replace it (once).
   const w = window as unknown as { onYouTubeIframeAPIReady?: () => void };
   if (w.onYouTubeIframeAPIReady !== apiReadyHandler) {
     const previous = w.onYouTubeIframeAPIReady;
@@ -122,109 +161,108 @@ function boot() {
       } catch {
         /* ignore foreign handler errors */
       }
-      if (!ytReady && !ytPlayer) createPlayer();
+      clearScriptTimers();
+      scriptAttempt = 0;
+      ensurePlayer();
     };
     w.onYouTubeIframeAPIReady = apiReadyHandler;
   }
 
-  if (!document.getElementById(SCRIPT_ID)) {
-    const tag = document.createElement("script");
-    tag.id = SCRIPT_ID;
-    tag.async = true;
-    // A cache-buster on retries makes sure a failed response is not reused.
-    tag.src = `https://www.youtube.com/iframe_api${bootAttempt > 0 ? `?r=${Date.now()}` : ""}`;
-    tag.onerror = () => {
-      console.warn("[YT Player] iframe_api failed to load");
-      scheduleRetry();
-    };
-    document.head.appendChild(tag);
-  }
+  if (document.getElementById(SCRIPT_ID)) return;
+  const tag = document.createElement("script");
+  tag.id = SCRIPT_ID;
+  tag.async = true;
+  // Cache-buster on retries so a failed response is not reused.
+  tag.src = `https://www.youtube.com/iframe_api${scriptAttempt > 0 ? `?r=${Date.now()}` : ""}`;
+  tag.onerror = () => {
+    console.warn("[YT Player] iframe_api failed to load");
+    retryScript();
+  };
+  document.head.appendChild(tag);
+
+  if (scriptTimer !== null) window.clearTimeout(scriptTimer);
+  scriptTimer = window.setTimeout(() => {
+    if (!yt()?.Player) {
+      console.warn("[YT Player] iframe_api timed out — retrying");
+      retryScript();
+    }
+  }, SCRIPT_TIMEOUT_MS);
 }
 
-function scheduleRetry() {
-  if (ytReady) return;
-  clearTimer("boot");
-  clearTimer("retry");
-  teardown();
-  bootAttempt += 1;
-  const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(bootAttempt - 1, 5));
-  retryTimer = window.setTimeout(boot, delay);
+function retryScript() {
+  clearScriptTimers();
+  removeScript();
+  scriptAttempt += 1;
+  const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(scriptAttempt - 1, 5));
+  scriptRetryTimer = window.setTimeout(loadScript, delay);
 }
 
-/** Network came back: retry right away instead of waiting out the backoff. */
-function hookOnline() {
-  if (onlineHooked) return;
-  onlineHooked = true;
-  window.addEventListener("online", () => {
-    if (ytReady || !readyPromise) return;
-    clearTimer("retry");
-    teardown();
-    boot();
-  });
+function clearScriptTimers() {
+  if (scriptTimer !== null) window.clearTimeout(scriptTimer);
+  if (scriptRetryTimer !== null) window.clearTimeout(scriptRetryTimer);
+  scriptTimer = scriptRetryTimer = null;
 }
 
-/** Removes a half-booted player (and the API script if it never arrived). */
-function teardown() {
-  try {
-    ytPlayer?.destroy();
-  } catch {
-    /* ignore */
-  }
-  ytPlayer = null;
-  ytReady = false;
-  currentVideoId = null;
-  document.getElementById(CONTAINER_ID)?.remove();
-  if (!yt()?.Player) {
-    document.getElementById(SCRIPT_ID)?.remove();
-    // A script that ran but whose widget bundle failed leaves a stub YT object
-    // flagged "loading", which would make the next iframe_api a no-op.
-    const w = window as unknown as { YT?: YTNamespace & { loading?: number } };
-    if (w.YT && !w.YT.Player) delete w.YT;
-    document.getElementById("www-widgetapi-script")?.remove();
-  }
+/** Removes a failed API load, including the stub `YT` object it leaves behind. */
+function removeScript() {
+  if (yt()?.Player) return;
+  document.getElementById(SCRIPT_ID)?.remove();
+  document.getElementById("www-widgetapi-script")?.remove();
+  const w = window as unknown as { YT?: YTNamespace };
+  if (w.YT && !w.YT.Player) delete w.YT;
 }
 
-function clearTimer(which: "boot" | "retry") {
-  if (which === "boot" && bootTimer !== null) {
-    window.clearTimeout(bootTimer);
-    bootTimer = null;
+/* ---- player ------------------------------------------------------------- */
+
+/** Creates the player once the API is loaded AND the user has interacted. */
+function ensurePlayer() {
+  if (ytPlayer || !yt()?.Player) return;
+  if (!activated) {
+    if (!hasBeenActive()) return;
+    activated = true;
   }
-  if (which === "retry" && retryTimer !== null) {
-    window.clearTimeout(retryTimer);
-    retryTimer = null;
-  }
+  createPlayer();
 }
 
 /**
- * Host for the player. It must stay inside the viewport and at least 200×200
- * (YouTube's minimum embed size): browsers throttle off-screen cross-origin
- * iframes, which could stall a cold player boot. It sits behind the whole UI
- * (z-index -1), fully transparent and click-through, so it is never seen.
+ * Host for the player: inside the viewport and at least 200×200 (YouTube's
+ * minimum), because browsers throttle off-screen cross-origin iframes. It
+ * sits behind the whole UI (z-index -1), fully transparent and click-through.
  */
 function ensureContainer() {
-  if (document.getElementById(CONTAINER_ID)) return;
-  const container = document.createElement("div");
-  container.id = CONTAINER_ID;
-  container.setAttribute("aria-hidden", "true");
-  container.style.cssText =
-    "position:fixed;left:0;bottom:0;width:240px;height:240px;opacity:0.01;pointer-events:none;overflow:hidden;z-index:-1;";
+  let container = document.getElementById(CONTAINER_ID);
+  if (!container) {
+    container = document.createElement("div");
+    container.id = CONTAINER_ID;
+    container.setAttribute("aria-hidden", "true");
+    container.style.cssText =
+      "position:fixed;left:0;bottom:0;width:240px;height:240px;opacity:0.01;pointer-events:none;overflow:hidden;z-index:-1;";
+    document.body.appendChild(container);
+  }
+  container.replaceChildren();
   const playerDiv = document.createElement("div");
   playerDiv.id = PLAYER_ID;
   container.appendChild(playerDiv);
-  document.body.appendChild(container);
 }
 
 function createPlayer() {
   const YT = yt();
   if (!YT?.Player || ytPlayer) return;
   ensureContainer();
+  ytReady = false;
+  currentVideoId = null;
+
+  const pendingId = requestedVideoId;
+  const pendingAutoplay = requestedAutoplay;
 
   ytPlayer = new YT.Player(PLAYER_ID, {
     height: "240",
     width: "240",
-    // No videoId: the player boots empty and receives tracks via load/cue.
+    // When a track is already waiting, boot straight into it (most reliable
+    // path: a plain autoplaying embed). Otherwise boot empty.
+    ...(pendingId ? { videoId: pendingId } : {}),
     playerVars: {
-      autoplay: 0,
+      autoplay: pendingId && pendingAutoplay ? 1 : 0,
       controls: 0,
       disablekb: 1,
       fs: 0,
@@ -233,10 +271,8 @@ function createPlayer() {
       rel: 0,
       iv_load_policy: 3,
       enablejsapi: 1,
-      // The player needs a real origin: the hosted site (https) and the
-      // Android app (Capacitor serves it on https://localhost) both have one.
-      // A direct file:// open would give an opaque origin, so skip the
-      // parameter there instead of sending "null".
+      // Real origin needed for the postMessage channel (site = https, the
+      // Android app = https://localhost). Skip it for opaque origins.
       ...(window.location.protocol === "https:" || window.location.protocol === "http:"
         ? { origin: window.location.origin }
         : {}),
@@ -244,26 +280,35 @@ function createPlayer() {
     events: {
       onReady: () => {
         ytReady = true;
-        bootAttempt = 0;
-        clearTimer("boot");
-        clearTimer("retry");
+        clearPlayerTimer();
         patchIframe();
         applyOutput();
-        // Hand over whatever the user asked for while the player was booting.
-        if (requestedVideoId) startRequested();
+        if (pendingId && pendingId === requestedVideoId) {
+          // Booted with this track already; make sure it is actually going.
+          currentVideoId = pendingId;
+          if (requestedAutoplay) {
+            try {
+              ytPlayer?.playVideo();
+            } catch {
+              /* ignore */
+            }
+            scheduleKicks(pendingId);
+          }
+        } else if (requestedVideoId) {
+          startRequested();
+        }
         resolveReady?.();
         window.dispatchEvent(new CustomEvent("yt-ready"));
       },
       onStateChange: (event: { data: number }) => {
-        if (event.data === STATE.PLAYING || event.data === STATE.BUFFERING) clearKicks();
+        if (event.data === STATE.PLAYING) clearKicks();
         window.dispatchEvent(new CustomEvent("yt-state-change", { detail: event.data }));
       },
       onError: (event: { data: number }) => {
         console.warn("[YT Player] Error code:", event.data);
         clearKicks();
-        // Errors raised before a video was actually handed to the player
-        // belong to the empty boot player — they must not fail (and pause)
-        // the track the user tapped while it was still booting.
+        // Errors before a video was handed to the player belong to the empty
+        // boot player; they must not fail the track the user tapped.
         if (!requestedVideoId || !currentVideoId) return;
         currentVideoId = null; // reset so retry works
         window.dispatchEvent(new CustomEvent("yt-error", { detail: event.data }));
@@ -271,12 +316,43 @@ function createPlayer() {
     },
   });
   patchIframe();
+
+  clearPlayerTimer();
+  playerTimer = window.setTimeout(() => {
+    if (!ytReady) {
+      console.warn("[YT Player] player did not become ready — rebuilding");
+      rebuildPlayer();
+    }
+  }, PLAYER_TIMEOUT_MS);
+}
+
+function clearPlayerTimer() {
+  if (playerTimer !== null) window.clearTimeout(playerTimer);
+  playerTimer = null;
+}
+
+function destroyPlayer() {
+  clearKicks();
+  clearPlayerTimer();
+  try {
+    ytPlayer?.destroy();
+  } catch {
+    /* ignore */
+  }
+  ytPlayer = null;
+  ytReady = false;
+  currentVideoId = null;
+}
+
+/** Throws the current player away and boots a fresh one (picks up the pending track). */
+function rebuildPlayer() {
+  destroyPlayer();
+  ensurePlayer();
 }
 
 /**
  * Makes sure the iframe delegates autoplay + EME. YouTube's own `allow` list
- * is kept (merged, not replaced). Never touches iframe.src — that would
- * reload the player in a loop.
+ * is kept (merged, not replaced). Never touches iframe.src.
  */
 function patchIframe() {
   try {
@@ -296,6 +372,10 @@ function patchIframe() {
   }
 }
 
+/* ------------------------------------------------------------------------ */
+/* playback                                                                 */
+/* ------------------------------------------------------------------------ */
+
 function applyOutput() {
   if (!ytReady || !ytPlayer) return;
   try {
@@ -307,30 +387,27 @@ function applyOutput() {
   }
 }
 
-/* ------------------------------------------------------------------------ */
-/* playback                                                                 */
-/* ------------------------------------------------------------------------ */
-
 function clearKicks() {
   kickTimers.forEach((t) => window.clearTimeout(t));
   kickTimers = [];
 }
 
 /**
- * A cold player sometimes accepts `loadVideoById` and then just sits in
- * "unstarted" / "cued". If it has not started after a moment, nudge it.
+ * After a load: nudge a player that sits "unstarted"/"cued", and if the track
+ * still has not started, rebuild the player for it.
  */
 function scheduleKicks(videoId: string) {
   clearKicks();
-  [1500, 4000, 8000].forEach((delay) => {
+  const stillWanted = () => ytReady && ytPlayer && requestedVideoId === videoId && requestedAutoplay;
+  [1500, 4000].forEach((delay) => {
     kickTimers.push(
       window.setTimeout(() => {
-        if (!ytReady || !ytPlayer || requestedVideoId !== videoId || !requestedAutoplay) return;
+        if (!stillWanted()) return;
         try {
-          const state = ytPlayer.getPlayerState();
+          const state = ytPlayer!.getPlayerState();
           if (state === STATE.UNSTARTED || state === STATE.CUED) {
             applyOutput();
-            ytPlayer.playVideo();
+            ytPlayer!.playVideo();
           }
         } catch {
           /* ignore */
@@ -338,6 +415,23 @@ function scheduleKicks(videoId: string) {
       }, delay),
     );
   });
+  kickTimers.push(
+    window.setTimeout(() => {
+      if (!stillWanted()) return;
+      let state: number = STATE.UNSTARTED;
+      try {
+        state = ytPlayer!.getPlayerState();
+      } catch {
+        /* treat as stuck */
+      }
+      if (state === STATE.UNSTARTED || state === STATE.CUED) {
+        if (rebuildsForRequest >= MAX_REBUILDS_PER_TRACK) return;
+        rebuildsForRequest += 1;
+        console.warn(`[YT Player] track did not start — rebuilding player (${rebuildsForRequest})`);
+        rebuildPlayer();
+      }
+    }, STUCK_REBUILD_MS),
+  );
 }
 
 function startRequested() {
@@ -360,17 +454,25 @@ function startRequested() {
 
 /**
  * Plays (or, with `autoplay: false`, just cues) a video. Works at any time:
- * before the player is ready the request is remembered and started the moment
- * it is — after any number of boot retries.
+ * before the player exists the request is kept and the player boots straight
+ * into it.
  */
 export function playYouTubeVideo(videoId: string, autoplay = true) {
+  if (videoId !== requestedVideoId) rebuildsForRequest = 0;
   requestedVideoId = videoId;
   requestedAutoplay = autoplay;
 
-  if (!ytReady || !ytPlayer) {
+  if (!ytPlayer) {
     void initYouTubePlayer();
+    // A play request normally follows a tap, so this usually creates the
+    // player right here (booting directly into the track).
+    if (autoplay) {
+      if (hasBeenActive()) activated = true;
+      ensurePlayer();
+    }
     return;
   }
+  if (!ytReady) return; // booting: onReady picks the request up
 
   patchIframe();
 

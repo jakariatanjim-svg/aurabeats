@@ -412,9 +412,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         timer = window.setTimeout(arm, 1000);
         return;
       }
-      timer = window.setTimeout(check, isYt ? 15000 : timeoutMs);
+      // YouTube gets longer: a stuck track triggers an automatic player
+      // rebuild (~7s) inside this window before we give up on it.
+      timer = window.setTimeout(check, isYt ? 20000 : timeoutMs);
     };
     const check = () => {
+      // Player being rebuilt right now — wait for it instead of failing.
+      if (isYt && !isYouTubePlayerReady()) { arm(); return; }
       const el = engineRef.current;
       if (el.currentTime > 0.2 || el.isPlaying || !el.isBuffering) return;
       const track = queueRef.current[indexRef.current];
