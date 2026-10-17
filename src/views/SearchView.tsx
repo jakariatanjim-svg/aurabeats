@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Music2, Mic2, Search as SearchIcon, X, History,
   Flame, Headphones, SlidersHorizontal, Piano, Dumbbell, Clapperboard,
@@ -41,43 +41,66 @@ export function SearchView() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(20);
 
+  /** The term actually searched — only changes on Enter / picking a suggestion
+   *  or chip, never while typing (YouTube-style). */
+  const [submitted, setSubmitted] = useState("");
+
   const inputRef = useRef<HTMLInputElement | null>(null);
   const suggestRef = useRef<HTMLDivElement | null>(null);
 
   const trimmed = query.trim();
-  const debounced = useDebouncedValue(trimmed, 300);
   const suggestDebounced = useDebouncedValue(trimmed, 180);
-  const enabled = debounced.length > 0;
+  const enabled = submitted.length > 0;
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { setVisibleCount(20); }, [debounced]);
+  useEffect(() => { setVisibleCount(20); }, [submitted]);
 
   useEffect(() => {
-    if (suggestDebounced.length < 2) { setSuggestions([]); return; }
+    // Drop the old list right away so stale / empty rows never linger.
+    setSuggestions([]);
+    if (suggestDebounced.length < 2 || suggestDebounced === submitted) return;
     let alive = true;
     fetchSearchSuggestions(suggestDebounced)
-      .then((r) => { if (alive) setSuggestions(r); })
+      .then((r) => { if (alive) setSuggestions(r.map((x) => x.trim()).filter(Boolean)); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [suggestDebounced]);
+  }, [suggestDebounced, submitted]);
 
+  // Close the suggestion list on any outside tap / click (pointer events
+  // cover touch as well as mouse).
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const onPointer = (e: PointerEvent) => {
       if (!suggestRef.current?.contains(e.target as Node)) setShowSuggestions(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, []);
+
+  // Mobile: closing the keyboard (e.g. Android back) keeps the input focused,
+  // which used to leave the suggestion list hanging. Treat a keyboard that
+  // slides away as leaving the field.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let last = vv.height;
+    const onResize = () => {
+      const grew = vv.height - last > 120;
+      last = vv.height;
+      if (grew && document.activeElement === inputRef.current) inputRef.current?.blur();
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
   }, []);
 
   const ytFeed = useFeed<Track[]>(
-    `search:yt:${debounced}`,
-    () => searchYTMusic(debounced, 100),
+    `search:yt:${submitted}`,
+    () => searchYTMusic(submitted, 100),
     { enabled: enabled && view === "ytmusic", ttl: 10 * 60 * 1000 },
   );
 
   const otherFeed = useFeed<Track[]>(
-    `search:other:${debounced}`,
-    () => searchOtherSources(debounced, 80),
+    `search:other:${submitted}`,
+    () => searchOtherSources(submitted, 80),
     { enabled: enabled && view === "sources", ttl: 10 * 60 * 1000 },
   );
 
@@ -91,10 +114,22 @@ export function SearchView() {
     storage.set(RECENT_KEY, next);
   };
 
-  const pick = (s: string) => {
-    setQuery(s);
+  /** Runs a search: closes suggestions and drops focus so the mobile keyboard hides. */
+  const runSearch = (term: string) => {
+    const t = term.trim();
     setShowSuggestions(false);
-    remember(s);
+    setSuggestions([]);
+    inputRef.current?.blur();
+    if (!t) return;
+    setQuery(t);
+    setSubmitted(t);
+    remember(t);
+    document.getElementById("ab-scroll")?.scrollTo({ top: 0 });
+  };
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    runSearch(query);
   };
 
   useEffect(() => {
@@ -117,30 +152,42 @@ export function SearchView() {
         {/* Search bar */}
         <div className="sticky top-0 z-20 -mx-4 px-4 py-3 sm:-mx-8 sm:px-8">
           <div className="relative mx-auto max-w-2xl" ref={suggestRef}>
-            <div className="blur-panel glass-inset flex items-center gap-2 rounded-full p-1 pl-4 focus-within:ring-2 focus-within:ring-accent/50">
+            <form role="search" onSubmit={onSubmit} className="blur-panel glass-inset flex items-center gap-2 rounded-full p-1 pl-4 focus-within:ring-2 focus-within:ring-accent/50">
               <SearchIcon className="h-5 w-5 shrink-0 text-ink3" />
               <input
                 ref={inputRef}
+                type="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
                 onFocus={() => setShowSuggestions(true)}
-                onBlur={() => { if (trimmed.length > 2) remember(trimmed); }}
+                onBlur={() => setShowSuggestions(false)}
                 onKeyDown={(e) => { if (e.key === "Escape") { setShowSuggestions(false); inputRef.current?.blur(); } }}
                 placeholder="Search songs, artists, lyrics..."
-                className="min-w-0 flex-1 bg-transparent py-3 text-[15px] font-semibold text-ink outline-none placeholder:text-ink3"
+                aria-label="Search"
+                className="min-w-0 flex-1 bg-transparent py-3 text-[15px] font-semibold text-ink outline-none placeholder:text-ink3 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
               />
               {query && (
-                <button type="button" onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="mr-1 rounded-full p-2 text-ink3 hover:text-ink">
+                <button type="button" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="rounded-full p-2 text-ink3 hover:text-ink">
                   <X className="h-5 w-5" />
                 </button>
               )}
-              {enabled && activeFeed.loading && <Spinner className="mx-2 h-4 w-4" />}
-            </div>
+              {enabled && activeFeed.loading ? (
+                <Spinner className="mx-2.5 h-4 w-4" />
+              ) : (
+                <button type="submit" aria-label="Search" onMouseDown={(e) => e.preventDefault()} className="rounded-full p-2.5 text-ink2 transition hover:bg-ink/[0.07] hover:text-ink active:scale-95">
+                  <SearchIcon className="h-5 w-5" />
+                </button>
+              )}
+            </form>
 
             {showSuggestions && suggestions.length > 0 && trimmed.length >= 2 && (
               <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl blur-panel surface-raised shadow-2xl animate-fade-in">
                 {suggestions.map((s) => (
-                  <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(s)}
+                  <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => runSearch(s)}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink2 transition hover:bg-ink/[0.07] hover:text-ink">
                     <SearchIcon className="h-3.5 w-3.5 shrink-0 text-ink3" />
                     <span className="truncate">{s}</span>
@@ -180,7 +227,7 @@ export function SearchView() {
             <section>
               <SectionHeader title="Recent searches" icon={<History className="h-5 w-5 text-accent" />} />
               <div className="flex flex-wrap gap-2">
-                {recent.map((item) => <Chip key={item} onClick={() => setQuery(item)}>{item}</Chip>)}
+                {recent.map((item) => <Chip key={item} onClick={() => runSearch(item)}>{item}</Chip>)}
               </div>
             </section>
           )}
@@ -188,7 +235,7 @@ export function SearchView() {
             <SectionHeader title="Browse" />
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
               {DISCOVER.map(({ label, icon: Icon, query: q, gradient }) => (
-                <button key={label} onClick={() => setQuery(q)}
+                <button key={label} onClick={() => runSearch(q)}
                   className={cn("group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br h-20 sm:h-24 text-left shadow-lg transition-all hover:brightness-110 hover:scale-[1.02] active:scale-[0.97]", gradient)}>
                   <div className="absolute inset-0 bg-black/20 transition group-hover:bg-black/10 rounded-xl" />
                   <div className="relative z-10 flex h-full flex-col justify-end gap-1.5 p-3">
@@ -223,7 +270,7 @@ export function SearchView() {
           ) : activeFeed.loading && !activeFeed.data ? (
             <TrackRowSkeleton rows={8} />
           ) : allTracks.length === 0 ? (
-            <EmptyState title={`No results for "${debounced}"`} hint="Try another keyword or switch tabs." />
+            <EmptyState title={`No results for "${submitted}"`} hint="Try another keyword or switch tabs." />
           ) : (
             <div className="blur-panel glass-inset overflow-hidden rounded-2xl p-1.5 sm:p-2">
               {displayed.map((track, i) => (
