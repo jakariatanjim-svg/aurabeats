@@ -45,7 +45,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
     <div className="fixed inset-x-0 bottom-[calc(4.85rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
       <div className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[calc(var(--sa-bottom)+0.55rem)] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
         {/* mobile progress line - moved to absolute top for better layout */}
-        <div className="absolute top-0 left-0 right-0 md:hidden">
+        <div className="absolute top-[3px] left-6 right-6 md:hidden">
           <Slider
           ariaLabel="Seek"
           value={isLive ? 0 : currentTime}

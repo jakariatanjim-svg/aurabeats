@@ -338,7 +338,7 @@ export function SettingsView() {
                 settings.rememberSearchTab ? "bg-emerald-500" : "bg-ink/15"
               )}
             >
-              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white transition", settings.rememberSearchTab ? "translate-x-5" : "translate-x-0")} />
+              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition", settings.rememberSearchTab ? "translate-x-5" : "translate-x-0")} />
             </button>
           </div>
           <div className="flex items-center justify-between gap-4">
@@ -353,7 +353,7 @@ export function SettingsView() {
                 settings.queueEnabled ? "bg-emerald-500" : "bg-ink/15"
               )}
             >
-              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white transition", settings.queueEnabled ? "translate-x-5" : "translate-x-0")} />
+              <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition", settings.queueEnabled ? "translate-x-5" : "translate-x-0")} />
             </button>
           </div>
         </div>

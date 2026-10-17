@@ -81,40 +81,48 @@
 
 /* ------------------------- GLASSMORPHISM / LIGHT ----------------------- */
 [data-theme="glassmorphism"][data-mode="light"] {
-  --c-base: #eef0ff;
-  --c-elev: rgb(255 255 255 / 0.42);
-  --c-elev-strong: rgb(255 255 255 / 0.72);
-  --c-elev2: rgb(255 255 255 / 0.6);
-  --c-line: rgb(255 255 255 / 0.7);
-  --c-ink: #120b26;
-  --c-ink2: #463d63;
-  --c-ink3: #6f6895;
+  --c-base: #e8eafa;
+  /* Frosted white glass: dense enough to read on, translucent enough to
+     pick up the aurora behind it. */
+  --c-elev: rgb(255 255 255 / 0.56);
+  --c-elev-strong: rgb(255 255 255 / 0.8);
+  /* Containers / skeletons / dividers are tinted DARK on light glass —
+     white-on-white made them invisible. */
+  --c-elev2: rgb(30 24 80 / 0.07);
+  --c-line: rgb(30 24 80 / 0.12);
+  --c-ink: #0f0a24;
+  --c-ink2: #3a3257;
+  --c-ink3: #5d5782; /* ≥ 4.5:1 on the glass panels */
 
   --panel-blur: 22px;
-  --panel-backdrop: blur(var(--panel-blur)) saturate(170%);
-  --panel-backdrop-raised: blur(30px) saturate(180%);
-  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.55) 0%, rgb(255 255 255 / 0.12) 60%, rgb(255 255 255 / 0.3) 100%);
-  --panel-border: 1px solid rgb(255 255 255 / 0.75);
+  --panel-backdrop: blur(var(--panel-blur)) saturate(180%);
+  --panel-backdrop-raised: blur(30px) saturate(190%);
+  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.5) 0%, rgb(255 255 255 / 0.14) 55%, rgb(255 255 255 / 0.28) 100%);
+  --panel-border: 1px solid rgb(255 255 255 / 0.85);
   --panel-radius: 24px;
-  --panel-shadow: 0 16px 40px -20px rgb(60 40 140 / 0.35), 0 2px 6px -2px rgb(60 40 140 / 0.12);
-  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 0.9);
+  /* Layered, cool-neutral depth: a tight contact shadow + a soft ambient
+     one (replaces the single muddy purple haze). */
+  --panel-shadow: 0 1px 2px rgb(24 20 70 / 0.06), 0 8px 22px -10px rgb(36 28 110 / 0.16), 0 24px 48px -30px rgb(36 28 110 / 0.24);
+  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 0 0 1px rgb(255 255 255 / 0.22);
   --panel-hover-lift: -2px;
 
-  --shell-bg: linear-gradient(160deg, rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.16));
-  --shell-border: 1px solid rgb(255 255 255 / 0.7);
-  --shell-shadow: 0 30px 70px -34px rgb(60 40 140 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.85);
+  --shell-bg: linear-gradient(160deg, rgb(255 255 255 / 0.36), rgb(255 255 255 / 0.14));
+  --shell-border: 1px solid rgb(255 255 255 / 0.8);
+  --shell-shadow: 0 1px 2px rgb(24 20 70 / 0.05), 0 26px 60px -32px rgb(36 28 110 / 0.32), inset 0 1px 0 rgb(255 255 255 / 0.9);
   --shell-backdrop: none;
   --shell-radius: 2rem;
   --bar-radius: 1.6rem;
-  --bar-shadow: 0 26px 60px -26px rgb(60 40 140 / 0.45);
+  --bar-shadow: 0 2px 6px -2px rgb(24 20 70 / 0.1), 0 24px 50px -24px rgb(36 28 110 / 0.36);
 
-  --glow-strength: 0.7;
+  --glow-strength: 0.6;
+  /* A livelier aurora so the white glass has colour to frost over. */
   --app-bg-image:
-    radial-gradient(900px 640px at 6% -8%, color-mix(in oklab, var(--c-accent) 45%, transparent), transparent 60%),
-    radial-gradient(760px 600px at 100% 8%, color-mix(in oklab, var(--c-accent2) 40%, transparent), transparent 60%),
-    radial-gradient(820px 640px at 70% 108%, rgb(244 114 182 / 0.38), transparent 62%),
-    radial-gradient(620px 520px at 0% 92%, rgb(129 140 248 / 0.35), transparent 62%),
-    linear-gradient(180deg, #f7f5ff 0%, #e9e7ff 100%);
+    radial-gradient(900px 640px at 6% -8%, color-mix(in oklab, var(--c-accent) 58%, transparent), transparent 60%),
+    radial-gradient(760px 600px at 100% 8%, color-mix(in oklab, var(--c-accent2) 50%, transparent), transparent 60%),
+    radial-gradient(820px 640px at 70% 108%, rgb(244 114 182 / 0.46), transparent 62%),
+    radial-gradient(620px 520px at 0% 92%, rgb(129 140 248 / 0.45), transparent 62%),
+    radial-gradient(1100px 700px at 58% 48%, color-mix(in oklab, var(--c-accent) 18%, transparent), transparent 70%),
+    linear-gradient(180deg, #f3f2ff 0%, #e2e4fb 100%);
 }
 
 /* Phones: slightly lighter blur on the many scrolling cards keeps scrolling
