@@ -1,0 +1,17 @@
+name: zz-video-probe (temporary)
+on:
+  push:
+    branches: [arena/1784188a-aurabeats]
+    paths: [".github/probe/**", ".github/workflows/zz-video-probe.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm i --no-save playwright@1 && npx playwright install --with-deps chromium
+        working-directory: .github/probe
+      - run: node probe.mjs
+        working-directory: .github/probe
