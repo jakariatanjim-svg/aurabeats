@@ -251,13 +251,12 @@ export async function fetchTrending(): Promise<Track[]> {
 }
 
 export async function fetchSuggestions(query: string): Promise<string[]> {
-  try {
-    const url = `${INVIDIOUS_HOSTS[0]}/api/v1/suggestions?q=${encodeURIComponent(query)}`;
-    const data = await fetchJSON<{ suggestions: string[] }>(url);
-    return data.suggestions?.slice(0, 8) ?? [];
-  } catch {
-    return [];
-  }
+  // Race every host — a single dead instance used to mean no suggestions at all.
+  return raceHosts<string>(
+    `/api/v1/suggestions?q=${encodeURIComponent(query)}`,
+    (data) => ((data as { suggestions?: unknown[] })?.suggestions ?? []).filter((x): x is string => typeof x === "string").slice(0, 10),
+    4000,
+  );
 }
 
 // Playback is now handled natively via the hidden YouTube IFrame player 

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
-  Music2, Mic2, Search as SearchIcon, X, History,
+  Music2, Mic2, Search as SearchIcon, X, History, ArrowUpLeft,
   Flame, Headphones, SlidersHorizontal, Piano, Dumbbell, Clapperboard,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -39,6 +39,11 @@ export function SearchView() {
   const [recent, setRecent] = useState<string[]>(() => storage.get<string[]>(RECENT_KEY, []));
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  /** What the user actually typed. `query` (the input's text) changes while
+   *  arrowing through suggestions; suggestions keep following `typed`. */
+  const [typed, setTyped] = useState("");
+  /** Keyboard-highlighted suggestion row (-1 = none, input shows `typed`). */
+  const [active, setActive] = useState(-1);
   const [visibleCount, setVisibleCount] = useState(20);
 
   /** The term actually searched — only changes on Enter / picking a suggestion
@@ -48,23 +53,42 @@ export function SearchView() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const suggestRef = useRef<HTMLDivElement | null>(null);
 
-  const trimmed = query.trim();
-  const suggestDebounced = useDebouncedValue(trimmed, 180);
+  const typedTrimmed = typed.trim();
+  const suggestDebounced = useDebouncedValue(typedTrimmed, 120);
   const enabled = submitted.length > 0;
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { setVisibleCount(20); }, [submitted]);
 
   useEffect(() => {
-    // Drop the old list right away so stale / empty rows never linger.
-    setSuggestions([]);
-    if (suggestDebounced.length < 2 || suggestDebounced === submitted) return;
+    setActive(-1);
+    if (!suggestDebounced || suggestDebounced === submitted) { setSuggestions([]); return; }
+    // Keep the previous list on screen until the new one arrives (no flicker
+    // while typing), but never show it for a different, empty result.
     let alive = true;
     fetchSearchSuggestions(suggestDebounced)
-      .then((r) => { if (alive) setSuggestions(r.map((x) => x.trim()).filter(Boolean)); })
-      .catch(() => {});
+      .then((r) => { if (alive) setSuggestions(r); })
+      .catch(() => { if (alive) setSuggestions([]); });
     return () => { alive = false; };
   }, [suggestDebounced, submitted]);
+
+  /** Dropdown rows: matching recent searches first (YouTube shows your
+   *  history on top), then live suggestions. */
+  const rows = useMemo(() => {
+    const t = typedTrimmed.toLowerCase();
+    if (!t || typedTrimmed === submitted) return [] as { text: string; recent: boolean }[];
+    const fromRecent = recent
+      .filter((r) => r.toLowerCase().startsWith(t) && r.toLowerCase() !== t)
+      .slice(0, 3);
+    const seen = new Set(fromRecent.map((r) => r.toLowerCase()));
+    const live = suggestions.filter((x) => !seen.has(x.toLowerCase()) && x.toLowerCase() !== t);
+    return [
+      ...fromRecent.map((text) => ({ text, recent: true })),
+      ...live.map((text) => ({ text, recent: false })),
+    ].slice(0, 10);
+  }, [typedTrimmed, submitted, recent, suggestions]);
+
+  const listOpen = showSuggestions && rows.length > 0;
 
   // Close the suggestion list on any outside tap / click (pointer events
   // cover touch as well as mouse).
@@ -120,11 +144,48 @@ export function SearchView() {
     setShowSuggestions(false);
     setSuggestions([]);
     inputRef.current?.blur();
+    setActive(-1);
     if (!t) return;
     setQuery(t);
+    setTyped(t);
     setSubmitted(t);
     remember(t);
     document.getElementById("ab-scroll")?.scrollTo({ top: 0 });
+  };
+
+  /** ↑ / ↓ walk the list (the input previews the row, as on YouTube),
+   *  Enter searches it, Esc goes back to what was typed. */
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (rows.length === 0) return;
+      e.preventDefault(); // keep the caret where it is
+      if (!showSuggestions) { setShowSuggestions(true); return; }
+      const n = rows.length;
+      // Cycle: -1 (typed text) → 0 … n-1 → back to -1
+      const next = e.key === "ArrowDown"
+        ? (active + 1 >= n ? -1 : active + 1)
+        : (active - 1 < -1 ? n - 1 : active - 1);
+      setActive(next);
+      setQuery(next === -1 ? typed : rows[next].text);
+      return;
+    }
+    if (e.key === "Escape") {
+      if (listOpen) {
+        e.preventDefault();
+        if (active !== -1) setQuery(typed);
+        setActive(-1);
+        setShowSuggestions(false);
+      } else {
+        inputRef.current?.blur();
+      }
+    }
+  };
+
+  const removeRecent = (item: string) => {
+    const next = recent.filter((r) => r !== item);
+    setRecent(next);
+    storage.set(RECENT_KEY, next);
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -157,21 +218,26 @@ export function SearchView() {
               <input
                 ref={inputRef}
                 type="search"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={listOpen}
+                aria-controls="search-suggestions"
+                aria-activedescendant={listOpen && active >= 0 ? `search-sugg-${active}` : undefined}
                 enterKeyHint="search"
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
                 value={query}
-                onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
+                onChange={(e) => { setQuery(e.target.value); setTyped(e.target.value); setActive(-1); setShowSuggestions(true); }}
                 onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setShowSuggestions(false)}
-                onKeyDown={(e) => { if (e.key === "Escape") { setShowSuggestions(false); inputRef.current?.blur(); } }}
+                onBlur={() => { setShowSuggestions(false); setActive(-1); }}
+                onKeyDown={onKeyDown}
                 placeholder="Search songs, artists, lyrics..."
                 aria-label="Search"
                 className="min-w-0 flex-1 bg-transparent py-3 text-[15px] font-semibold text-ink outline-none placeholder:text-ink3 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
               />
               {query && (
-                <button type="button" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); inputRef.current?.focus(); }} className="rounded-full p-2 text-ink3 hover:text-ink">
+                <button type="button" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setTyped(""); setActive(-1); inputRef.current?.focus(); }} className="rounded-full p-2 text-ink3 hover:text-ink">
                   <X className="h-5 w-5" />
                 </button>
               )}
@@ -184,14 +250,59 @@ export function SearchView() {
               )}
             </form>
 
-            {showSuggestions && suggestions.length > 0 && trimmed.length >= 2 && (
-              <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl blur-panel surface-raised shadow-2xl animate-fade-in">
-                {suggestions.map((s) => (
-                  <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => runSearch(s)}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-ink2 transition hover:bg-ink/[0.07] hover:text-ink">
-                    <SearchIcon className="h-3.5 w-3.5 shrink-0 text-ink3" />
-                    <span className="truncate">{s}</span>
-                  </button>
+            {listOpen && (
+              <div
+                id="search-suggestions"
+                role="listbox"
+                aria-label="Search suggestions"
+                className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl py-1.5 blur-panel surface-raised shadow-2xl animate-fade-in"
+              >
+                {rows.map((row, i) => (
+                  <div
+                    key={`${row.recent ? "r" : "s"}:${row.text}`}
+                    id={`search-sugg-${i}`}
+                    role="option"
+                    aria-selected={i === active}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => runSearch(row.text)}
+                    className={cn(
+                      "group flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left text-[15px] text-ink transition-colors",
+                      i === active ? "bg-ink/[0.12]" : "hover:bg-ink/[0.06]",
+                    )}
+                  >
+                    {row.recent
+                      ? <History className="h-4 w-4 shrink-0 text-ink3" />
+                      : <SearchIcon className="h-4 w-4 shrink-0 text-ink3" />}
+                    <span className={cn("min-w-0 flex-1 truncate", row.recent && "text-accent")}>
+                      <Highlight text={row.text} typed={typedTrimmed} />
+                    </span>
+                    {row.recent ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${row.text} from recent searches`}
+                        onClick={(e) => { e.stopPropagation(); removeRecent(row.text); }}
+                        className="shrink-0 rounded-full p-1 text-ink3 opacity-70 transition hover:bg-ink/[0.08] hover:text-ink hover:opacity-100"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Fill in "${row.text}"`}
+                        title="Fill in"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuery(row.text + " ");
+                          setTyped(row.text + " ");
+                          setActive(-1);
+                          inputRef.current?.focus();
+                        }}
+                        className="shrink-0 rounded-full p-1 text-ink3 opacity-60 transition hover:bg-ink/[0.08] hover:text-ink hover:opacity-100"
+                      >
+                        <ArrowUpLeft className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -288,4 +399,18 @@ export function SearchView() {
       )}
     </div>
   );
+}
+
+/** YouTube style: the part you typed stays regular, the completion is bold. */
+function Highlight({ text, typed }: { text: string; typed: string }) {
+  const t = typed.toLowerCase();
+  if (t && text.toLowerCase().startsWith(t)) {
+    return (
+      <>
+        <span className="font-normal">{text.slice(0, typed.length)}</span>
+        <span className="font-bold">{text.slice(typed.length)}</span>
+      </>
+    );
+  }
+  return <span className="font-semibold">{text}</span>;
 }

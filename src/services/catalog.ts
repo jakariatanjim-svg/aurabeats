@@ -96,13 +96,7 @@ export async function searchEverything(query: string, opts: CatalogQuery = {}): 
     .slice(0, limit);
 }
 
-export async function fetchSearchSuggestions(query: string): Promise<string[]> {
-  const [yt, js] = await Promise.all([
-    cap(youtube.fetchSuggestions(query), [] as string[]),
-    cap(jiosaavn.fetchSuggestions(query), [] as string[]),
-  ]);
-  return [...new Set([...yt, ...js])].slice(0, 10);
-}
+export { fetchSearchSuggestions } from "./suggest";
 
 export async function fetchForYou(favorites: Track[]): Promise<Track[]> {
   if (favorites.length === 0) return [];
