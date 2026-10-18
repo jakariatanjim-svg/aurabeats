@@ -15,7 +15,9 @@ function detectBrowser(): Browser {
   if ((navigator as unknown as { brave?: unknown }).brave) return "brave";
   const ua = navigator.userAgent;
   if (/Firefox\//.test(ua)) return "firefox";
-  if (/Edg(A|iOS)?\//.test(ua)) return "edge";
+  const phone = /Android|iPhone|iPad|Mobile/.test(ua);
+  if (phone) return "other"; // extensions don't run in phone Chrome/Edge
+  if (/Edg\//.test(ua)) return "edge";
   if (/Chrome\//.test(ua)) return "chrome";
   return "other";
 }
@@ -58,7 +60,7 @@ export function AdBlockSteps({ className }: { className?: string }) {
       key: "chromium",
       mine: b === "chrome" || b === "edge",
       node: (
-        <Option key="c" title="Chrome · Edge" mine={b === "chrome" || b === "edge"}>
+        <Option key="c" title="Chrome · Edge (computer)" mine={b === "chrome" || b === "edge"}>
           <p>Install the free uBlock Origin Lite extension, then reload this page.</p>
           <LinkBtn href={UBO_LITE}>Get uBlock Origin Lite</LinkBtn>
         </Option>
