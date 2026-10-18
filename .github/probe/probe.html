@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><title>probe</title></head><body>
+<p>probe page</p>
+<script>
+const URLS = [
+  "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+  "https://pagead2.googlesyndication.com/pagead/show_ads.js",
+  "https://static.doubleclick.net/instream/ad_status.js",
+  "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+  "https://www.googletagservices.com/tag/js/gpt.js",
+  "https://adservice.google.com/adsid/integrator.js?domain=aurabeats.test",
+  "https://googleads.g.doubleclick.net/pagead/id",
+  "https://www.youtube.com/api/stats/ads?ver=2",
+  "https://www.youtube.com/pagead/paralleladview",
+  "https://imasdk.googleapis.com/js/sdkloader/ima3.js",
+  "https://c.amazon-adsystem.com/aax2/apstag.js",
+  "https://cdn.adsafeprotected.com/iasPET.1.js",
+  "https://ads.pubmatic.com/AdServer/js/pwt/1/1/pwt.js",
+  "https://www.google-analytics.com/analytics.js",
+  "https://i.ytimg.com/vi/dQw4w9WgXcQ/default.jpg",
+];
+const bust = (u) => u + (u.includes("?") ? "&" : "?") + "_=" + Math.random();
+const withT = (p, ms = 8000) => Promise.race([p, new Promise((r) => setTimeout(() => r("timeout"), ms))]);
+const fetchT = (u) => withT(fetch(bust(u), { mode: "no-cors", cache: "no-store" }).then((r) => "ok:" + r.type, (e) => "ERR"));
+const scriptT = (u) => withT(new Promise((r) => { const s = document.createElement("script"); s.src = bust(u); s.onload = () => r("load"); s.onerror = () => r("ERROR"); document.head.appendChild(s); }));
+const imgT = (u) => withT(new Promise((r) => { const i = new Image(); i.onload = () => r("load"); i.onerror = () => r("error"); i.src = bust(u); }));
+window.runProbe = async () => {
+  const out = { brave: !!navigator.brave, ua: navigator.userAgent.slice(0, 80), rows: {} };
+  const before = new Set(Object.keys(window));
+  for (const u of URLS) {
+    const short = u.replace("https://", "").slice(0, 60);
+    const [f, i] = await Promise.all([fetchT(u), imgT(u)]);
+    const s = u.endsWith(".jpg") ? "-" : await scriptT(u);
+    const te = performance.getEntriesByType("resource").filter((e) => e.name.startsWith(u.split("?")[0]));
+    const timing = te.map((e) => `${e.initiatorType}:${e.transferSize}/${e.decodedBodySize}/${e.responseStatus ?? "?"}`).join(" ");
+    out.rows[short] = `fetch=${f} img=${i} script=${s} | timing ${timing || "none"}`;
+  }
+  out.newGlobals = Object.keys(window).filter((k) => !before.has(k)).slice(0, 40).join(",");
+  out.adsbygoogle = typeof window.adsbygoogle === "undefined" ? "undef" : JSON.stringify({ isArr: Array.isArray(window.adsbygoogle), loaded: window.adsbygoogle.loaded, keys: Object.keys(window.adsbygoogle).slice(0, 8), push: String(window.adsbygoogle.push).slice(0, 80) });
+  out.googletag = typeof window.googletag === "undefined" ? "undef" : Object.keys(window.googletag).slice(0, 10).join(",") + " apiReady=" + window.googletag.apiReady;
+  out.google_ad_status = String(window.google_ad_status);
+  // bait elements
+  const baits = ["adsbox", "ad-banner", "adsbygoogle", "pub_300x250", "textAd", "ad-placement", "banner_ad", "sponsored-ad", "ytd-ad-slot-renderer"];
+  const els = baits.map((c) => { const d = document.createElement("div"); d.className = c; d.id = c === "adsbox" ? "ad_banner" : ""; d.style.cssText = "width:300px;height:250px;position:absolute;left:-9999px"; d.innerHTML = "&nbsp;"; document.body.appendChild(d); return [c, d]; });
+  const ins = document.createElement("ins"); ins.className = "adsbygoogle"; ins.style.cssText = "display:block;width:300px;height:250px"; document.body.appendChild(ins);
+  await new Promise((r) => setTimeout(r, 2500));
+  out.bait = els.map(([c, d]) => `${c}:${d.offsetHeight === 0 || getComputedStyle(d).display === "none" ? "HIDDEN" : "vis"}`).join(" ") + ` ins.adsbygoogle:${ins.offsetHeight === 0 || getComputedStyle(ins).display === "none" ? "HIDDEN" : "vis"}`;
+  return out;
+};
+</script></body></html>
