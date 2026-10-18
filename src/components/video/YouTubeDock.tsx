@@ -108,7 +108,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [scrub, setScrub] = useState<number | null>(null);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
   const [fs, setFs] = useState<"off" | "native" | "css">("off");
-  const [frame, setFrame] = useState({ w: 0, h: 0 });
+  const [frame, setFrame] = useState({ w: 0, h: 0, boxH: 0 });
   const [miniPos, setMiniPos] = useState(() => storage.get<{ side: "l" | "r"; y: number }>("video:miniPos", { side: "r", y: 0 }));
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
 
@@ -528,7 +528,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       const W = box.clientWidth;
       const H = box.clientHeight;
       const w = Math.min(W, (H * 16) / 9);
-      setFrame({ w: Math.round(w), h: Math.round((w * 9) / 16) });
+      setFrame({ w: Math.round(w), h: Math.round((w * 9) / 16), boxH: H });
     });
     ro.observe(box);
     return () => ro.disconnect();
@@ -1068,7 +1068,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                     <Settings2 className={cn("h-5 w-5 transition-transform", menu && "rotate-45")} />
                   </CtrlBtn>
                   {menu && (
-                    <div className="absolute right-0 bottom-11 z-20 w-64 overflow-hidden rounded-2xl bg-[rgb(28_28_30/0.94)] py-1.5 text-[13px] shadow-2xl ring-1 ring-white/10 backdrop-blur-md">
+                    <div
+                      className="absolute right-0 bottom-11 z-20 w-64 overflow-y-auto overscroll-contain rounded-2xl bg-[rgb(28_28_30/0.94)] py-1.5 text-[13px] shadow-2xl ring-1 ring-white/10 backdrop-blur-md [scrollbar-width:thin]"
+                      // stays inside the player (the box clips anything outside)
+                      style={{ maxHeight: Math.max(120, (frame.boxH || 300) - 64) }}
+                      onWheel={(e) => e.stopPropagation()}
+                    >
                       {menu === "main" ? (
                         <>
                           <MenuRow icon={<Gauge className="h-4 w-4" />} label="Playback speed" value={rate === 1 ? "Normal" : `${rate}x`} onClick={() => setMenu("speed")} />
@@ -1090,7 +1095,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                       ) : menu === "quality" ? (
                         <>
                           <SubHead title="Quality" onBack={() => setMenu("main")} />
-                          <div className="max-h-72 overflow-y-auto">
+                          <div className="ab-menu-list">
                             {[...levels, "auto"].map((q) => (
                               <MenuPick key={q} on={qPref === q} onClick={() => pickQuality(q)}>
                                 {q === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(q)}
@@ -1106,7 +1111,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                       ) : menu === "cc" ? (
                         <>
                           <SubHead title="Subtitles" onBack={() => setMenu("main")} />
-                          <div className="max-h-72 overflow-y-auto">
+                          <div className="ab-menu-list">
                             <MenuPick on={!cc} onClick={() => pickCc(null)}>
                               Off
                             </MenuPick>
@@ -1183,7 +1188,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
 function SubHead({ title, onBack }: { title: string; onBack: () => void }) {
   return (
-    <button type="button" onClick={onBack} className="flex w-full items-center gap-2 border-b border-white/10 px-4 py-2.5 font-bold">
+    <button type="button" onClick={onBack} className="sticky -top-1.5 z-10 flex w-full items-center gap-2 border-b border-white/10 bg-[rgb(28_28_30)] px-4 py-2.5 font-bold">
       <ChevronLeft className="h-4 w-4" /> {title}
     </button>
   );

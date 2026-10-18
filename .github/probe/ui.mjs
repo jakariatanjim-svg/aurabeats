@@ -62,15 +62,15 @@ const dockCenter = (page) => page.evaluate(() => {
   await page.waitForTimeout(400);
   await page.getByText("Quality", { exact: true }).click();
   await page.waitForTimeout(400);
-  log("  quality list:", (await page.locator(".fixed .max-h-72").first().innerText()).replace(/\n/g, " | "));
+  log("  quality list:", (await page.locator(".fixed .ab-menu-list").first().innerText()).replace(/\n/g, " | "));
   await shot(page, "A3-quality-menu");
   for (const q of ["1080p", "360p", "4K"]) {
-    if (!(await page.locator(".fixed .max-h-72").count())) {
+    if (!(await page.locator(".fixed .ab-menu-list").count())) {
       await page.mouse.move(c.x, c.y); await page.mouse.move(c.x + 4, c.y + 4);
       await page.locator('.fixed button[aria-label="Settings"]').click(); await page.waitForTimeout(300);
       await page.getByText("Quality", { exact: true }).click(); await page.waitForTimeout(300);
     }
-    await page.locator(".fixed .max-h-72 button", { hasText: new RegExp(`^${q}`) }).first().click();
+    await page.locator(".fixed .ab-menu-list button", { hasText: new RegExp(`^${q}`) }).first().click();
     await page.waitForTimeout(8000);
     log(`  picked ${q}:`, await st(page));
   }
