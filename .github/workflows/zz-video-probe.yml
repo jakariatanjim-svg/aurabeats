@@ -16,9 +16,11 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           npm i --no-save playwright@1
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium firefox
           url=$(gh api repos/uBlockOrigin/uBOL-home/releases/latest -q '.assets[] | select(.name | test("chromium")) | .browser_download_url' | head -1)
-          echo "uBOL: $url"; curl -sL "$url" -o ubol.zip; mkdir ubol; unzip -q ubol.zip -d ubol; ls ubol | head
+          echo "uBOL: $url"; curl -sL "$url" -o ubol.zip; mkdir ubol; unzip -q ubol.zip -d ubol; ls ubol | head -3
+          xpi=$(gh api repos/gorhill/uBlock/releases/latest -q '.assets[] | select(.name | test("firefox")) | .browser_download_url' | head -1)
+          echo "uBO: $xpi"; curl -sL "$xpi" -o ubo.xpi; ls -la ubo.xpi
           sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
           sudo apt-get update -qq && sudo apt-get install -y -qq brave-browser > /dev/null && brave-browser --version
