@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, MonitorPlay, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
+import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -11,7 +11,7 @@ import { getVideoSettings } from "@/services/video/settings";
 import type { VideoDetails, VideoItem } from "@/services/video/types";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { dock, dockRefs, useDock } from "@/components/video/dock";
-import { AdBlockTip } from "@/components/video/AdBlockTip";
+import { AdBadge, AdBlockTip } from "@/components/video/AdBlockTip";
 import { Avatar, VideoRow, VideoRowSkeleton } from "@/components/video/VideoCards";
 import { Button, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
@@ -237,12 +237,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 {info.views !== undefined && <span>{formatCount(info.views)} views</span>}
                 {info.published && <span>· {relativeTime(info.published)}</span>}
                 {embed ? (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-semibold text-amber-600 dark:text-amber-400"
-                    title="On the website videos play in YouTube's official player, which may show ads. A free uBlock Origin extension blocks them. The Android app plays everything ad-free."
-                  >
-                    <MonitorPlay className="h-3 w-3" /> YouTube player · may show ads
-                  </span>
+                  <AdBadge />
                 ) : details ? (
                   <span
                     className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 font-semibold text-emerald-500"

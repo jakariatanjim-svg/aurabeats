@@ -17,6 +17,10 @@ export interface YTPlayer {
   getVideoLoadedFraction(): number;
   getPlayerState(): number;
   getPlaybackQuality(): string;
+  getAvailableQualityLevels(): string[];
+  loadModule(m: string): void;
+  getOption(module: string, option: string): unknown;
+  setOption(module: string, option: string, value: unknown): void;
   loadVideoById(o: { videoId: string; startSeconds?: number }): void;
   getIframe(): HTMLIFrameElement;
   destroy(): void;
@@ -38,6 +42,7 @@ interface YTNamespace {
         onPlaybackQualityChange?: (e: { data: string }) => void;
         onError?: (e: { data: number }) => void;
         onAutoplayBlocked?: () => void;
+        onApiChange?: () => void;
       };
     },
   ) => YTPlayer;
@@ -90,5 +95,15 @@ export const YT_ERRORS: Record<number, string> = {
   100: "This video was removed or is private.",
   101: "The owner doesn't allow this video to be played outside YouTube.",
   150: "The owner doesn't allow this video to be played outside YouTube.",
+  152: "YouTube won't play this video outside YouTube right now.",
   153: "YouTube refused to load this player.",
+};
+
+/**
+ * YouTube ignores setPlaybackQuality() and picks the quality from the
+ * player's size, so a fixed quality = render the iframe at that width and
+ * scale it down with CSS. Widths per level:
+ */
+export const QUALITY_WIDTH: Record<string, number> = {
+  tiny: 256, small: 426, medium: 640, large: 854, hd720: 1280, hd1080: 1920, hd1440: 2560, hd2160: 3840, hd2880: 5120, highres: 7680,
 };

@@ -102,6 +102,8 @@ interface PlayerContextValue {
   next: () => void;
   previous: () => void;
   toggle: () => void;
+  /** Pause music if it is playing (safe to call repeatedly). */
+  pause: () => void;
   seek: (seconds: number) => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
@@ -636,6 +638,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggle = useCallback(() => engineRef.current.toggle(), []);
+  const pause = useCallback(() => engineRef.current.pause(), []);
   const seek = useCallback((seconds: number) => engineRef.current.seek(seconds), []);
 
   const toggleShuffle = useCallback(() => {
@@ -801,6 +804,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       next,
       previous,
       toggle,
+      pause,
       seek,
       toggleShuffle,
       cycleRepeat,
@@ -852,6 +856,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       next,
       previous,
       toggle,
+      pause,
       seek,
       toggleShuffle,
       cycleRepeat,

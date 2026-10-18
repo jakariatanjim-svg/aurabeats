@@ -28,7 +28,8 @@ import {
   Maximize,
   Maximize2,
   Minimize,
-  MonitorPlay,
+  Captions,
+  ShieldAlert,
   Pause,
   PictureInPicture2,
   Play,
@@ -49,7 +50,8 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { videoLibrary } from "@/hooks/useVideoLibrary";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
-import { loadYT, qualityLabel, YT_ERRORS, YTState, type YTPlayer } from "./yt";
+import { loadYT, QUALITY_WIDTH, qualityLabel, YT_ERRORS, YTState, type YTPlayer } from "./yt";
+import { adBlockState } from "./adblock";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const HOLD_MS = 420;
@@ -71,7 +73,7 @@ export function YouTubeDock({ navigate, musicBar }: { navigate: (r: RouteKey) =>
 
 function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; musicBar: boolean }) {
   const d = useDock();
-  const { isPlaying: musicPlaying, toggle: toggleMusic } = usePlayer();
+  const { isPlaying: musicPlaying, pause: pauseMusic } = usePlayer();
 
   const boxRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -91,9 +93,15 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [quality, setQuality] = useState("auto");
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [native, setNative] = useState<false | "user" | "auto">(false);
+  // Ad playing in YouTube's player (only possible when no blocker is active):
+  // its "Skip" button sits outside our crop, so the crop opens up until it's over.
+  const [ad, setAd] = useState(false);
+  const [qPref, setQPref] = useState(() => storage.get<string>("video:ytQuality", "auto"));
+  const [levels, setLevels] = useState<string[]>([]);
+  const [tracks, setTracks] = useState<{ languageCode: string; displayName: string }[]>([]);
+  const [cc, setCc] = useState<string | null>(null);
   const [controls, setControls] = useState(true);
-  const [menu, setMenu] = useState<null | "main" | "speed">(null);
+  const [menu, setMenu] = useState<null | "main" | "speed" | "quality" | "cc">(null);
   const [held, setHeld] = useState(false);
   const [seekFx, setSeekFx] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
   const [flash, setFlash] = useState<{ icon: "play" | "pause"; key: number } | null>(null);
@@ -135,7 +143,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
           height: "100%",
           playerVars: {
             autoplay: 1,
-            controls: 1, // kept for the "YouTube controls" view; hidden by the crop otherwise
+            controls: 0, // our own controls only
             rel: 0,
             playsinline: 1,
             iv_load_policy: 3,
@@ -156,6 +164,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               ifr.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen");
               ifr.tabIndex = -1;
               e.target.setVolume(storage.get<number>("video:ytVolume", 100));
+              e.target.unMute(); // YouTube remembers "muted" across embeds; every video starts with sound
               e.target.playVideo();
               setReady(true);
             },
@@ -165,14 +174,23 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
             onError: (e) => {
               if (!alive) return;
               setError(YT_ERRORS[e.data] || `YouTube error ${e.data}`);
-              // YouTube's own screen explains it best (sign-in / bot check / blocked) and links out.
-              setNative((n) => n || "auto");
             },
+            // Browser refused sound before any tap/click on the page: play muted
+            // now, unmute automatically on the first interaction anywhere.
             onAutoplayBlocked: () => {
               if (!alive || !playerRef.current) return;
               playerRef.current.mute();
               playerRef.current.playVideo();
               setNeedsUnmute(true);
+            },
+            onApiChange: () => {
+              if (!alive || !playerRef.current) return;
+              try {
+                const list = playerRef.current.getOption("captions", "tracklist");
+                if (Array.isArray(list)) setTracks(list as { languageCode: string; displayName: string }[]);
+              } catch {
+                /* no captions module */
+              }
             },
           },
         });
@@ -197,33 +215,61 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     lastClaim.current = d.claim;
     setStarted(false);
     setError(null);
-    setNative(false);
+    setAd(false);
+    setLevels([]);
+    setTracks([]);
+    setCc(null);
     setTime(d.startAt);
     setDuration(0);
     setState(YTState.UNSTARTED);
+    if (!needsUnmuteRef.current) call("unMute");
     call("loadVideoById", { videoId: d.id!, startSeconds: Math.floor(d.startAt) });
   }, [d.claim, d.id, d.startAt, call]);
 
-  // Autoplay safety net: still not running shortly after load → start muted.
+  // Autoplay safety net. Never shows YouTube's UI; only nudges the player.
   useEffect(() => {
     if (!ready || started || error) return;
-    const t = setTimeout(() => {
-      const s = call("getPlayerState");
-      if (s !== YTState.PLAYING && s !== YTState.BUFFERING && s !== YTState.ENDED) {
-        call("mute");
-        call("playVideo");
-        setNeedsUnmute(true);
-      }
-    }, 2200);
-    return () => clearTimeout(t);
+    const idle = () => {
+      const st = call("getPlayerState");
+      return st === YTState.UNSTARTED || st === YTState.CUED || st === YTState.PAUSED;
+    };
+    // 1) still idle → ask again (with sound)
+    const t1 = setTimeout(() => idle() && call("playVideo"), 2500);
+    // 2) still idle → the browser silently refused sound: play muted, unmute on first tap
+    const t2 = setTimeout(() => {
+      if (!idle()) return;
+      call("mute");
+      call("playVideo");
+      setNeedsUnmute(true);
+    }, 6000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [ready, started, error, d.claim, call]);
 
-  // Nothing at all after a while (bot check, region block…) → show YouTube's own view.
+  // Auto-unmute: the first tap / click / key anywhere on the page gives the
+  // browser permission, so sound comes back without hunting for a button.
+  const needsUnmuteRef = useRef(false);
+  needsUnmuteRef.current = needsUnmute;
+  const unmutedAt = useRef(0);
   useEffect(() => {
-    if (!ready || started || error) return;
-    const t = setTimeout(() => setNative((n) => n || "auto"), 9000);
-    return () => clearTimeout(t);
-  }, [ready, started, error, d.claim]);
+    if (!needsUnmute) return;
+    const go = () => {
+      call("unMute");
+      if (call("getPlayerState") !== YTState.PLAYING) call("playVideo");
+      unmutedAt.current = Date.now();
+      setMuted(false);
+      setNeedsUnmute(false);
+    };
+    const opts = { capture: true } as const;
+    window.addEventListener("pointerdown", go, opts);
+    window.addEventListener("keydown", go, opts);
+    return () => {
+      window.removeEventListener("pointerdown", go, opts);
+      window.removeEventListener("keydown", go, opts);
+    };
+  }, [needsUnmute, call]);
 
   /* ------------------------------ polling ------------------------------- */
   const lastSave = useRef(0);
@@ -241,18 +287,29 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       setMuted(Boolean(call("isMuted")));
       if (s === YTState.PLAYING && t > 0.05) setStarted(true);
 
-      // Playing but the clock doesn't move → most likely an ad; let the
-      // user see YouTube's own UI (skip button) until the video resumes.
-      if (s === YTState.PLAYING) {
+      // Playing but the video clock doesn't move → YouTube is showing an ad.
+      // Only possible without a blocker; with one we never assume this.
+      if (s === YTState.PLAYING && adBlockState() !== "on") {
         if (Math.abs(t - stuck.current.t) < 0.01) {
           if (!stuck.current.since) stuck.current.since = Date.now();
-          else if (Date.now() - stuck.current.since > 3000) setNative((n) => n || "auto");
+          else if (Date.now() - stuck.current.since > 1500) setAd(true);
         } else {
           stuck.current.since = 0;
-          setNative((n) => (n === "auto" ? false : n));
+          setAd(false);
         }
-      } else stuck.current.since = 0;
+      } else {
+        stuck.current.since = 0;
+        if (s !== YTState.BUFFERING) setAd(false);
+      }
       stuck.current.t = t;
+
+      const lv = call("getAvailableQualityLevels");
+      if (Array.isArray(lv)) {
+        const clean = (lv as string[]).filter((q) => q !== "auto");
+        setLevels((old) => (old.join() === clean.join() ? old : clean));
+      }
+      const q = call("getPlaybackQuality");
+      if (typeof q === "string" && q) setQuality(q);
 
       const meta = dock.get().meta;
       if (meta && meta.id === dock.get().id && t > 1 && Date.now() - lastSave.current > 5000) {
@@ -280,7 +337,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const musicRef = useRef(musicPlaying);
   musicRef.current = musicPlaying;
   useEffect(() => {
-    if (state === YTState.PLAYING && musicRef.current) toggleMusic();
+    if (state === YTState.PLAYING && musicRef.current) pauseMusic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
   useEffect(() => {
@@ -566,6 +623,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (s.id !== e.pointerId) return;
     s.id = -1;
     if (endHold()) return;
+    if (Date.now() - unmutedAt.current < 800) return; // that tap was "give me sound", not play/pause
     const dx = e.clientX - s.x;
     const dy = e.clientY - s.y;
 
@@ -695,8 +753,33 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   /* ------------------------------- layout ------------------------------- */
   const shownTime = scrub ?? time;
   const pct = duration ? (shownTime / duration) * 100 : 0;
-  const nativeOn = Boolean(native);
-  const showUi = !nativeOn && (controls || !playing || ended);
+  const showUi = !ad && (controls || !playing || ended);
+  // Fixed quality: lay the iframe out at that level's width, scale to fit.
+  const fw = frame.w || 1;
+  const fh = frame.h || 1;
+  const layoutW = !ad && qPref !== "auto" && QUALITY_WIDTH[qPref] ? QUALITY_WIDTH[qPref] : fw;
+  const k = fw / layoutW;
+  const hostStyle: React.CSSProperties = ad
+    ? { left: 0, top: 0, width: fw, height: fh } // full player while an ad runs (its Skip button is at the bottom)
+    : { left: 0, top: -fh / 2, width: layoutW, height: ((layoutW * 9) / 16) * 2, transform: k === 1 ? undefined : `scale(${k})`, transformOrigin: "0 0" };
+  const pickQuality = (q: string) => {
+    setQPref(q);
+    storage.set("video:ytQuality", q);
+    setMenu(null);
+  };
+  const pickCc = (lang: string | null) => {
+    if (lang) {
+      call("loadModule", "captions");
+      call("setOption", "captions", "track", { languageCode: lang });
+    } else call("setOption", "captions", "track", {});
+    setCc(lang);
+    setMenu(null);
+  };
+  const retry = () => {
+    setError(null);
+    setStarted(false);
+    call("loadVideoById", { videoId: d.id!, startSeconds: Math.floor(time) });
+  };
   // only the drag offset goes through React; position is set in the layout effect above
   const boxStyle: React.CSSProperties = mode === "mini" && drag ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : {};
 
@@ -719,11 +802,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       >
         <div
           ref={hostRef}
-          className={cn("absolute inset-x-0 [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0", nativeOn ? "inset-y-0" : "")}
-          style={nativeOn ? undefined : { top: "-50%", height: "200%" }}
+          className="absolute [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0"
+          style={hostStyle}
         />
         {/* poster until the picture is really there (hides YouTube's start UI) */}
-        {(!started || error) && !nativeOn && (
+        {((!started && !ad) || error) && (
           <img
             src={`https://i.ytimg.com/vi/${d.id}/hqdefault.jpg`}
             alt=""
@@ -735,7 +818,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
       {/* gesture surface + our controls */}
       <div
-        className={cn("absolute inset-0 touch-none", nativeOn && "pointer-events-none", showUi ? "cursor-default" : "cursor-none")}
+        className={cn("absolute inset-0 touch-none", ad && "pointer-events-none", showUi ? "cursor-default" : "cursor-none")}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
@@ -753,30 +836,42 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         />
 
         {/* loading */}
-        {!error && (!started || state === YTState.BUFFERING) && !nativeOn && (
+        {!error && !ad && (!started || state === YTState.BUFFERING) && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <Loader2 className={cn("animate-spin text-white drop-shadow", mode === "mini" ? "h-8 w-8" : "h-12 w-12")} />
           </div>
         )}
 
         {/* error */}
-        {error && !nativeOn && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center" onPointerUp={(e) => e.stopPropagation()}>
-            <p className="max-w-sm text-sm font-semibold">{error}</p>
-            <a
-              href={`https://www.youtube.com/watch?v=${d.id}`}
-              target="_blank"
-              rel="noreferrer"
-              onPointerDown={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-bold text-black"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> Open on YouTube
-            </a>
+        {error && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 p-6 text-center"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            <p className={cn("max-w-sm font-semibold", mode === "mini" ? "text-xs" : "text-sm")}>{error}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={retry}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-xs font-bold text-white ring-1 ring-white/25 hover:bg-white/25"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Try again
+              </button>
+              <a
+                href={`https://www.youtube.com/watch?v=${d.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-bold text-black"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Open on YouTube
+              </a>
+            </div>
           </div>
         )}
 
         {/* tap to unmute */}
-        {needsUnmute && !error && !nativeOn && (
+        {needsUnmute && !error && !ad && (
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
@@ -787,7 +882,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               mode === "mini" && "top-2 left-2 px-2.5 py-1.5 text-[11px]",
             )}
           >
-            <VolumeX className="h-4 w-4" /> Tap to unmute
+            <VolumeX className="h-4 w-4" /> Tap anywhere for sound
           </button>
         )}
 
@@ -980,30 +1075,51 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                           <MenuRow
                             icon={<SlidersHorizontal className="h-4 w-4" />}
                             label="Quality"
-                            value={`Auto${quality !== "auto" && qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}`}
-                            onClick={() => {
-                              setMenu(null);
-                              setNative("user");
-                            }}
+                            value={qPref === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(qPref)}
+                            onClick={() => setMenu("quality")}
                           />
-                          <p className="px-4 pb-1.5 text-[11px] leading-snug text-white/55">
-                            YouTube picks the quality for the player size. To fix one (up to 4K), choose Quality → it opens YouTube's own menu.
-                          </p>
-                          <MenuRow
-                            icon={<MonitorPlay className="h-4 w-4" />}
-                            label="YouTube controls"
-                            value="Show"
-                            onClick={() => {
-                              setMenu(null);
-                              setNative("user");
-                            }}
-                          />
+                          {tracks.length > 0 && (
+                            <MenuRow
+                              icon={<Captions className="h-4 w-4" />}
+                              label="Subtitles"
+                              value={cc ? (tracks.find((t) => t.languageCode === cc)?.displayName ?? cc) : "Off"}
+                              onClick={() => setMenu("cc")}
+                            />
+                          )}
+                        </>
+                      ) : menu === "quality" ? (
+                        <>
+                          <SubHead title="Quality" onBack={() => setMenu("main")} />
+                          <div className="max-h-72 overflow-y-auto">
+                            {[...levels, "auto"].map((q) => (
+                              <MenuPick key={q} on={qPref === q} onClick={() => pickQuality(q)}>
+                                {q === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(q)}
+                                {(q === "hd2160" || q === "highres" || q === "hd1440") && <sup className="ml-1 text-[9px] font-black text-red-400">{q === "hd1440" ? "HD" : "4K"}</sup>}
+                              </MenuPick>
+                            ))}
+                          </div>
+                          {levels.length === 0 && <p className="px-4 py-2 text-[11px] text-white/55">Loading qualities from YouTube…</p>}
+                          {qPref !== "auto" && qualityLabel(quality) !== qualityLabel(qPref) && (
+                            <p className="px-4 pt-1 pb-1.5 text-[11px] text-white/55">Switching… now {qualityLabel(quality)}</p>
+                          )}
+                        </>
+                      ) : menu === "cc" ? (
+                        <>
+                          <SubHead title="Subtitles" onBack={() => setMenu("main")} />
+                          <div className="max-h-72 overflow-y-auto">
+                            <MenuPick on={!cc} onClick={() => pickCc(null)}>
+                              Off
+                            </MenuPick>
+                            {tracks.map((t) => (
+                              <MenuPick key={t.languageCode} on={cc === t.languageCode} onClick={() => pickCc(t.languageCode)}>
+                                {t.displayName}
+                              </MenuPick>
+                            ))}
+                          </div>
                         </>
                       ) : (
                         <>
-                          <button type="button" onClick={() => setMenu("main")} className="flex w-full items-center gap-2 border-b border-white/10 px-4 py-2.5 font-bold">
-                            <ChevronLeft className="h-4 w-4" /> Playback speed
-                          </button>
+                          <SubHead title="Playback speed" onBack={() => setMenu("main")} />
                           {SPEEDS.map((s) => (
                             <button
                               key={s}
@@ -1040,17 +1156,18 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         )}
       </div>
 
-      {/* back from YouTube's own view */}
-      {nativeOn && mode !== "mini" && (
-        <button
-          type="button"
-          onClick={() => setNative(false)}
-          className="absolute top-2 right-2 z-30 inline-flex items-center gap-1.5 rounded-full bg-black/75 px-3 py-1.5 text-[11px] font-bold text-white ring-1 ring-white/20"
+      {/* an ad is running inside YouTube's player (no blocker): label it, keep Skip reachable */}
+      {ad && (
+        <div
+          className={cn(
+            "pointer-events-none absolute top-2 left-2 z-30 inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 font-bold text-white shadow-lg",
+            mode === "mini" ? "text-[10px]" : "text-[11px]",
+          )}
         >
-          <X className="h-3.5 w-3.5" /> {native === "auto" ? "AuraBeats controls" : "Done"}
-        </button>
+          <ShieldAlert className="h-3.5 w-3.5" /> YouTube ad{mode !== "mini" && " · a free blocker removes these"}
+        </div>
       )}
-      {nativeOn && mode === "mini" && (
+      {ad && mode === "mini" && (
         <div className="absolute top-1 right-1 z-30 flex gap-1">
           <MiniBtn label="Expand" onClick={expand}>
             <Maximize2 className="h-4 w-4" />
@@ -1061,6 +1178,23 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         </div>
       )}
     </div>
+  );
+}
+
+function SubHead({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <button type="button" onClick={onBack} className="flex w-full items-center gap-2 border-b border-white/10 px-4 py-2.5 font-bold">
+      <ChevronLeft className="h-4 w-4" /> {title}
+    </button>
+  );
+}
+
+function MenuPick({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-white/10">
+      <Check className={cn("h-4 w-4 shrink-0", on ? "opacity-100" : "opacity-0")} />
+      <span>{children}</span>
+    </button>
   );
 }
 

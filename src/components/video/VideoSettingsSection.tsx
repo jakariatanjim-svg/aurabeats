@@ -3,7 +3,7 @@ import { ShieldCheck, Tv } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { SectionHeader } from "@/components/ui";
 import { appEnv, playbackMethodLabel } from "@/services/video/net";
-import { AdBlockSteps } from "./AdBlockTip";
+import { AdBadge, AdBlockSteps } from "./AdBlockTip";
 import { getVideoSettings, setVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 
 const QUALITIES: { value: "auto" | number; label: string }[] = [
@@ -34,7 +34,9 @@ export function VideoSettingsSection() {
           </p>
         ) : (
           <div className="border-b border-line pb-4">
-            <p className="text-sm font-bold text-ink">Ads on the website</p>
+            <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-ink">
+              Ads on the website <AdBadge />
+            </p>
             <p className="mt-0.5 mb-3 text-[11px] leading-relaxed text-ink3">
               Videos play in YouTube's official player, so YouTube may show ads. Block them for free:
             </p>
