@@ -1,0 +1,20 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<div id="a" style="width:1280px;height:720px"></div>
+<script>
+window.R = { log: [] };
+const L = (...x) => { R.log.push(x.join(" ")); };
+const t = document.createElement("script"); t.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(t);
+window.onYouTubeIframeAPIReady = () => {
+  window.P = new YT.Player("a", {
+    host: "https://www.youtube-nocookie.com", videoId: "dQw4w9WgXcQ", width: "1280", height: "720",
+    playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, origin: location.origin },
+    events: {
+      onReady: (e) => { L("ready"); e.target.playVideo(); },
+      onStateChange: (e) => L("state", e.data, "t=" + e.target.getCurrentTime().toFixed(1)),
+      onPlaybackQualityChange: (e) => L("qchange", e.data),
+      onAutoplayBlocked: () => L("autoplayBlocked"),
+      onApiChange: () => L("apichange", JSON.stringify(P.getOptions())),
+    },
+  });
+};
+</script></body></html>

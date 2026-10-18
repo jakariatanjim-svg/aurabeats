@@ -1,0 +1,25 @@
+name: zz-video-probe (temporary)
+on:
+  push:
+    branches: [arena/1784188a-aurabeats]
+    paths: [".github/probe/**", ".github/workflows/zz-video-probe.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm i --no-save playwright@1
+        working-directory: .github/probe
+      - run: node q.mjs > out.txt 2>&1 || true
+        working-directory: .github/probe
+      - name: Text
+        working-directory: .github/probe
+        run: |
+          python3 - <<'PY'
+          t = open("out.txt").read()
+          for n, c in enumerate([t[i:i+3800] for i in range(0, len(t), 3800)][:10]):
+              print(f"::notice title=part{n}::" + c.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
+          PY
