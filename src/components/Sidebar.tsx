@@ -18,7 +18,7 @@ import {
 import { AppModeSwitch } from "@/components/video/AppModeSwitch";
 import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
-import { playbackMethodLabel } from "@/services/video/net";
+import { isNative, playbackMethodLabel } from "@/services/video/net";
 import { isVideoRoute } from "@/routes";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -186,7 +186,9 @@ export const Sidebar = memo(function Sidebar({
                 <Tv className="h-3.5 w-3.5 text-accent" /> Video Engine
               </p>
               <p className="mt-1 text-[10px] leading-relaxed text-ink3">
-                Ad-free YouTube in every quality, no account. {playbackMethodLabel()}.
+                {isNative
+                  ? `Ad-free YouTube in every quality, no account. ${playbackMethodLabel()}.`
+                  : "YouTube in every quality, no account. Add uBlock Origin to block ads."}
               </p>
             </>
           ) : (

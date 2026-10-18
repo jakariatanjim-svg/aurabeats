@@ -101,7 +101,7 @@ export function ChannelView({ id }: { id: string }) {
       {page && !page.videos.length ? (
         <EmptyState
           title="Videos aren't available right now"
-          hint="The ad-free servers couldn't list this channel's uploads. Try again in a moment."
+          hint="The servers couldn't list this channel's uploads. Try again in a moment."
           action={<Button variant="outline" onClick={() => setNonce((n) => n + 1)}>Try again</Button>}
         />
       ) : page ? (

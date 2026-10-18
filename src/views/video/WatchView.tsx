@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, RefreshCw, Share2, ShieldCheck, ThumbsUp, MonitorPlay } from "lucide-react";
+import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, MonitorPlay, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
-import { getRelated, getVideo, getVideoMeta } from "@/services/video/api";
+import { getRelated, getVideo, getVideoInfo } from "@/services/video/api";
+import { isNative } from "@/services/video/net";
 import { providerLabel, reportPlayback } from "@/services/video/providers";
 import { getVideoSettings } from "@/services/video/settings";
 import type { VideoDetails, VideoItem } from "@/services/video/types";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { YouTubeEmbed } from "@/components/video/YouTubeEmbed";
+import { AdBlockTip } from "@/components/video/AdBlockTip";
 import { Avatar, VideoRow, VideoRowSkeleton } from "@/components/video/VideoCards";
 import { Button, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
@@ -22,10 +24,11 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   const [error, setError] = useState<string | null>(null);
   const [exclude, setExclude] = useState<string[]>([]);
   const [nonce, setNonce] = useState(0);
-  // Info stays on screen while servers are switched or the YouTube player is used.
+  // Info stays on screen while servers are switched (and is all the website needs).
   const [meta, setMeta] = useState<VideoDetails | null>(null);
-  // Official YouTube player: fallback when no ad-free server can play this video.
-  const [embed, setEmbed] = useState(false);
+  // Website: always the official YouTube player (browsers can't reach the
+  // streams directly). The app plays ad-free streams and never uses it.
+  const embed = !isNative;
   const [startAt, setStartAt] = useState(() => {
     const p = videoLibrary.positionOf(id);
     const h = videoLibrary.get().history.find((x) => x.id === id);
@@ -37,7 +40,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   const lastSave = useRef(0);
   const lastT = useRef(0);
 
-  // load / reload (server switch)
+  // App: ad-free streams (on-device, then servers). Reloads on server switch.
   useEffect(() => {
     if (embed) return;
     let alive = true;
@@ -50,30 +53,32 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
         if (d.related.length) setRelated(d.related);
       })
       .catch((e: unknown) => {
-        if (!alive) return;
-        if (getVideoSettings().embedFallback) setEmbed(true);
-        else setError(e instanceof Error ? e.message : "Could not load this video");
+        if (alive) setError(e instanceof Error ? e.message : "Could not load this video");
       });
     return () => {
       alive = false;
     };
   }, [id, exclude, embed, nonce]);
 
-  // YouTube player without any server info → title/channel from YouTube's oEmbed.
+  // Website: the player starts right away; info loads alongside it.
   useEffect(() => {
-    if (!embed || meta) return;
+    if (!embed) return;
     let alive = true;
-    getVideoMeta(id)
-      .then((m) => alive && setMeta(m))
-      .catch(() => {});
+    getVideoInfo(id)
+      .then((m) => {
+        if (!alive) return;
+        setMeta(m);
+        setRelated(m.related);
+      })
+      .catch(() => alive && setRelated([]));
     return () => {
       alive = false;
     };
-  }, [embed, meta, id]);
+  }, [embed, id]);
 
   // On-device extraction has no related list → ask a server for it.
   useEffect(() => {
-    if (related || (details ? details.related.length : !embed)) return;
+    if (related || !details || details.related.length) return;
     let alive = true;
     getRelated(id)
       .then((r) => alive && setRelated(r))
@@ -81,7 +86,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     return () => {
       alive = false;
     };
-  }, [details, id, related, embed]);
+  }, [details, id, related]);
 
   const onFatal = useCallback(
     (reason: string, at: number) => {
@@ -109,15 +114,9 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     [info],
   );
 
-  const switchToEmbed = () => {
-    setStartAt(lastT.current || startAt);
-    setDetails(null);
-    setEmbed(true);
-  };
-  const tryAdFree = () => {
+  const retry = () => {
     setStartAt(lastT.current || startAt);
     setExclude([]);
-    setEmbed(false);
     setNonce((n) => n + 1);
   };
 
@@ -168,7 +167,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   if (error && !details) {
     return (
       <div className="mx-auto max-w-xl space-y-3 pt-6">
-        <ErrorState message={`${error}. Age-restricted or private videos can't be played without signing in.`} onRetry={tryAdFree} />
+        <ErrorState message={`${error}. Age-restricted or private videos can't be played without signing in.`} onRetry={retry} />
         <a
           href={`https://www.youtube.com/watch?v=${id}`}
           target="_blank"
@@ -222,7 +221,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 {embed ? (
                   <span
                     className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 font-semibold text-amber-600 dark:text-amber-400"
-                    title="No ad-free server could play this video, so the official YouTube player is used. YouTube may show ads in it."
+                    title="On the website videos play in YouTube's official player, which may show ads. A free uBlock Origin extension blocks them. The Android app plays everything ad-free."
                   >
                     <MonitorPlay className="h-3 w-3" /> YouTube player · may show ads
                   </span>
@@ -273,31 +272,19 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
                   <Share2 className="h-3.5 w-3.5" /> Share
                 </Button>
-                {embed ? (
-                  <Button variant="outline" className="px-3.5 text-xs" onClick={tryAdFree} title="Look for an ad-free server again">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Try ad-free
+                {!embed && (
+                  <Button
+                    variant="outline"
+                    className="px-3.5 text-xs"
+                    onClick={() => onFatal("user", lastT.current)}
+                    title="Use a different ad-free server"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Another server
                   </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      className="px-3.5 text-xs"
-                      onClick={() => onFatal("user", lastT.current)}
-                      title="Use a different ad-free server"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" /> Another server
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="px-3.5 text-xs"
-                      onClick={switchToEmbed}
-                      title="Official YouTube player: every quality, but YouTube may show ads"
-                    >
-                      <MonitorPlay className="h-3.5 w-3.5" /> YouTube player
-                    </Button>
-                  </>
                 )}
               </div>
+
+              {embed && <AdBlockTip />}
 
               {info.description && (
                 <button
@@ -323,6 +310,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 <Skeleton className="h-10 w-10 rounded-full!" />
                 <Skeleton className="h-4 w-40" />
               </div>
+              {embed && <AdBlockTip />}
             </div>
           )}
         </div>

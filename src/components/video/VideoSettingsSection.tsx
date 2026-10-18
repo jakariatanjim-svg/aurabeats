@@ -3,6 +3,7 @@ import { ShieldCheck, Tv } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { SectionHeader } from "@/components/ui";
 import { appEnv, playbackMethodLabel } from "@/services/video/net";
+import { AdBlockSteps } from "./AdBlockTip";
 import { getVideoSettings, setVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 
 const QUALITIES: { value: "auto" | number; label: string }[] = [
@@ -21,18 +22,27 @@ export function VideoSettingsSection() {
 
   return (
     <section>
-      <SectionHeader title="Video" subtitle="Ad-free YouTube" icon={<Tv className="h-4 w-4 text-accent" />} />
+      <SectionHeader title="Video" subtitle={appEnv === "apk" ? "Ad-free YouTube" : "YouTube"} icon={<Tv className="h-4 w-4 text-accent" />} />
       <div className="blur-panel space-y-4 p-4">
-        <p className="flex items-start gap-2 text-[11px] leading-relaxed text-ink3">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-          <span>
-            Playback on this device: <b className="text-ink">{playbackMethodLabel()}</b>.{" "}
-            {appEnv === "apk"
-              ? "The app fetches streams straight from YouTube, like NewPipe. If that fails it switches to ad-free servers."
-              : "YouTube blocks browsers from fetching videos directly, so streams come through free public ad-free servers (Invidious / Piped) with automatic failover. Few of them work today and they usually offer 360p only. For every quality without ads, use the Android app."}
-          </span>
-        </p>
+        {appEnv === "apk" ? (
+          <p className="flex items-start gap-2 text-[11px] leading-relaxed text-ink3">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+            <span>
+              Playback on this device: <b className="text-ink">{playbackMethodLabel()}</b>. The app fetches streams straight
+              from YouTube, like NewPipe, so there are no ads. If that fails it switches to ad-free servers.
+            </span>
+          </p>
+        ) : (
+          <div className="border-b border-line pb-4">
+            <p className="text-sm font-bold text-ink">Ads on the website</p>
+            <p className="mt-0.5 mb-3 text-[11px] leading-relaxed text-ink3">
+              Videos play in YouTube's official player, so YouTube may show ads. Block them for free:
+            </p>
+            <AdBlockSteps />
+          </div>
+        )}
 
+        {appEnv === "apk" && (
         <div className="border-b border-line pb-4">
           <p className="text-sm font-bold text-ink">Default quality</p>
           <p className="mt-0.5 mb-2.5 text-[11px] text-ink3">Auto picks the best fit for your screen and connection (up to 1080p).</p>
@@ -52,19 +62,13 @@ export function VideoSettingsSection() {
             ))}
           </div>
         </div>
+        )}
 
         <Toggle
           title="Autoplay next video"
           hint="Play the first suggestion when a video ends."
           on={s.autoplayNext}
           onChange={() => setVideoSettings({ autoplayNext: !s.autoplayNext })}
-        />
-
-        <Toggle
-          title="YouTube player fallback"
-          hint="If no ad-free server can play a video, use the official YouTube player instead of showing an error. It has every quality, but YouTube may show ads in it (an ad-blocker extension removes them)."
-          on={s.embedFallback}
-          onChange={() => setVideoSettings({ embedFallback: !s.embedFallback })}
         />
 
         <form
@@ -75,7 +79,8 @@ export function VideoSettingsSection() {
         >
           <p className="text-sm font-bold text-ink">Custom server (optional)</p>
           <p className="mt-0.5 mb-2.5 text-[11px] text-ink3">
-            Your own Invidious URL or Piped API URL. It's tried first. Leave empty for automatic servers.
+            Your own Invidious URL or Piped API URL. It's tried first (for video info, and for playback in the app). Leave
+            empty for automatic servers.
           </p>
           <div className="flex gap-2">
             <input

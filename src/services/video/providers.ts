@@ -286,7 +286,7 @@ const items = <T,>(arr: (T | null)[]): T[] => arr.filter((x): x is T => x !== nu
 
 /* ------------------------------ details -------------------------------- */
 
-async function invDetails(p: Provider, id: string): Promise<VideoDetails> {
+async function invDetails(p: Provider, id: string, needStreams = true): Promise<VideoDetails> {
   type F = { url: string; type: string; bitrate?: string | number; resolution?: string; qualityLabel?: string; fps?: number; size?: string; audioTrack?: { audioIsDefault?: boolean } };
   const d = await http<
     InvVideo & {
@@ -316,7 +316,7 @@ async function invDetails(p: Provider, id: string): Promise<VideoDetails> {
       .filter((f) => f.url)
       .map((f) => ({ url: abs(p.base, f.url), mime: f.type, height: h(f) || 360, label: f.qualityLabel || `${h(f) || 360}p` })),
   };
-  assertPlayable(streams);
+  if (needStreams) assertPlayable(streams);
   const base = invItem(d);
   if (!base) throw new Error("bad response");
   return {
@@ -329,7 +329,7 @@ async function invDetails(p: Provider, id: string): Promise<VideoDetails> {
   };
 }
 
-async function pipedDetails(p: Provider, id: string): Promise<VideoDetails> {
+async function pipedDetails(p: Provider, id: string, needStreams = true): Promise<VideoDetails> {
   type PS = { url: string; mimeType?: string; codec?: string; format?: string; quality?: string; videoOnly?: boolean; bitrate?: number; height?: number; fps?: number; audioTrackType?: string };
   const d = await http<{
     title: string;
@@ -366,7 +366,7 @@ async function pipedDetails(p: Provider, id: string): Promise<VideoDetails> {
       .map((s) => ({ url: s.url, mime: mime(s), bitrate: s.bitrate })),
     muxed: vids.filter((s) => !s.videoOnly && s.url).map((s) => ({ url: s.url, mime: mime(s), height: height(s) || 360, label: s.quality || "360p" })),
   };
-  assertPlayable(streams);
+  if (needStreams) assertPlayable(streams);
   const subs = d.uploaderSubscriberCount;
   return {
     id,
@@ -391,8 +391,9 @@ function assertPlayable(s: StreamSet) {
   if (s.live ? !s.hls : !(s.muxed.length || (s.video.length && s.audio.length))) throw new Error("no playable streams");
 }
 
-export function providerDetails(p: Provider, id: string): Promise<VideoDetails> {
-  return p.kind === "piped" ? pipedDetails(p, id) : invDetails(p, id);
+/** `needStreams: false` = info only (title, description, related…). */
+export function providerDetails(p: Provider, id: string, needStreams = true): Promise<VideoDetails> {
+  return p.kind === "piped" ? pipedDetails(p, id, needStreams) : invDetails(p, id, needStreams);
 }
 
 /* ------------------------------- feeds --------------------------------- */

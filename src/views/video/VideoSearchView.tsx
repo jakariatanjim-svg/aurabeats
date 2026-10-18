@@ -293,7 +293,7 @@ export function VideoSearchView({ onNavigate }: { onNavigate: (r: RouteKey) => v
       {error && <ErrorState message={error} onRetry={() => run(submitted)} />}
       {!loading && !error && !results && (
         <EmptyState
-          title="Search YouTube without ads"
+          title="Search YouTube"
           hint="Press Enter to search. You can also paste any YouTube link (video, Shorts or live) to open it right away."
         />
       )}

@@ -124,5 +124,5 @@ export async function http<T = unknown>(
 
 /** Short, human description of how this device plays YouTube. */
 export function playbackMethodLabel(): string {
-  return isNative ? "On-device (direct from YouTube)" : "Ad-free proxy servers";
+  return isNative ? "On-device (direct from YouTube)" : "Official YouTube player";
 }

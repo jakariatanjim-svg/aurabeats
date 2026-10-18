@@ -3,7 +3,7 @@ import { Bookmark, Clock, Flame, History, Rss, Search, ShieldCheck, Trash2, User
 import { useFeed } from "@/hooks/useFeed";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
 import { followingFeed, getTrending } from "@/services/video/api";
-import { playbackMethodLabel } from "@/services/video/net";
+import { isNative, playbackMethodLabel } from "@/services/video/net";
 import { guessRegion } from "@/services/video/settings";
 import type { VideoItem } from "@/services/video/types";
 import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton, VideoRow } from "@/components/video/VideoCards";
@@ -64,7 +64,9 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
         </button>
         <p className="flex items-center gap-1.5 text-xs text-ink3">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-          No ads, no account, every quality · {playbackMethodLabel()}
+          {isNative
+            ? `No ads, no account, every quality · ${playbackMethodLabel()}`
+            : "No account, every quality · add uBlock Origin to block YouTube ads"}
         </p>
       </section>
 

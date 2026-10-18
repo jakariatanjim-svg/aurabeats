@@ -1,10 +1,12 @@
 /**
  * Video-mode public API. Strategy per environment:
  *
- *   APK      → on-device extraction (direct from YouTube, every quality),
- *              falling back to the ad-free proxy servers.
- *   Web/PWA  → ad-free proxy servers (Invidious / Piped) raced in parallel
- *              with automatic failover.
+ *   APK      → on-device extraction (direct from YouTube, every quality,
+ *              no ads), falling back to the ad-free proxy servers. Never the
+ *              official player, so the app never shows ads.
+ *   Web/PWA  → official YouTube player (iframe) for playback, because the
+ *              browser can't reach YouTube's streams directly; video info
+ *              comes from Invidious / Piped, then YouTube's oEmbed.
  *
  * The player reports a failing source back via `exclude`, so a dead server
  * is skipped transparently ("try another server").
@@ -59,6 +61,17 @@ export async function getVideo(id: string, exclude: string[] = []): Promise<Vide
     }
     const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700 });
     return value;
+  });
+}
+
+/** Website: info only (playback is the YouTube player). */
+export async function getVideoInfo(id: string): Promise<VideoDetails> {
+  return cached(`info:${id}`, 10 * 60 * 1000, async () => {
+    try {
+      return (await race((p) => providerDetails(p, id, false), { stagger: 700, max: 6 })).value;
+    } catch {
+      return getVideoMeta(id);
+    }
   });
 }
 

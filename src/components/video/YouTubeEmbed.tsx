@@ -1,8 +1,9 @@
 /**
- * Official YouTube player (iframe) — the last-resort fallback when no ad-free
- * server can play a video. It always works and offers every quality, but
- * YouTube may show ads in it (a website can't block ads inside YouTube's
- * iframe; only a browser extension can).
+ * Official YouTube player (iframe) — the website's video player. Browsers
+ * can't fetch YouTube's streams directly, so this is the reliable option with
+ * every quality. YouTube may show ads in it; a website can't block ads inside
+ * YouTube's iframe, but a browser extension (uBlock Origin) can — see
+ * AdBlockTip. The Android app never uses this player.
  *
  * Uses the IFrame API's postMessage protocol directly (no extra script) to
  * follow time / state for history, autoplay-next and pausing music.
