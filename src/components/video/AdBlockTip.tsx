@@ -29,6 +29,9 @@ const UBO = "https://addons.mozilla.org/firefox/addon/ublock-origin/";
 
 const KEY = "video:adTipCollapsed";
 
+/** Always the newest GitHub release (no fixed tag), where the APK is attached. */
+export const APP_DOWNLOAD_URL = "https://github.com/jakariatanjim-svg/aurabeats/releases/latest";
+
 function LinkBtn({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -42,12 +45,12 @@ function LinkBtn({ href, children }: { href: string; children: React.ReactNode }
   );
 }
 
-function Option({ title, mine, children }: { title: string; mine: boolean; children: React.ReactNode }) {
+function Option({ title, mine, label = "Your browser", children }: { title: string; mine: boolean; label?: string; children: React.ReactNode }) {
   return (
     <div className={cn("rounded-xl border p-3", mine ? "border-accent/60 bg-accent/[0.06]" : "border-line")}>
       <p className="mb-1.5 flex items-center gap-2 text-[12px] font-black text-ink">
         {title}
-        {mine && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white">Your browser</span>}
+        {mine && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white">{label}</span>}
       </p>
       <div className="space-y-2 text-[12px] leading-relaxed text-ink2">{children}</div>
     </div>
@@ -57,6 +60,7 @@ function Option({ title, mine, children }: { title: string; mine: boolean; child
 /** The full how-to (also used in Settings). Your browser's option comes first. */
 export function AdBlockSteps({ className }: { className?: string }) {
   const b = detectBrowser();
+  const android = typeof navigator !== "undefined" && /Android/.test(navigator.userAgent);
   const options = [
     {
       key: "chromium",
@@ -99,16 +103,25 @@ export function AdBlockSteps({ className }: { className?: string }) {
     },
   ].sort((x, y) => Number(y.mine) - Number(x.mine));
 
+  // Android phone without Brave/Firefox: the app is the easy way.
+  const appFirst = android && b !== "brave" && b !== "firefox";
+  const appCard = (
+    <Option title="Android phone · AuraBeats app" mine={appFirst} label="Your device">
+      <p>
+        Install the free AuraBeats app: videos play with <b className="text-ink">no ads at all</b>, no extension needed.
+        On the page that opens, tap <b className="text-ink">AuraBeats-….apk</b> under “Assets”, then open it to install.
+      </p>
+      <LinkBtn href={APP_DOWNLOAD_URL}>
+        <Smartphone className="h-3.5 w-3.5" /> Download the Android app
+      </LinkBtn>
+    </Option>
+  );
+
   return (
     <div className={cn("space-y-2.5", className)}>
+      {appFirst && appCard}
       {options.map((o) => o.node)}
-      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-ink3">
-        <Smartphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          On a phone, Brave and Firefox block ads too. Or use the <b className="text-ink2">AuraBeats Android app</b>, where
-          videos play with no ads at all.
-        </span>
-      </p>
+      {!appFirst && appCard}
     </div>
   );
 }
