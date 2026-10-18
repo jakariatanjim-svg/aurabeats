@@ -58,7 +58,7 @@ const dockCenter = (page) => page.evaluate(() => {
   log("=== A3 quality menu");
   const c = await dockCenter(page);
   await page.mouse.move(c.x, c.y); await page.mouse.move(c.x + 4, c.y + 4);
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.locator('.fixed button[aria-label="Settings"]').click();
   await page.waitForTimeout(400);
   await page.getByText("Quality", { exact: true }).click();
   await page.waitForTimeout(400);
@@ -67,7 +67,7 @@ const dockCenter = (page) => page.evaluate(() => {
   for (const q of ["1080p", "360p", "4K"]) {
     if (!(await page.locator(".fixed .max-h-72").count())) {
       await page.mouse.move(c.x, c.y); await page.mouse.move(c.x + 4, c.y + 4);
-      await page.getByRole("button", { name: "Settings" }).click(); await page.waitForTimeout(300);
+      await page.locator('.fixed button[aria-label="Settings"]').click(); await page.waitForTimeout(300);
       await page.getByText("Quality", { exact: true }).click(); await page.waitForTimeout(300);
     }
     await page.locator(".fixed .max-h-72 button", { hasText: new RegExp(`^${q}`) }).first().click();
@@ -76,7 +76,7 @@ const dockCenter = (page) => page.evaluate(() => {
   }
   log("=== A4 subtitles row?");
   await page.mouse.move(c.x, c.y); await page.mouse.move(c.x + 4, c.y + 4);
-  await page.getByRole("button", { name: "Settings" }).click(); await page.waitForTimeout(400);
+  await page.locator('.fixed button[aria-label="Settings"]').click(); await page.waitForTimeout(400);
   log("  menu:", (await page.locator(".fixed .w-64").first().innerText()).replace(/\n/g, " | "));
   await page.keyboard.press("Escape");
   log("=== A5 Up next click (gesture) → next video");
