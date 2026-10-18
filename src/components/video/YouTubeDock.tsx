@@ -50,7 +50,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { videoLibrary } from "@/hooks/useVideoLibrary";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
-import { loadYT, QUALITY_WIDTH, qualityLabel, YT_ERRORS, YTState, type YTPlayer } from "./yt";
+import { loadYT, QUALITY_WIDTH, qualityLabel, qualityTag, YT_ERRORS, YTState, type YTPlayer } from "./yt";
 import { adBlockState } from "./adblock";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -757,7 +757,9 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   // Fixed quality: lay the iframe out at that level's width, scale to fit.
   const fw = frame.w || 1;
   const fh = frame.h || 1;
-  const layoutW = !ad && qPref !== "auto" && QUALITY_WIDTH[qPref] ? QUALITY_WIDTH[qPref] : fw;
+  // Auto: like youtube.com — size × screen density, but never below 720p.
+  const autoW = Math.max(fw * Math.min(2, window.devicePixelRatio || 1), QUALITY_WIDTH.hd720);
+  const layoutW = ad ? fw : qPref !== "auto" && QUALITY_WIDTH[qPref] ? QUALITY_WIDTH[qPref] : autoW;
   const k = fw / layoutW;
   const hostStyle: React.CSSProperties = ad
     ? { left: 0, top: 0, width: fw, height: fh } // full player while an ad runs (its Skip button is at the bottom)
@@ -1099,7 +1101,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                             {[...levels, "auto"].map((q) => (
                               <MenuPick key={q} on={qPref === q} onClick={() => pickQuality(q)}>
                                 {q === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(q)}
-                                {(q === "hd2160" || q === "highres" || q === "hd1440") && <sup className="ml-1 text-[9px] font-black text-red-400">{q === "hd1440" ? "HD" : "4K"}</sup>}
+                                {qualityTag(q) && <sup className="ml-1 text-[9px] font-black text-red-400">{qualityTag(q)}</sup>}
                               </MenuPick>
                             ))}
                           </div>

@@ -83,7 +83,7 @@ export function loadYT(): Promise<YTNamespace> {
 /** "hd1080" → "1080p" */
 export function qualityLabel(q: string): string {
   const map: Record<string, string> = {
-    highres: "4K+", hd2880: "2880p", hd2160: "4K", hd1440: "1440p", hd1080: "1080p", hd720: "720p",
+    highres: "4320p", hd2880: "2880p", hd2160: "2160p", hd1440: "1440p", hd1080: "1080p", hd720: "720p",
     large: "480p", medium: "360p", small: "240p", tiny: "144p",
   };
   return map[q] || "Auto";
@@ -93,8 +93,8 @@ export const YT_ERRORS: Record<number, string> = {
   2: "This video link looks invalid.",
   5: "This video can't be played in the browser.",
   100: "This video was removed or is private.",
-  101: "The owner doesn't allow this video to be played outside YouTube.",
-  150: "The owner doesn't allow this video to be played outside YouTube.",
+  101: "YouTube won't play this video here — the owner may not allow it on other sites, or YouTube wants a sign-in.",
+  150: "YouTube won't play this video here — the owner may not allow it on other sites, or YouTube wants a sign-in.",
   152: "YouTube won't play this video outside YouTube right now.",
   153: "YouTube refused to load this player.",
 };
@@ -107,3 +107,11 @@ export const YT_ERRORS: Record<number, string> = {
 export const QUALITY_WIDTH: Record<string, number> = {
   tiny: 256, small: 426, medium: 640, large: 854, hd720: 1280, hd1080: 1920, hd1440: 2560, hd2160: 3840, hd2880: 5120, highres: 7680,
 };
+
+/** YouTube-style tag next to a quality (HD / 4K / 8K). */
+export function qualityTag(q: string): string {
+  if (q === "highres") return "8K";
+  if (q === "hd2880") return "5K";
+  if (q === "hd2160") return "4K";
+  return q.startsWith("hd") ? "HD" : "";
+}

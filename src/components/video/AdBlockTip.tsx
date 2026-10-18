@@ -189,7 +189,7 @@ export function AdBlockTip() {
       >
         <X className="h-4 w-4" />
       </button>
-      <p className="flex items-center gap-2 pr-8 text-[15px] font-black text-red-500 sm:text-base">
+      <p className="flex items-center gap-2 pr-8 text-[15px] font-black text-red-500 sm:text-[1rem]">
         <ShieldAlert className="h-6 w-6 shrink-0" /> No ad blocker found — YouTube will show ads
       </p>
       <p className="mt-1.5 mb-3 text-[12.5px] leading-relaxed text-ink2">
