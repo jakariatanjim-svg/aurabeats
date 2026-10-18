@@ -76,15 +76,6 @@ async function watchFor(page, label, secs) {
   await watchFor(page, "direct", 12);
   await shot(page, "1-desktop-inline");
 
-  log("\n=== 2. click an Up next video (user gesture) ===");
-  const link = page.locator('aside a[href^="/watch/"]').first();
-  if (await link.count()) {
-    const href = await link.getAttribute("href");
-    await link.click();
-    log("  clicked", href);
-    await watchFor(page, "clicked", 10);
-  } else log("  no Up next links");
-
   log("\n=== 3. hover → controls, hold → 2x ===");
   const box = await page.evaluate(() => {
     const b = [...document.querySelectorAll("div.fixed.bg-black")].find((d) => d.querySelector("iframe"))?.getBoundingClientRect();
@@ -102,6 +93,15 @@ async function watchFor(page, label, secs) {
     await page.waitForTimeout(300);
     log("  released:", JSON.stringify(await state(page)));
   }
+
+  log("\n=== 2. click an Up next video (user gesture) ===");
+  const link = page.locator('aside a[href^="/watch/"]').first();
+  if (await link.count()) {
+    const href = await link.getAttribute("href");
+    await link.click();
+    log("  clicked", href);
+    await watchFor(page, "clicked", 10);
+  } else log("  no Up next links");
 
   log("\n=== 4. theater (t) ===");
   await page.keyboard.press("t");

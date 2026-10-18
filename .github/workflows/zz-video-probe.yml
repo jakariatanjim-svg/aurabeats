@@ -3,6 +3,8 @@ on:
   push:
     branches: [arena/1784188a-aurabeats]
     paths: [".github/probe/**", ".github/workflows/zz-video-probe.yml", "src/**"]
+permissions:
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -26,38 +28,15 @@ jobs:
               c = c.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
               print(f"::notice title=part{n}::{c}")
           PY
-      - name: Shots A
+      - name: Shots
         working-directory: .github/probe
+        env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, subprocess
           if os.path.exists("shots.json"):
-            s = json.load(open("shots.json"))
-            items = []
-            for sh in s:
-              b = sh["b64"]
-              parts = [b[i:i+60000] for i in range(0, len(b), 60000)]
-              for k, p in enumerate(parts):
-                items.append((f"img|{sh['name']}|{k}|{len(parts)}", p))
-            json.dump(items, open("items.json", "w"))
-            for t, p in items[:10]:
-              print(f"::notice title={t}::{p}")
-          PY
-      - name: Shots B
-        working-directory: .github/probe
-        run: |
-          python3 - <<'PY'
-          import json, os
-          if os.path.exists("items.json"):
-            for t, p in json.load(open("items.json"))[10:20]:
-              print(f"::notice title={t}::{p}")
-          PY
-      - name: Shots C
-        working-directory: .github/probe
-        run: |
-          python3 - <<'PY'
-          import json, os
-          if os.path.exists("items.json"):
-            for t, p in json.load(open("items.json"))[20:30]:
-              print(f"::notice title={t}::{p}")
+            for sh in json.load(open("shots.json")):
+              open("b.json","w").write(json.dumps({"content": sh["b64"], "encoding": "base64"}))
+              r = subprocess.run(["gh","api",f"repos/{os.environ['GITHUB_REPOSITORY']}/git/blobs","--input","b.json","-q",".sha"],capture_output=True,text=True)
+              print(f"::notice title=blob|{sh['name']}::{r.stdout.strip()} {r.stderr.strip()[:200]}")
           PY

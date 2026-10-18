@@ -162,7 +162,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
             onStateChange: (e) => alive && setState(e.data),
             onPlaybackRateChange: (e) => alive && setRate(e.data),
             onPlaybackQualityChange: (e) => alive && setQuality(e.data),
-            onError: (e) => alive && setError(YT_ERRORS[e.data] || `YouTube error ${e.data}`),
+            onError: (e) => {
+              if (!alive) return;
+              setError(YT_ERRORS[e.data] || `YouTube error ${e.data}`);
+              // YouTube's own screen explains it best (sign-in / bot check / blocked) and links out.
+              setNative((n) => n || "auto");
+            },
             onAutoplayBlocked: () => {
               if (!alive || !playerRef.current) return;
               playerRef.current.mute();
@@ -755,7 +760,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         )}
 
         {/* error */}
-        {error && (
+        {error && !nativeOn && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center" onPointerUp={(e) => e.stopPropagation()}>
             <p className="max-w-sm text-sm font-semibold">{error}</p>
             <a
