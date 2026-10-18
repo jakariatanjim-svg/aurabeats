@@ -4,7 +4,29 @@ import { chromium } from "playwright";
 const server = http.createServer((req, res) => { res.setHeader("Content-Type", "text/html"); res.end(fs.readFileSync("q.html")); });
 await new Promise((r) => server.listen(4174, r));
 const log = (...a) => console.log(...a);
-for (const policy of ["no-user-gesture-required", "document-user-activation-required"]) {
+{
+  log("\n##### quality by iframe size (scaled with CSS transform)");
+  const browser = await chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  await page.goto("http://localhost:4174/");
+  const frameInfo = async () => {
+    const f = page.frames().find((fr) => fr.url().includes("/embed/"));
+    return f ? f.evaluate(() => { const v = document.querySelector("video"); return v ? `video ${v.videoWidth}x${v.videoHeight} t=${v.currentTime.toFixed(1)} paused=${v.paused}` : "no video"; }).catch((e) => "err " + e) : "no frame";
+  };
+  await page.waitForTimeout(7000);
+  log("natural 1280x720:", await frameInfo(), await page.evaluate(() => P.getPlaybackQuality()));
+  for (const [w, h] of [[3840, 2160], [2560, 1440], [1920, 1080], [640, 360], [3840, 4320]]) {
+    await page.evaluate(([w, h]) => {
+      const f = P.getIframe();
+      f.style.width = w + "px"; f.style.height = h + "px";
+      f.style.transformOrigin = "0 0"; f.style.transform = `scale(${1280 / w})`;
+    }, [w, h]);
+    await page.waitForTimeout(7000);
+    log(`iframe ${w}x${h}:`, await frameInfo(), await page.evaluate(() => P.getPlaybackQuality()));
+  }
+  await browser.close();
+}
+for (const policy of []) {
   log(`\n##### autoplay-policy=${policy}`);
   const browser = await chromium.launch({ channel: "chrome", args: [`--autoplay-policy=${policy}`] });
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
