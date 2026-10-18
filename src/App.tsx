@@ -7,6 +7,8 @@ import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
 import { storage } from "@/utils/storage";
+import { YouTubeDock } from "@/components/video/YouTubeDock";
+import { isNative } from "@/services/video/net";
 import { isVideoRoute, pathToRoute, routeToPath, type RouteKey } from "@/routes";
 import { rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
@@ -195,6 +197,8 @@ function Shell() {
 
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
       <MobileNav route={route} onNavigate={navigate} favoritesCount={favorites.length} />
+      {/* Website video player: one YouTube iframe for watch page + miniplayer */}
+      {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
       <Suspense fallback={null}>
         {settings.queueEnabled && <QueuePanel />}
         <FullScreenPlayer />

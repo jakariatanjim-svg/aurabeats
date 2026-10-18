@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, MonitorPlay, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
@@ -10,7 +10,7 @@ import { providerLabel, reportPlayback } from "@/services/video/providers";
 import { getVideoSettings } from "@/services/video/settings";
 import type { VideoDetails, VideoItem } from "@/services/video/types";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
-import { YouTubeEmbed } from "@/components/video/YouTubeEmbed";
+import { dock, dockRefs, useDock } from "@/components/video/dock";
 import { AdBlockTip } from "@/components/video/AdBlockTip";
 import { Avatar, VideoRow, VideoRowSkeleton } from "@/components/video/VideoCards";
 import { Button, Skeleton } from "@/components/ui";
@@ -130,6 +130,17 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     if (getVideoSettings().autoplayNext && upNext) onNavigate(`watch:${upNext.id}`);
   }, [info, upNext, onNavigate]);
 
+  // Website: hand info + "next" to the shared player; it calls back on end.
+  useEffect(() => {
+    if (embed) dock.setMeta(info ?? null, upNext ?? null);
+  }, [embed, info, upNext]);
+  useEffect(() => {
+    if (embed) dockRefs.onEnded = onEnded;
+  });
+  const { theater } = useDock();
+  const isLg = useMinWidth(1024);
+  const wide = embed && theater && isLg;
+
   const pauseMusic = useCallback(() => {
     if (isPlaying) toggle();
   }, [isPlaying, toggle]);
@@ -181,12 +192,19 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   }
 
   return (
+    <>
+    {/* Theater mode (desktop): full-width black stage above the columns */}
+    {wide && (
+      <div className="-mx-4 -mt-4 mb-5 bg-black sm:-mx-8">
+        <PlayerSlot id={id} startAt={startAt} className="mx-auto aspect-video max-h-[calc(100dvh-8.5rem)] w-full" />
+      </div>
+    )}
     <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
       <div className="min-w-0">
         {/* Player: edge-to-edge and sticky on phones, like the YouTube app */}
-        <div className="sticky top-0 z-20 -mx-4 -mt-4 bg-black sm:static sm:mx-0 sm:mt-0 sm:bg-transparent">
+        <div className={cn("sticky top-0 z-20 -mx-4 -mt-4 bg-black sm:static sm:mx-0 sm:mt-0 sm:bg-transparent", wide && "hidden")}>
           {embed ? (
-            <YouTubeEmbed id={id} startAt={startAt} onPlayStart={pauseMusic} onTime={onTime} onEnded={onEnded} />
+            !wide && <PlayerSlot id={id} startAt={startAt} className="aspect-video w-full sm:rounded-2xl" />
           ) : details ? (
             <VideoPlayer
               key={details.streams.source}
@@ -332,7 +350,37 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
         )}
       </aside>
     </div>
+    </>
   );
+}
+
+/** Reserves the player's spot; the shared YouTube player positions itself over it. */
+function PlayerSlot({ id, startAt, className }: { id: string; startAt: number; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current!;
+    dock.claim(id, startAt, el);
+    return () => dock.release(el);
+    // startAt only matters for the first claim
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  return (
+    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)}>
+      <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-60" />
+    </div>
+  );
+}
+
+function useMinWidth(px: number) {
+  const q = `(min-width: ${px}px)`;
+  const [ok, setOk] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setOk(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [q]);
+  return ok;
 }
 
 /** Turns URLs in a description into links (opened outside the app). */

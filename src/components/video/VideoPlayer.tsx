@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import {
   Check,
+  FastForward,
   Gauge,
   Headphones,
   Loader2,
@@ -533,7 +534,48 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     else poke();
   }, [playing, poke]);
 
+  // Press & hold = 2× while held; vertical swipe = enter / leave fullscreen.
+  const hold = useRef({ timer: 0 as unknown as ReturnType<typeof setTimeout>, on: false, prev: 1, x: 0, y: 0, moved: false });
+  const [held, setHeld] = useState(false);
+  const onSurfacePointerDown = (e: RPointerEvent<HTMLDivElement>) => {
+    const h = hold.current;
+    h.x = e.clientX;
+    h.y = e.clientY;
+    h.moved = false;
+    clearTimeout(h.timer);
+    h.timer = setTimeout(() => {
+      if (h.moved || !playing) return;
+      h.on = true;
+      h.prev = rate;
+      setRate(2);
+      setHeld(true);
+    }, 420);
+  };
+  const onSurfacePointerMove = (e: RPointerEvent<HTMLDivElement>) => {
+    const h = hold.current;
+    if (!h.moved && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) {
+      h.moved = true;
+      clearTimeout(h.timer);
+    }
+  };
   const onSurfacePointerUp = (e: RPointerEvent<HTMLDivElement>) => {
+    const h = hold.current;
+    clearTimeout(h.timer);
+    if (h.on) {
+      h.on = false;
+      setRate(h.prev);
+      setHeld(false);
+      return;
+    }
+    if (h.moved) {
+      const dx = e.clientX - h.x;
+      const dy = e.clientY - h.y;
+      if (e.pointerType !== "mouse" && Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.3) {
+        if (dy < 0 && fs === "off") void enterFs();
+        else if (dy > 0 && fs !== "off") void exitFs();
+      }
+      return;
+    }
     if (menu) {
       setMenu(false);
       return;
@@ -610,7 +652,26 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       )}
 
       {/* tap surface */}
-      <div className="absolute inset-0" onPointerUp={onSurfacePointerUp} />
+      <div
+        className="absolute inset-0 touch-none"
+        onPointerDown={onSurfacePointerDown}
+        onPointerMove={onSurfacePointerMove}
+        onPointerUp={onSurfacePointerUp}
+        onPointerCancel={() => {
+          clearTimeout(hold.current.timer);
+          if (hold.current.on) {
+            hold.current.on = false;
+            setRate(hold.current.prev);
+            setHeld(false);
+          }
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      {held && (
+        <span className="pointer-events-none absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
+          2x <FastForward className="h-4 w-4 fill-current" />
+        </span>
+      )}
 
       {flash && (
         <span

@@ -66,7 +66,7 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
           {isNative
             ? `No ads, no account, every quality · ${playbackMethodLabel()}`
-            : "No account, every quality · add uBlock Origin to block YouTube ads"}
+            : "No account, every quality · block YouTube ads with uBlock Origin or Brave Shields"}
         </p>
       </section>
 

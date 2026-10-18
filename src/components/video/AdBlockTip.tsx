@@ -1,64 +1,108 @@
 /**
  * Website only: the official YouTube player may show ads, and a page can't
  * block them inside YouTube's iframe. A free blocker extension can, so we
- * explain how in two steps. Dismissing shrinks it to a one-line reminder.
+ * explain how per browser (uBlock Origin Lite, Brave Shields, uBlock Origin). Dismissing shrinks it to a one-line reminder.
  */
 import { useState } from "react";
 import { ExternalLink, ShieldCheck, Smartphone, X } from "lucide-react";
 import { storage } from "@/utils/storage";
 import { cn } from "@/utils/cn";
 
-export const UBLOCK_LINKS = [
-  {
-    browser: "Chrome · Edge · Brave",
-    name: "uBlock Origin Lite",
-    url: "https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh",
-  },
-  {
-    browser: "Firefox (PC & Android)",
-    name: "uBlock Origin",
-    url: "https://addons.mozilla.org/firefox/addon/ublock-origin/",
-  },
-] as const;
+type Browser = "chrome" | "edge" | "brave" | "firefox" | "other";
+
+function detectBrowser(): Browser {
+  if (typeof navigator === "undefined") return "other";
+  if ((navigator as unknown as { brave?: unknown }).brave) return "brave";
+  const ua = navigator.userAgent;
+  if (/Firefox\//.test(ua)) return "firefox";
+  if (/Edg(A|iOS)?\//.test(ua)) return "edge";
+  if (/Chrome\//.test(ua)) return "chrome";
+  return "other";
+}
+
+const UBO_LITE = "https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh";
+const UBO = "https://addons.mozilla.org/firefox/addon/ublock-origin/";
 
 const KEY = "video:adTipCollapsed";
 
-function Links({ className }: { className?: string }) {
+function LinkBtn({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <div className={cn("flex flex-wrap gap-2", className)}>
-      {UBLOCK_LINKS.map((l) => (
-        <a
-          key={l.url}
-          href={l.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-2 text-xs font-bold text-white transition hover:brightness-110"
-        >
-          {l.name}
-          <span className="font-semibold opacity-80">· {l.browser}</span>
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      ))}
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-bold text-white transition hover:brightness-110"
+    >
+      {children} <ExternalLink className="h-3 w-3" />
+    </a>
+  );
+}
+
+function Option({ title, mine, children }: { title: string; mine: boolean; children: React.ReactNode }) {
+  return (
+    <div className={cn("rounded-xl border p-3", mine ? "border-accent/60 bg-accent/[0.06]" : "border-line")}>
+      <p className="mb-1.5 flex items-center gap-2 text-[12px] font-black text-ink">
+        {title}
+        {mine && <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-white">Your browser</span>}
+      </p>
+      <div className="space-y-2 text-[12px] leading-relaxed text-ink2">{children}</div>
     </div>
   );
 }
 
-/** The full how-to (also used in Settings). */
+/** The full how-to (also used in Settings). Your browser's option comes first. */
 export function AdBlockSteps({ className }: { className?: string }) {
+  const b = detectBrowser();
+  const options = [
+    {
+      key: "chromium",
+      mine: b === "chrome" || b === "edge",
+      node: (
+        <Option key="c" title="Chrome · Edge" mine={b === "chrome" || b === "edge"}>
+          <p>Install the free uBlock Origin Lite extension, then reload this page.</p>
+          <LinkBtn href={UBO_LITE}>Get uBlock Origin Lite</LinkBtn>
+        </Option>
+      ),
+    },
+    {
+      key: "brave",
+      mine: b === "brave",
+      node: (
+        <Option key="b" title="Brave · no extension needed" mine={b === "brave"}>
+          <ol className="list-decimal space-y-0.5 pl-4">
+            <li>
+              Tap the <b className="text-ink">lion icon</b> (Brave Shields) in the address bar and make sure Shields are{" "}
+              <b className="text-ink">Up</b> for this site.
+            </li>
+            <li>
+              Set <b className="text-ink">Trackers &amp; ads blocking</b> to <b className="text-ink">Aggressive</b>. To do it for every site:
+              Settings → Shields → Trackers &amp; ads blocking → Aggressive.
+            </li>
+            <li>Reload this page.</li>
+          </ol>
+        </Option>
+      ),
+    },
+    {
+      key: "firefox",
+      mine: b === "firefox",
+      node: (
+        <Option key="f" title="Firefox · PC & Android" mine={b === "firefox"}>
+          <p>Install the original uBlock Origin add-on, then reload this page.</p>
+          <LinkBtn href={UBO}>Get uBlock Origin</LinkBtn>
+        </Option>
+      ),
+    },
+  ].sort((x, y) => Number(y.mine) - Number(x.mine));
+
   return (
-    <div className={cn("space-y-2.5 text-[12px] leading-relaxed text-ink2", className)}>
-      <ol className="list-decimal space-y-1 pl-4">
-        <li>Install the free uBlock Origin extension for your browser:</li>
-      </ol>
-      <Links />
-      <ol start={2} className="list-decimal space-y-1 pl-4">
-        <li>Reload this page. YouTube ads are now blocked on AuraBeats (and on youtube.com too).</li>
-      </ol>
-      <p className="flex items-start gap-1.5 text-[11px] text-ink3">
+    <div className={cn("space-y-2.5", className)}>
+      {options.map((o) => o.node)}
+      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-ink3">
         <Smartphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          On a phone: Firefox for Android supports uBlock Origin. Or use the <b className="text-ink2">AuraBeats Android app</b>,
-          where videos play with no ads at all.
+          On a phone, Brave and Firefox block ads too. Or use the <b className="text-ink2">AuraBeats Android app</b>, where
+          videos play with no ads at all.
         </span>
       </p>
     </div>
@@ -81,7 +125,7 @@ export function AdBlockTip() {
       >
         <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
         <span>
-          Seeing ads? <b className="text-accent">Block them free with uBlock Origin →</b>
+          Seeing ads? <b className="text-accent">Block them for free →</b>
         </span>
       </button>
     );
@@ -102,7 +146,7 @@ export function AdBlockTip() {
       </p>
       <p className="mt-1 mb-3 text-[12px] leading-relaxed text-ink3">
         Videos on the website play in YouTube's official player, so YouTube may show ads. A website can't block them, but
-        a free browser extension can. It takes a few seconds:
+        your browser can, for free, in a few seconds:
       </p>
       <AdBlockSteps />
     </div>

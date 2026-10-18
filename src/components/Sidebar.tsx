@@ -188,7 +188,7 @@ export const Sidebar = memo(function Sidebar({
               <p className="mt-1 text-[10px] leading-relaxed text-ink3">
                 {isNative
                   ? `Ad-free YouTube in every quality, no account. ${playbackMethodLabel()}.`
-                  : "YouTube in every quality, no account. Add uBlock Origin to block ads."}
+                  : "YouTube in every quality, no account. Block ads with uBlock Origin or Brave Shields."}
               </p>
             </>
           ) : (
