@@ -34,10 +34,10 @@ export function EmptyState({
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-accent">
         <Sparkles className="h-6 w-6" />
       </span>
-      <div>
-        <p className="text-sm font-bold text-ink">{title}</p>
-        {hint && <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-ink3">{hint}</p>}
-      </div>
+      {/* the hint is a hover tooltip, not text on the page */}
+      <p className="text-sm font-bold text-ink" data-tip={hint}>
+        {title}
+      </p>
       {action}
     </div>
   );

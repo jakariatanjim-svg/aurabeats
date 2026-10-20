@@ -6,6 +6,7 @@ import { MobileNav } from "@/components/MobileNav";
 import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
+import { TooltipLayer } from "@/components/Tooltips";
 import { storage } from "@/utils/storage";
 import { YouTubeDock } from "@/components/video/YouTubeDock";
 import { isNative } from "@/services/video/net";
@@ -213,6 +214,7 @@ function Shell() {
         <FullScreenPlayer />
       </Suspense>
       <Toaster />
+      <TooltipLayer />
     </div>
   );
 }

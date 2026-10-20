@@ -48,16 +48,6 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
 
   return (
     <div className="space-y-10 pb-12">
-      {/* What this app is — one glance, no clutter */}
-      <header className="animate-fade-in pt-1">
-        <h1 className="text-[22px] leading-tight font-black tracking-tight text-ink sm:text-3xl">
-          Play any song, free.
-        </h1>
-        <p className="mt-1.5 text-sm text-ink3 sm:text-[15px]">
-          Millions of songs from YouTube Music and more. No sign-up. Tap a song to play it.
-        </p>
-      </header>
-
       {/* Trending */}
       <section className="animate-fade-in">
         <FeedHeader
@@ -133,7 +123,7 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
             )}
             {feed.done && feed.items.length > 0 && (
               <p className="mt-10 text-center text-xs text-ink3">
-                You're all caught up. Add more favourites for new recommendations.
+                You're all caught up
               </p>
             )}
           </>
@@ -161,9 +151,8 @@ function FeedHeader({
       <div className="min-w-0">
         <h2 className="flex items-center gap-2 text-xl font-black tracking-tight text-ink sm:text-2xl">
           {icon}
-          {title}
+          <span data-tip={subtitle}>{title}</span>
         </h2>
-        <p className="mt-0.5 truncate text-[13px] text-ink3 sm:text-sm">{subtitle}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {onRefresh && (

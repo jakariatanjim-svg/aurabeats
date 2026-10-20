@@ -98,6 +98,7 @@ export function AboutView() {
 
       <section id="about-sources">
         <SectionHeader
+          showSubtitle
           title="Streaming sources"
           subtitle="AuraBeats connects to multiple independent audio networks simultaneously"
           icon={<Sparkles className="h-4 w-4 text-accent" />}
@@ -125,6 +126,7 @@ export function AboutView() {
 
       <section id="about-principles">
         <SectionHeader
+          showSubtitle
           title="How it works"
           subtitle="The technology and values behind AuraBeats"
           icon={<Shield className="h-4 w-4 text-accent" />}

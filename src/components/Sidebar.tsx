@@ -6,18 +6,15 @@ import {
   Home,
   Info,
   Library,
-  ListMusic,
   Plus,
   Radio,
   Settings,
   DownloadCloud,
   Rss,
-  Tv,
 } from "lucide-react";
 import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
 import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
-import { isNative, playbackMethodLabel } from "@/services/video/net";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, WaveformLogo } from "@/components/ui";
@@ -171,32 +168,6 @@ export const Sidebar = memo(function Sidebar({
         className={cn("mb-4", collapsed ? "mx-auto w-12" : "mx-3")}
       />
 
-      {!collapsed && (
-        <div className="blur-panel mx-3 mb-6 animate-fade-in rounded-[1.4rem] p-3.5">
-          {video ? (
-            <>
-              <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
-                <Tv className="h-3.5 w-3.5 text-accent" /> Video Engine
-              </p>
-              <p className="mt-1 text-[10px] leading-relaxed text-ink3">
-                {isNative
-                  ? `Ad-free YouTube in every quality, no account. ${playbackMethodLabel()}.`
-                  : "YouTube in every quality, no account. Block ads with uBlock Origin or Brave Shields."}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink">
-                <ListMusic className="h-3.5 w-3.5 text-accent" /> Sound Engine
-              </p>
-              <p className="mt-1 text-[10px] leading-relaxed text-ink3">
-                Aggregating YouTube Music, JioSaavn, Audius, Jamendo, Archive and live radio in one player.
-              </p>
-            </>
-          )}
-        </div>
-      )}
-
       <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>
         <div className="space-y-1">
           {(video ? VIDEO_MAIN : MAIN).map((item) => (
@@ -211,12 +182,10 @@ export const Sidebar = memo(function Sidebar({
           ))}
         </div>
 
-        {!collapsed && video && (
+        {!collapsed && video && follows.length > 0 && (
           <div>
             <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Channels you follow</p>
-            {follows.length === 0 ? (
-              <p className="px-3 text-xs leading-relaxed text-ink3">Tap Follow on any channel — no account needed.</p>
-            ) : (
+            {(
               <div className="space-y-0.5">
                 {follows.slice(0, 12).map((c) => (
                   <button

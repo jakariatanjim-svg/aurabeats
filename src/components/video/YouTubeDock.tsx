@@ -174,6 +174,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               e.target.setVolume(storage.get<number>("video:ytVolume", 100));
               e.target.unMute(); // YouTube remembers "muted" across embeds; every video starts with sound
               e.target.playVideo();
+              claimAt.current = Date.now();
               setReady(true);
             },
             onStateChange: (e) => alive && setState(e.data),
@@ -222,8 +223,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (d.claim === lastClaim.current) return;
     lastClaim.current = d.claim;
     setStarted(false);
+    startedRef.current = false;
+    claimAt.current = Date.now();
     setError(null);
     setAd(false);
+    adRef.current = false;
     setLevels([]);
     setUnavailable([]);
     setQNote(null);
@@ -268,6 +272,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   useEffect(() => {
     if (!needsUnmute) return;
     const go = () => {
+      if (adRef.current) {
+        adMuted.current = true; // sound comes back right after the ad
+        setNeedsUnmute(false);
+        return;
+      }
       call("unMute");
       if (call("getPlayerState") !== YTState.PLAYING) call("playVideo");
       unmutedAt.current = Date.now();
@@ -283,6 +292,32 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     };
   }, [needsUnmute, call]);
 
+  /* ------------------------------- ads ---------------------------------- */
+  const adRef = useRef(false);
+  const adMuted = useRef(false);
+  const startedRef = useRef(false);
+  const claimAt = useRef(Date.now());
+  const enterAd = useCallback(() => {
+    if (adRef.current) return;
+    adRef.current = true;
+    setAd(true);
+    if (!call("isMuted")) {
+      call("mute");
+      adMuted.current = true;
+    }
+    if (call("getPlayerState") !== YTState.PLAYING) call("playVideo");
+  }, [call]);
+  const leaveAd = useCallback(() => {
+    if (!adRef.current) return;
+    adRef.current = false;
+    setAd(false);
+    if (adMuted.current) {
+      adMuted.current = false;
+      call("unMute");
+      setMuted(false);
+    }
+  }, [call]);
+
   /* ------------------------------ polling ------------------------------- */
   const lastSave = useRef(0);
   const stuck = useRef({ t: -1, since: 0 });
@@ -297,21 +332,32 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       if (dur) setDuration(dur);
       setLoaded(Number(call("getVideoLoadedFraction")) || 0);
       setMuted(Boolean(call("isMuted")));
-      if (s === YTState.PLAYING && t > 0.05) setStarted(true);
+      const advancing = Math.abs(t - stuck.current.t) > 0.01;
+      if (s === YTState.PLAYING && advancing) {
+        startedRef.current = true;
+        setStarted(true);
+      }
 
-      // Playing but the video clock doesn't move → YouTube is showing an ad.
-      // Only possible without a blocker; with one we never assume this.
-      if (s === YTState.PLAYING && adBlockState() !== "on") {
-        if (Math.abs(t - stuck.current.t) < 0.01) {
-          if (!stuck.current.since) stuck.current.since = Date.now();
-          else if (Date.now() - stuck.current.since > 1500) setAd(true);
-        } else {
+      // Without a blocker YouTube may run an ad first. The video clock doesn't
+      // move during it, and the ad (inside YouTube's own frame) may not be
+      // allowed to play with sound — it then just sits there. So: show the ad
+      // as YouTube draws it (its Skip / play buttons work), muted so it always
+      // plays, and give the sound back as soon as the video itself runs.
+      // With a blocker none of this ever applies.
+      if (adBlockState() !== "on") {
+        const now = Date.now();
+        if (s === YTState.PLAYING && advancing) {
           stuck.current.since = 0;
-          setAd(false);
+          leaveAd();
+        } else if (s === YTState.PLAYING) {
+          if (!stuck.current.since) stuck.current.since = now;
+          else if (now - stuck.current.since > 1500) enterAd();
+        } else if (!startedRef.current && now - claimAt.current > 3500 && s !== YTState.ENDED) {
+          enterAd(); // nothing started yet: YouTube is showing something (ad / tap-to-play)
         }
       } else {
         stuck.current.since = 0;
-        if (s !== YTState.BUFFERING) setAd(false);
+        if (s !== YTState.BUFFERING) leaveAd();
       }
       stuck.current.t = t;
 

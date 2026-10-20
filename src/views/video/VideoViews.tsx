@@ -1,9 +1,8 @@
 import { useMemo, useRef, useState } from "react";
-import { Bookmark, Clock, History, Sparkles, Rss, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { Bookmark, Clock, History, Sparkles, Rss, Trash2, Users, X } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
 import { followingFeed, recommendedVideos } from "@/services/video/api";
-import { isNative, playbackMethodLabel } from "@/services/video/net";
 import type { VideoItem } from "@/services/video/types";
 import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton, VideoRow } from "@/components/video/VideoCards";
 import { Button, Chip, SectionHeader } from "@/components/ui";
@@ -56,16 +55,6 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
 
   return (
     <div className="space-y-10">
-      {/* Search entry + promise */}
-      <section className="space-y-3">
-        <p className="flex items-center gap-1.5 text-xs text-ink3">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-          {isNative
-            ? `No ads, no account, every quality · ${playbackMethodLabel()}`
-            : "No account, every quality · block YouTube ads with uBlock Origin or Brave Shields"}
-        </p>
-      </section>
-
       {continueWatching.length > 0 && (
         <section>
           <SectionHeader title="Continue watching" icon={<History className="h-5 w-5 text-accent" />} />
@@ -127,7 +116,11 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
         </section>
       )}
       {seeds.length === 0 && ids.length === 0 && (
-        <p className="text-center text-[13px] text-ink3">Watch a few videos or follow channels — recommendations here come only from those.</p>
+        <EmptyState
+          title="Try searching to get started"
+          hint="Your home feed is built only from videos you watch and channels you follow."
+          action={<Button onClick={openSearch}>Search</Button>}
+        />
       )}
     </div>
   );
@@ -145,7 +138,7 @@ export function VideoSubsView(_props: { onNavigate?: (r: RouteKey) => void }) {
   if (!ids.length) {
     return (
       <EmptyState
-        title="You're not following any channels yet"
+        title="Not following any channels yet"
         hint="Search for a channel or open any video and tap Follow. Their newest uploads will show up here, straight from YouTube — no account needed."
         action={<Button onClick={openSearch}>Find channels</Button>}
       />

@@ -215,20 +215,25 @@ export function SectionHeader({
   subtitle,
   action,
   icon,
+  showSubtitle,
 }: {
   title: string;
+  /** Hover tooltip on the title (shown as text only with `showSubtitle`, e.g. About). */
   subtitle?: string;
   action?: ReactNode;
   icon?: ReactNode;
+  showSubtitle?: boolean;
 }) {
   return (
     <div className="mb-4 flex items-end justify-between gap-4">
       <div className="min-w-0 max-w-[56rem]">
         <h2 className="flex items-center gap-2 text-lg font-black tracking-tight text-ink sm:text-xl">
           {icon}
-          <span className="text-balance leading-tight">{title}</span>
+          <span className="text-balance leading-tight" data-tip={!showSubtitle ? subtitle : undefined}>
+            {title}
+          </span>
         </h2>
-        {subtitle && <p className="mt-1 max-w-[52rem] text-xs leading-relaxed text-ink3 sm:text-sm">{subtitle}</p>}
+        {subtitle && showSubtitle && <p className="mt-1 max-w-[52rem] text-xs leading-relaxed text-ink3 sm:text-sm">{subtitle}</p>}
       </div>
       {action}
     </div>

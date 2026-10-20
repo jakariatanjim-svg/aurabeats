@@ -1,16 +1,17 @@
 /**
  * YouTube-style search in the top bar, for Music and Video.
  *
- *  - Desktop (lg+): a search field in the middle of the bar; focusing it opens
- *    a panel right under it.
- *  - Phone / tablet: a search icon; tapping it turns the screen into the
- *    search page (back arrow + field, keyboard up). Android back closes it.
+ *  - PC (website, desktop layout): a search field in the bar; focusing it
+ *    opens a dropdown right under it — the page stays as it is.
+ *  - Phone screens and the Android app: a search icon; tapping it turns the
+ *    screen into the search page (back arrow + field, keyboard up). Android
+ *    Back closes it.
  *
  * The panel: your search history straight down (clock, remove ✕), then
  * "Trending searches". While typing: matching history + live suggestions
  * (↑/↓ + Enter). Nothing searches until Enter / a pick.
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowUpLeft, History, Search, TrendingUp, X } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -20,6 +21,21 @@ import { cachedTrendingSearches, trendingSearches } from "@/services/trendingSea
 import { searchHistory, useSearchHistory, type SearchMode } from "@/utils/searchHistory";
 import { goPath, goSearch, useUrlQuery } from "@/utils/searchNav";
 import type { RouteKey } from "@/routes";
+import { isNative } from "@/services/video/net";
+
+const PC_QUERY = "(min-width: 768px)";
+/** PC = the website in the desktop layout (sidebar). The app always uses the phone search. */
+export function usePcSearch(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(PC_QUERY);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => !isNative && window.matchMedia(PC_QUERY).matches,
+    () => false,
+  );
+}
 
 type Row = { kind: "history" | "suggest" | "trend"; text: string };
 
@@ -36,6 +52,7 @@ export function TopSearch({
   onNavigate: (r: RouteKey) => void;
   className?: string;
 }) {
+  const pc = usePcSearch();
   const onResults = route === (mode === "video" ? "video-search" : "search");
   const urlQ = useUrlQuery();
   const shownQ = onResults ? urlQ : "";
@@ -124,7 +141,7 @@ export function TopSearch({
   // "Find channels" etc. elsewhere in the app open this search.
   useEffect(() => {
     const onOpen = () => {
-      if (window.matchMedia("(min-width: 1024px)").matches) deskInput.current?.focus();
+      if (window.matchMedia(PC_QUERY).matches && !isNative) deskInput.current?.focus();
       else setSheet(true);
     };
     window.addEventListener("ab:open-search", onOpen);
@@ -276,8 +293,10 @@ export function TopSearch({
 
   return (
     <>
-      {/* Desktop: field in the middle of the bar */}
-      <div ref={deskBox} className={cn("relative hidden w-full max-w-[36rem] lg:block", className)}>
+      {/* PC: field in the bar, dropdown under it */}
+      {pc && (
+        <>
+      <div ref={deskBox} className={cn("relative w-full max-w-[36rem]", className)}>
         <div
           className={cn(
             "glass-inset flex items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] pr-1.5 pl-4 transition",
@@ -304,12 +323,15 @@ export function TopSearch({
         )}
       </div>
 
+        </>
+      )}
+
       {/* Phone / tablet */}
-      {onResults && shownQ ? (
+      {pc ? null : onResults && shownQ ? (
         <button
           type="button"
           onClick={() => setSheet(true)}
-          className="focus-ring glass-inset flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] px-3.5 py-2 text-left text-[14px] font-medium text-ink lg:hidden"
+          className="focus-ring glass-inset flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] px-3.5 py-2 text-left text-[14px] font-medium text-ink"
         >
           <Search className="h-4 w-4 shrink-0 text-ink3" />
           <span className="truncate">{shownQ}</span>
@@ -319,13 +341,13 @@ export function TopSearch({
           type="button"
           aria-label="Search"
           onClick={() => setSheet(true)}
-          className="focus-ring ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line text-ink2 transition hover:text-ink lg:hidden"
+          className="focus-ring ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line text-ink2 transition hover:text-ink"
         >
           <Search className="h-[18px] w-[18px]" />
         </button>
       )}
 
-      {sheet &&
+      {sheet && !pc &&
         createPortal(
           <div
             role="dialog"

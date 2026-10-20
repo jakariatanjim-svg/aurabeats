@@ -98,8 +98,7 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
         <div>
           <h2 className="text-2xl font-black tracking-tight text-ink">Your library</h2>
           <p className="mt-1 text-xs text-ink3">
-            {playlists.length} playlists · {favorites.length} favourites · {history.length} in history — all stored
-            locally on this device
+            {playlists.length} playlists · {favorites.length} favourites · {history.length} in history
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
@@ -419,7 +418,7 @@ export function FavoritesView() {
           <p className="text-[10px] font-bold tracking-[0.2em] text-ink3 uppercase">Collection</p>
           <h2 className="mt-1 text-3xl font-black tracking-tight text-ink">Favourites</h2>
           <p className="mt-1 text-xs text-ink3">
-            {favorites.length} {favorites.length === 1 ? "track" : "tracks"} · saved on this device
+            {favorites.length} {favorites.length === 1 ? "track" : "tracks"}
           </p>
           {favorites.length > 0 && (
             <Button className="mt-4" onClick={() => playAll(favorites, 0)}>

@@ -43,11 +43,12 @@ export function RadioView() {
               </span>
               Broadcasting now
             </p>
-            <h2 className="mt-1.5 text-2xl font-black tracking-tight text-ink sm:text-3xl">Open Live Radio</h2>
-            <p className="mt-1 max-w-lg text-xs leading-relaxed text-ink3">
-              Community-maintained archive of worldwide stations. Streams are direct HTTPS audio, checked continuously by
-              the network — if one drops, AuraBeats hops to another automatically.
-            </p>
+            <h2
+              className="mt-1.5 text-2xl font-black tracking-tight text-ink sm:text-3xl"
+              data-tip="Worldwide stations from the open Radio Browser archive. If a stream drops, the next one takes over automatically."
+            >
+              Open Live Radio
+            </h2>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 rounded-full border border-line px-3 py-2 text-xs text-ink2">

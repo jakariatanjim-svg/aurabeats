@@ -28,6 +28,7 @@ import { Artwork, IconButton, Slider } from "@/components/ui";
 import { Visualizer } from "@/components/Visualizer";
 import { TrackRow } from "@/components/TrackList";
 import { LyricsViewer } from "@/components/LyricsViewer";
+import { storage } from "@/utils/storage";
 
 export function FullScreenPlayer() {
   const { currentTime, duration, bufferedAhead } = usePlaybackClock();
@@ -70,7 +71,12 @@ export function FullScreenPlayer() {
 
   const [showLyrics, setShowLyrics] = useState(false);
   const [showTimerMenu, setShowTimerMenu] = useState(false);
-  const [romanized, setRomanized] = useState(false);
+  const [romanized, setRomanizedState] = useState(() => storage.get("lyricsRomanized", false));
+  const [canRomanize, setCanRomanize] = useState(false);
+  const setRomanized = (v: boolean) => {
+    setRomanizedState(v);
+    storage.set("lyricsRomanized", v);
+  };
 
   useEffect(() => {
     if (!expanded) return;
@@ -166,16 +172,18 @@ export function FullScreenPlayer() {
           </div>
 
           <div className="relative flex items-center gap-2">
-            {showLyrics && (
+            {showLyrics && canRomanize && (
               <button
                 type="button"
-                onClick={() => setRomanized((v) => !v)}
+                onClick={() => setRomanized(!romanized)}
+                aria-pressed={romanized}
+                data-tip={romanized ? "Show original script" : "Show in Roman letters"}
                 className={cn(
-                  "h-10 rounded-full px-3 text-[10px] font-bold tracking-wider uppercase transition-all",
+                  "flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-[14px] font-black tracking-tight transition-all",
                   romanized ? "bg-accent text-white shadow-[0_0_14px_-2px_var(--glow)]" : chip,
                 )}
               >
-                {romanized ? "Original" : "Aa"}
+                Aa
               </button>
             )}
             {videoIdOfTrack(current) && (
@@ -193,7 +201,7 @@ export function FullScreenPlayer() {
               </button>
             )}
             <IconButton
-              onClick={() => { setShowLyrics((v) => !v); if (showLyrics) setRomanized(false); }}
+              onClick={() => setShowLyrics((v) => !v)}
               aria-label="Show lyrics"
               className={cn(chip, showLyrics && "glow-ring text-accent hover:text-accent")}
             >
@@ -269,7 +277,7 @@ export function FullScreenPlayer() {
             )}>
               {showLyrics ? (
                 <div className="blur-panel glass-inset h-full w-full max-w-2xl overflow-hidden rounded-[2rem]! p-2">
-                  <LyricsViewer trackName={current.title} artistName={current.artist} currentTime={currentTime} romanized={romanized} />
+                  <LyricsViewer track={current} romanized={romanized} onRomanizable={setCanRomanize} />
                 </div>
               ) : (
                 <>

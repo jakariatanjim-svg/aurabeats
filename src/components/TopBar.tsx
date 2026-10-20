@@ -4,7 +4,7 @@ import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
 import { isVideoRoute, routeLabel, type RouteKey } from "@/routes";
 import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
-import { TopSearch } from "@/components/TopSearch";
+import { TopSearch, usePcSearch } from "@/components/TopSearch";
 import { useUrlQuery } from "@/utils/searchNav";
 import { isNative, playbackMethodLabel } from "@/services/video/net";
 import { IconButton, WaveformLogo } from "@/components/ui";
@@ -127,12 +127,13 @@ export function TopBar({
   const mode = modeOf(route);
   const q = useUrlQuery();
   // Phone results page: the bar becomes ← + the search term (YouTube).
-  const resultsBar = (route === "search" || route === "video-search") && Boolean(q);
+  const pc = usePcSearch();
+  const resultsBar = !pc && (route === "search" || route === "video-search") && Boolean(q);
 
   return (
     <header className="ab-topbar blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
       {resultsBar && (
-        <IconButton onClick={() => (window.history.length > 1 ? window.history.back() : onNavigate(video ? "video" : "home"))} aria-label="Back" className="-ml-1 shrink-0 lg:hidden">
+        <IconButton onClick={() => (window.history.length > 1 ? window.history.back() : onNavigate(video ? "video" : "home"))} aria-label="Back" className="-ml-1 shrink-0">
           <ArrowLeft className="h-5 w-5" />
         </IconButton>
       )}
@@ -151,25 +152,23 @@ export function TopBar({
         </span>
       </button>
 
-      <div className={cn("hidden min-w-0 flex-1 md:block", resultsBar && "md:hidden lg:block")}>
-        <p className="truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl">{routeLabel(route)}</p>
-        <p className="mt-0.5 hidden items-center gap-1.5 text-[11px] font-medium text-ink3 sm:flex sm:text-xs">
-          <Wifi className="h-3.5 w-3.5 shrink-0 text-accent drop-shadow-[0_0_8px_var(--glow)]" />
-          {failoverNote ? (
-            <span className="truncate text-accent">{failoverNote}</span>
-          ) : live ? (
-            "Open radio archive · live streams"
-          ) : video ? (
-            `${isNative ? "Ad-free YouTube" : "YouTube"} · ${playbackMethodLabel()}`
-          ) : (
-            "Multi-source streaming engine"
-          )}
+      <div className={cn("hidden min-w-0 flex-1", pc ? "lg:block" : "md:block", resultsBar && "md:hidden")}>
+        <p
+          className="w-fit max-w-full truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl"
+          data-tip={live ? "Live radio streams" : video ? `${isNative ? "Ad-free YouTube" : "YouTube"} · ${playbackMethodLabel()}` : undefined}
+        >
+          {routeLabel(route)}
         </p>
+        {failoverNote && (
+          <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-accent sm:text-xs">
+            <Wifi className="h-3.5 w-3.5 shrink-0" /> {failoverNote}
+          </p>
+        )}
       </div>
 
       <TopSearch mode={mode} route={route} onNavigate={onNavigate} className="flex-[1.4]" />
 
-      <div className={cn("flex shrink-0 items-center gap-2 sm:gap-2.5", resultsBar ? "max-lg:hidden lg:ml-auto" : "lg:ml-auto")}>
+      <div className={cn("flex shrink-0 items-center gap-2 sm:gap-2.5", resultsBar ? "hidden" : "md:ml-auto")}>
         <AppModeSwitch route={route} onNavigate={onNavigate} compact className="md:hidden" />
         <IconButton
           onClick={() => onNavigate("settings")}
