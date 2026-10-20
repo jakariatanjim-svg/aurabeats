@@ -55,8 +55,12 @@ export function VideoDownloadSheet() {
     <Modal open onClose={close} title="Download video">
       <p className="-mt-2 mb-3 truncate text-[13px] text-ink3">{req.title}</p>
       {err ? (
-        <div className="mb-3 flex items-center gap-2 rounded-xl bg-rose-500/10 px-3 py-2.5 text-[13px] text-rose-400">
-          <AlertCircle className="h-4 w-4 shrink-0" /> Couldn't read this video in the app.
+        <div className="mb-3 flex items-start gap-2 rounded-xl bg-rose-500/10 px-3 py-2.5 text-[13px] text-rose-400">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="min-w-0">
+            Couldn't read this video in the app.
+            <span className="mt-0.5 block text-[11px] break-words opacity-80">{err}</span>
+          </span>
         </div>
       ) : !opts ? (
         <div className="space-y-2">
@@ -136,6 +140,9 @@ export function DownloadTray() {
                   {j.label} ·{" "}
                   {j.status === "done" ? "Saved" : j.status === "error" ? "Failed" : j.status === "merging" ? "Finishing…" : `${pct}%`}
                 </p>
+                {j.status === "error" && j.error && (
+                  <p className="mt-0.5 line-clamp-3 text-[10.5px] leading-snug break-words text-rose-400/90">{j.error}</p>
+                )}
               </div>
               {j.status === "done" && j.uri && (
                 <button

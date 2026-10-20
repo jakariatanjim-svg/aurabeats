@@ -89,6 +89,8 @@ jobs:
       - name: Build
         env:
           APP_VERSION: ${{ steps.target.outputs.version }}
+          # Bundles the app-only YouTube TV fallback (youtubei.js); the website build leaves it out.
+          VITE_APK: "1"
         run: npm run build
 
       - name: Setup Capacitor Android

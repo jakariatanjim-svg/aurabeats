@@ -51,18 +51,23 @@ async function cached<T>(key: string, ttl: number, fn: () => Promise<T>, keep: (
 export async function getVideo(id: string, exclude: string[] = []): Promise<VideoDetails> {
   const key = `v:${id}:${exclude.join(",")}`;
   return cached(key, 4 * 60 * 1000, async () => {
+    let deviceErr: unknown;
     if (deviceExtractionAvailable && !exclude.includes("device")) {
       try {
-        const d = await devicePlayer(id);
-        // Fill in related videos in the background-friendly way: the watch
-        // page asks `getRelated` separately when this list is empty.
-        return d;
-      } catch {
-        /* fall through to the servers */
+        // Related videos: the watch page asks `getRelated` separately.
+        return await devicePlayer(id);
+      } catch (e) {
+        deviceErr = e;
       }
     }
-    const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700 });
-    return value;
+    try {
+      const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700 });
+      return value;
+    } catch (e) {
+      // The phone's own answer explains far more than "servers busy".
+      if (deviceErr instanceof Error) throw new Error(`${deviceErr.message} • servers: ${e instanceof Error ? e.message : e}`);
+      throw e;
+    }
   });
 }
 

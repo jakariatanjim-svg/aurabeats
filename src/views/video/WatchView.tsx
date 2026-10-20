@@ -25,6 +25,11 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   const lib = useVideoLibrary();
   const [details, setDetails] = useState<VideoDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Why each stream source failed during playback (shown if all of them do).
+  const failNotes = useRef<string[]>([]);
+  useEffect(() => {
+    failNotes.current = [];
+  }, [id]);
   const [exclude, setExclude] = useState<string[]>([]);
   const [nonce, setNonce] = useState(0);
   // Info stays on screen while servers are switched (and is all the website needs).
@@ -132,7 +137,10 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   const onFatal = useCallback(
     (reason: string, at: number) => {
       if (!details) return;
-      if (reason !== "user") reportPlayback(details.streams.source, false);
+      if (reason !== "user") {
+        reportPlayback(details.streams.source, false);
+        failNotes.current = [...failNotes.current, `${details.streams.source === "device" ? "phone stream" : details.streams.source}: ${reason}`].slice(-4);
+      }
       setStartAt(at || lastT.current);
       setExclude((x) => [...x, details.streams.source]);
       setDetails(null);
@@ -158,6 +166,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   const retry = () => {
     setStartAt(lastT.current || startAt);
     setExclude([]);
+    failNotes.current = [];
     setNonce((n) => n + 1);
   };
 
@@ -219,7 +228,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   if (error && !details) {
     return (
       <div className="mx-auto max-w-xl space-y-3 pt-6">
-        <ErrorState message={`${error}. Age-restricted or private videos can't be played without signing in.`} onRetry={retry} />
+        <ErrorState message={[...failNotes.current, error].join(" • ")} onRetry={retry} />
         <a
           href={`https://www.youtube.com/watch?v=${id}`}
           target="_blank"
