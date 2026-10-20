@@ -54,6 +54,12 @@ export interface VideoPlayerProps {
 type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
 
+/** " (code 2: …)" from a failed media element, for the error screen. */
+const mediaErr = (el: HTMLMediaElement) => {
+  const e = el.error;
+  return e ? ` (code ${e.code}${e.message ? `: ${e.message.slice(0, 80)}` : ""})` : "";
+};
+
 export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal }: VideoPlayerProps) {
   const plan: Plan | null = useMemo(() => makePlan(details.streams), [details.streams]);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -218,7 +224,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
           return;
         }
       }
-      cbs.current.onFatal(dual ? "audio failed" : "video failed", m.currentTime || startAt);
+      cbs.current.onFatal(`${dual ? "audio" : "video"} failed${mediaErr(m)}`, m.currentTime || startAt);
     };
     m.addEventListener("loadedmetadata", onLoaded);
     m.addEventListener("play", onPlay);
@@ -247,7 +253,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   // Startup watchdog: nothing loads in 15 s → let the parent try another server.
   useEffect(() => {
     const t = setTimeout(() => {
-      if (!started.current) cbs.current.onFatal("timeout", startAt);
+      if (!started.current) cbs.current.onFatal("no data in 15 s", startAt);
     }, 15000);
     return () => clearTimeout(t);
   }, [startAt]);
@@ -279,7 +285,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       badQualities.current.add(qIndex);
       const next = plan!.qualities.findIndex((_, i) => i > qIndex && !badQualities.current.has(i));
       if (next !== -1) setQIndex(next);
-      else cbs.current.onFatal("video failed", a.currentTime);
+      else cbs.current.onFatal(`video failed${mediaErr(v)}`, a.currentTime);
     };
     const onAudioPlay = () => {
       if (v.getAttribute("src") && v.paused) void v.play().catch(() => {});

@@ -1,10 +1,15 @@
+<div align="center">
+
+<img src="repo-assets/icon.png" alt="AuraBeats app icon" width="120" height="120" />
+
 # AuraBeats
 
-A free music **and video** app: songs, live radio and ad-free YouTube videos (every quality, up to 4K) in one simple player. No account, no subscription, no ads and no API key needed — just open it and play.
+A free music **and video** app: songs, live radio and ad-free YouTube videos (every quality, up to 4K) in one simple player.<br/>
+No account, no subscription, no ads and no API key needed — just open it and play.
 
-**Website:** [aurabeats.pages.dev](https://aurabeats.pages.dev/)
-**Download for Android:** [Latest release (APK)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
-**Source code:** [github.com/jakariatanjim-svg/aurabeats](https://github.com/jakariatanjim-svg/aurabeats)
+**Website:** [aurabeats.pages.dev](https://aurabeats.pages.dev/) ·
+**Download for Android:** [Latest release (APK)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest) ·
+**Source code:** [GitHub](https://github.com/jakariatanjim-svg/aurabeats)
 
 [![Website](https://img.shields.io/badge/Website-aurabeats.pages.dev-7c5cff?style=for-the-badge)](https://aurabeats.pages.dev/)
 [![Android APK](https://img.shields.io/badge/Android-APK-3ddc84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
@@ -18,6 +23,8 @@ A free music **and video** app: songs, live radio and ad-free YouTube videos (ev
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-7-646cff?style=flat-square&logo=vite&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)
+
+</div>
 
 ---
 

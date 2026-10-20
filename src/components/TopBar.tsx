@@ -182,9 +182,13 @@ export function TopBar({
         >
           <Settings className="h-4 w-4" />
         </IconButton>
-        <ThemeSwitch className="hidden sm:flex" />
-        <ModeSwitch />
-        <AccentPicker />
+        {/* Phone: logo, search, Music/Video and Settings only — theme, light/dark
+            and accent live in Settings there. PC keeps them in the bar. */}
+        <ThemeSwitch className="hidden md:flex" />
+        <div className="hidden items-center gap-2 sm:gap-2.5 md:flex">
+          <ModeSwitch />
+          <AccentPicker />
+        </div>
       </div>
     </header>
   );
