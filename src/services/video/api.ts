@@ -69,7 +69,9 @@ export async function getVideo(id: string, exclude: string[] = []): Promise<Vide
 export async function getVideoInfo(id: string): Promise<VideoDetails> {
   return cached(`info:${id}`, 10 * 60 * 1000, async () => {
     try {
-      return (await race((p) => providerDetails(p, id, false), { stagger: 700, max: 6 })).value;
+      // Two servers at most: a blocked video fails on all of them alike, and
+      // the page already shows the card / oEmbed / search info meanwhile.
+      return (await race((p) => providerDetails(p, id, false), { stagger: 300, max: 2 })).value;
     } catch {
       return getVideoMeta(id);
     }
@@ -99,6 +101,39 @@ export async function getVideoMeta(id: string): Promise<VideoDetails> {
       streams: { source: "embed", video: [], audio: [], muxed: [], live: false },
     };
   });
+}
+
+/**
+ * The video as it appears in search results — views, date, channel id,
+ * avatar and the first lines of the description. Search keeps working when
+ * YouTube bot-blocks the servers' watch-page access (most videos, Oct 2026).
+ */
+export async function findInSearch(id: string, title: string): Promise<VideoItem | null> {
+  const list = await searchVideosOnly(title).catch(() => [] as VideoItem[]);
+  return list.find((v) => v.id === id) ?? null;
+}
+
+/** Fill-only merge: what is known stays, new facts are added; the longer description wins. */
+export function mergeInfo(id: string, prev: VideoDetails | null, next: Partial<VideoDetails>): VideoDetails {
+  const base: VideoDetails = prev ?? {
+    id,
+    title: "",
+    author: "",
+    duration: 0,
+    thumbnail: thumbFor(id),
+    description: "",
+    related: [],
+    streams: { source: "embed", video: [], audio: [], muxed: [], live: false },
+  };
+  const out = { ...base } as VideoDetails & Record<string, unknown>;
+  for (const [k, v] of Object.entries(next)) {
+    if (v === undefined || v === null || v === "" || k === "id" || k === "related" || k === "streams") continue;
+    const cur = out[k];
+    if (k === "description" || k === "snippet") {
+      if (typeof v === "string" && v.length > String(cur ?? "").length) out[k] = v;
+    } else if (cur === undefined || cur === null || cur === "" || (k === "duration" && !cur)) out[k] = v;
+  }
+  return out;
 }
 
 /** Related videos for the APK path (device extraction has none). */

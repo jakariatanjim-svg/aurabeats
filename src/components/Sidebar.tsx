@@ -9,17 +9,15 @@ import {
   ListMusic,
   Plus,
   Radio,
-  Search,
   Settings,
   DownloadCloud,
   Rss,
   Tv,
 } from "lucide-react";
-import { AppModeSwitch } from "@/components/video/AppModeSwitch";
+import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
 import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { isNative, playbackMethodLabel } from "@/services/video/net";
-import { isVideoRoute } from "@/routes";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, WaveformLogo } from "@/components/ui";
@@ -33,14 +31,12 @@ interface NavItem {
 
 const MAIN: NavItem[] = [
   { key: "home", label: "Discover", icon: Home },
-  { key: "search", label: "Search", icon: Search },
   { key: "radio", label: "Live Radio", icon: Radio },
   { key: "library", label: "Your Library", icon: Library },
 ];
 
 const VIDEO_MAIN: NavItem[] = [
   { key: "video", label: "Home", icon: Home },
-  { key: "video-search", label: "Search", icon: Search },
   { key: "video-subs", label: "Following", icon: Rss },
   { key: "video-library", label: "Library", icon: Library },
 ];
@@ -121,10 +117,7 @@ export const Sidebar = memo(function Sidebar({
   const { playlists, createPlaylist, favorites, history } = usePlayer();
   const { follows } = useVideoLibrary();
   // Settings / About are shared: keep the mode you came from.
-  const [lastMode, setLastMode] = useState<"music" | "video">(isVideoRoute(route) ? "video" : "music");
-  const shared = route === "settings" || route === "about" || route === "privacy";
-  const video = shared ? lastMode === "video" : isVideoRoute(route);
-  if (!shared && (isVideoRoute(route) ? "video" : "music") !== lastMode) setLastMode(isVideoRoute(route) ? "video" : "music");
+  const video = modeOf(route) === "video";
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -171,7 +164,7 @@ export const Sidebar = memo(function Sidebar({
       </div>
 
       <AppModeSwitch
-        route={shared ? (video ? "video" : "home") : route}
+        route={route}
         onNavigate={onNavigate}
         compact={collapsed}
         vertical={collapsed}

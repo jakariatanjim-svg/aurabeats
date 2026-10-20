@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Droplets, Moon, Palette, Search, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
+import { ArrowLeft, Check, Droplets, Moon, Palette, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
 import { isVideoRoute, routeLabel, type RouteKey } from "@/routes";
-import { AppModeSwitch } from "@/components/video/AppModeSwitch";
+import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
+import { TopSearch } from "@/components/TopSearch";
+import { useUrlQuery } from "@/utils/searchNav";
 import { isNative, playbackMethodLabel } from "@/services/video/net";
 import { IconButton, WaveformLogo } from "@/components/ui";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -122,13 +124,22 @@ export function TopBar({
   const { failoverNote } = usePlayer();
   const live = route === "radio";
   const video = isVideoRoute(route);
+  const mode = modeOf(route);
+  const q = useUrlQuery();
+  // Phone results page: the bar becomes ← + the search term (YouTube).
+  const resultsBar = (route === "search" || route === "video-search") && Boolean(q);
 
   return (
     <header className="ab-topbar blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
+      {resultsBar && (
+        <IconButton onClick={() => (window.history.length > 1 ? window.history.back() : onNavigate(video ? "video" : "home"))} aria-label="Back" className="-ml-1 shrink-0 lg:hidden">
+          <ArrowLeft className="h-5 w-5" />
+        </IconButton>
+      )}
       <button
         type="button"
         onClick={() => onNavigate(video ? "video" : "home")}
-        className="focus-ring flex min-w-0 shrink items-center gap-2.5 rounded-2xl md:hidden"
+        className={cn("focus-ring flex min-w-0 shrink items-center gap-2.5 rounded-2xl md:hidden", resultsBar && "hidden")}
         aria-label="AuraBeats — go to home"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3b82f6] to-[#22d3ee] text-white shadow-[0_8px_20px_-6px_rgba(59,130,246,0.5)]">
@@ -140,7 +151,7 @@ export function TopBar({
         </span>
       </button>
 
-      <div className="hidden min-w-0 flex-1 md:block">
+      <div className={cn("hidden min-w-0 flex-1 md:block", resultsBar && "md:hidden lg:block")}>
         <p className="truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl">{routeLabel(route)}</p>
         <p className="mt-0.5 hidden items-center gap-1.5 text-[11px] font-medium text-ink3 sm:flex sm:text-xs">
           <Wifi className="h-3.5 w-3.5 shrink-0 text-accent drop-shadow-[0_0_8px_var(--glow)]" />
@@ -156,17 +167,9 @@ export function TopBar({
         </p>
       </div>
 
-      <button
-        type="button"
-        onClick={() => onNavigate(video ? "video-search" : "search")}
-        className="focus-ring glass-inset hidden items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] px-4 py-2.5 text-xs text-ink3 transition hover:border-accent hover:text-accent lg:flex"
-      >
-        <Search className="h-3.5 w-3.5" />
-        {video ? (isNative ? "Search YouTube, ad-free" : "Search YouTube") : "Search millions of tracks"}
-        <ChevronDown className="h-3 w-3 -rotate-90 opacity-60" />
-      </button>
+      <TopSearch mode={mode} route={route} onNavigate={onNavigate} className="flex-[1.4]" />
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-2.5">
+      <div className={cn("flex shrink-0 items-center gap-2 sm:gap-2.5", resultsBar ? "max-lg:hidden lg:ml-auto" : "lg:ml-auto")}>
         <AppModeSwitch route={route} onNavigate={onNavigate} compact className="md:hidden" />
         <IconButton
           onClick={() => onNavigate("settings")}

@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Heart, Loader2, Play, RefreshCw, TrendingUp } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useDiscoverFeed } from "@/hooks/useDiscoverFeed";
-import { fetchPopular } from "@/services/catalog";
 import { fetchTrendingMusic } from "@/services/youtube";
-import { looksLikeMusic, trackKey } from "@/services/discover";
+import { looksLikeMusic } from "@/services/discover";
 import { FeedCard, FeedCardSkeleton } from "@/components/FeedCard";
 import { IconButton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
@@ -15,14 +14,10 @@ import type { Track } from "@/types";
 const GRID = "grid grid-cols-1 gap-x-4 gap-y-7 min-[560px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
 const TRENDING_COUNT = 8;
 
-/** YouTube's music chart first; the multi-source popular list if that is unavailable. */
+/** Trending in Bangladesh — YouTube / YouTube Music only. */
 async function fetchTrendingSongs(): Promise<Track[]> {
-  const yt = await fetchTrendingMusic(30).catch(() => [] as Track[]);
-  const list = yt.filter(looksLikeMusic);
-  if (list.length >= TRENDING_COUNT) return list;
-  const popular = await fetchPopular({ limit: 30 }).catch(() => [] as Track[]);
-  const seen = new Set(list.map(trackKey));
-  return [...list, ...popular.filter((t) => !seen.has(trackKey(t)))];
+  const yt = await fetchTrendingMusic(30);
+  return yt.filter(looksLikeMusic);
 }
 
 export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void }) {

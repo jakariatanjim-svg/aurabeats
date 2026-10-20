@@ -4,6 +4,7 @@
  * play together).
  */
 import type { Track } from "@/types";
+import { rememberVideo } from "@/services/video/hints";
 
 let pending: { id: string; at: number } | null = null;
 
@@ -19,6 +20,7 @@ export function watchTrackVideo(t: Track, at: number, pauseMusic: () => void) {
   const id = videoIdOfTrack(t);
   if (!id) return;
   pauseMusic();
+  rememberVideo({ id, title: t.title, author: t.artist, duration: Math.round(t.duration || 0), thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` });
   pending = { id, at: Math.max(0, Math.floor(at)) };
   const path = `/watch/${encodeURIComponent(id)}`;
   if (window.location.pathname !== path) window.history.pushState(null, "", path);

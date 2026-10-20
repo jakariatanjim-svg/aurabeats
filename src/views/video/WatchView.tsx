@@ -4,7 +4,8 @@ import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
-import { getVideo, getVideoInfo, relatedFor } from "@/services/video/api";
+import { findInSearch, getVideo, getVideoInfo, getVideoMeta, mergeInfo, relatedFallback, relatedFor } from "@/services/video/api";
+import { videoHint } from "@/services/video/hints";
 import { takeHandoffStart } from "@/utils/watchVideo";
 import { isNative } from "@/services/video/net";
 import { providerLabel, reportPlayback } from "@/services/video/providers";
@@ -63,26 +64,53 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     };
   }, [id, exclude, embed, nonce]);
 
-  // Website: the player starts right away; info loads alongside it.
+  // Website: the player starts right away; info fills in from every source
+  // in parallel, fastest first:
+  //   card you tapped / watch history (instant) → oEmbed title + channel
+  //   (~60 ms) → search result: views, date, channel, first lines (~0.5 s)
+  //   → full description, likes, subscribers from a server (when YouTube
+  //   lets it open the video — often it doesn't).
+  const [fullPending, setFullPending] = useState(embed);
   useEffect(() => {
     if (!embed) return;
     let alive = true;
-    getVideoInfo(id)
-      .then((m) => {
-        if (!alive) return;
-        setMeta(m);
-        if (m.related.length) setRelated(m.related);
-        else
-          // No server could open this video: build Up next from search.
-          relatedFor(id, m.title, m.author)
-            .then((r) => alive && setRelated(r))
-            .catch(() => alive && setRelated([]));
+    const merge = (m: Partial<VideoDetails> | null | undefined) => {
+      if (alive && m) setMeta((prev) => mergeInfo(id, prev, m));
+    };
+    const known = videoHint(id) ?? videoLibrary.get().history.find((x) => x.id === id);
+    merge(known);
+    setFullPending(true);
+
+    let gotRelated = false;
+    const setUpNext = (r: VideoItem[]) => {
+      if (!alive || gotRelated || !r.length) return;
+      gotRelated = true;
+      setRelated(r);
+    };
+
+    const titled = known?.title
+      ? Promise.resolve({ title: known.title, author: known.author })
+      : getVideoMeta(id)
+          .then((m) => (merge(m), { title: m.title, author: m.author }))
+          .catch(() => null);
+    if (known?.title) getVideoMeta(id).then(merge).catch(() => {});
+
+    const full = getVideoInfo(id)
+      .then((d) => {
+        merge(d);
+        setUpNext(d.related);
       })
-      .catch(() => {
-        relatedFor(id)
-          .then((r) => alive && setRelated(r))
-          .catch(() => alive && setRelated([]));
-      });
+      .catch(() => {})
+      .finally(() => alive && setFullPending(false));
+
+    titled.then((t) => {
+      if (!alive || !t?.title) return;
+      findInSearch(id, t.title).then(merge).catch(() => {});
+      // Up next from search right away; the server's own list wins if it is faster.
+      relatedFallback(id, t.title, t.author)
+        .then(setUpNext)
+        .catch(() => full.then(() => alive && !gotRelated && setRelated([])));
+    });
     return () => {
       alive = false;
     };
@@ -309,23 +337,29 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 )}
               </div>
 
-              {embed && <AdBlockTip />}
-
-              {info.description && (
+              {(info.description || info.snippet) ? (
                 <button
                   type="button"
                   onClick={() => setDescOpen((o) => !o)}
                   className="blur-panel block w-full rounded-2xl p-3.5 text-left"
                 >
                   <p className={cn("text-[13px] leading-relaxed whitespace-pre-wrap break-words text-ink2", !descOpen && "line-clamp-3")}>
-                    <Linkified text={info.description} />
+                    <Linkified text={info.description || info.snippet || ""} />
                   </p>
                   <span className="mt-1.5 flex items-center gap-1 text-xs font-bold text-ink">
                     {descOpen ? "Show less" : "Show more"}
                     <ChevronDown className={cn("h-3.5 w-3.5 transition", descOpen && "rotate-180")} />
                   </span>
                 </button>
-              )}
+              ) : embed && fullPending ? (
+                <div className="blur-panel space-y-2 rounded-2xl p-3.5">
+                  <Skeleton className="h-3 w-11/12" />
+                  <Skeleton className="h-3 w-4/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                </div>
+              ) : null}
+
+              {embed && <AdBlockTip />}
             </>
           ) : (
             <div className="space-y-3">

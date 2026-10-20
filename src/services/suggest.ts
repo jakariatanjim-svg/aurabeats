@@ -12,7 +12,6 @@
  *   2. JioSaavn song names (clean song titles, never "Title - Artist" strings)
  */
 import * as youtube from "./youtube";
-import * as jiosaavn from "./jiosaavn";
 
 const ENDPOINTS = [
   "https://suggestqueries-clients6.youtube.com/complete/search",
@@ -85,19 +84,10 @@ async function fromYouTube(q: string): Promise<string[]> {
   throw new Error("youtube suggest unreachable");
 }
 
-/** Song name only: "Kesariya (From \"Brahmastra\")" → "Kesariya". */
-function cleanSongName(s: string): string {
-  return decodeEntities(s)
-    .replace(/\s*[([](from|feat\.?|ft\.?)[^)\]]*[)\]]/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 async function fromFallbacks(q: string): Promise<string[]> {
+  // YouTube's own suggestions via the servers — never another catalogue.
   const inv = await youtube.fetchSuggestions(q).catch(() => [] as string[]);
-  if (inv.length) return inv.map(decodeEntities);
-  const songs = await jiosaavn.fetchSuggestionItems(q).catch(() => []);
-  return songs.map((s) => cleanSongName(s.title).toLowerCase());
+  return inv.map(decodeEntities);
 }
 
 /** YouTube-style suggestions for what the user has typed so far. */

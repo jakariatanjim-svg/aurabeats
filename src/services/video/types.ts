@@ -14,6 +14,8 @@ export interface VideoItem {
   publishedText?: string;
   live?: boolean;
   thumbnail: string;
+  /** first lines of the description (search results) */
+  snippet?: string;
 }
 
 export interface ChannelItem {

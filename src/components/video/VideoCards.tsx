@@ -5,6 +5,7 @@ import { formatCount, formatTime, gradientFrom, initials, relativeTime } from "@
 import { routeToPath } from "@/routes";
 import type { ChannelItem, VideoItem } from "@/services/video/types";
 import { ytImgProps } from "@/utils/ytImg";
+import { rememberVideo } from "@/services/video/hints";
 
 export function Avatar({ name, src, className }: { name: string; src?: string; className?: string }) {
   const [broken, setBroken] = useState(false);
@@ -80,6 +81,7 @@ export const VideoCard = memo(function VideoCard({
   progress?: number;
   hideChannel?: boolean;
 }) {
+  rememberVideo(v); // the watch page shows this instantly
   return (
     <div className="group min-w-0">
       <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="focus-ring block rounded-2xl" aria-label={v.title}>
@@ -124,6 +126,7 @@ export const VideoRow = memo(function VideoRow({
   progress?: number;
   action?: React.ReactNode;
 }) {
+  rememberVideo(v);
   return (
     <div className="group relative flex gap-3">
       <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="focus-ring w-40 shrink-0 rounded-xl sm:w-44" aria-label={v.title}>

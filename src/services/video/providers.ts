@@ -259,6 +259,7 @@ interface PipedStream {
   uploaded?: number;
   uploadedDate?: string;
   isShort?: boolean;
+  shortDescription?: string;
 }
 
 function pipedItem(s: PipedStream): VideoItem | null {
@@ -277,6 +278,7 @@ function pipedItem(s: PipedStream): VideoItem | null {
     publishedText: s.uploadedDate,
     live: s.duration === -1,
     thumbnail: thumbFor(id),
+    snippet: s.shortDescription || undefined,
   };
 }
 

@@ -4,15 +4,32 @@ import { storage } from "@/utils/storage";
 import { isVideoRoute, type RouteKey } from "@/routes";
 
 const LAST = { music: "lastRoute:music", video: "lastRoute:video" } as const;
+const MODE = "lastMode";
+export type AppMode = "music" | "video";
 
-/** Called by the shell on every navigation so each mode reopens where you left it. */
-export function rememberRoute(route: RouteKey) {
-  storage.set(isVideoRoute(route) ? LAST.video : LAST.music, route);
+/** Settings / About / Privacy belong to both modes. */
+export function isSharedRoute(route: RouteKey): boolean {
+  return route === "settings" || route === "about" || route === "privacy";
 }
 
-export function lastRouteFor(mode: "music" | "video"): RouteKey {
+/** The mode a route belongs to; shared pages keep the mode you came from. */
+export function modeOf(route: RouteKey): AppMode {
+  if (isSharedRoute(route)) return storage.get<AppMode>(MODE, "music") === "video" ? "video" : "music";
+  return isVideoRoute(route) ? "video" : "music";
+}
+
+/** Called by the shell on every navigation so each mode reopens where you
+ *  left it. Shared pages are never remembered (that sent Music → Settings). */
+export function rememberRoute(route: RouteKey) {
+  if (isSharedRoute(route)) return;
+  const mode: AppMode = isVideoRoute(route) ? "video" : "music";
+  storage.set(LAST[mode], route);
+  storage.set(MODE, mode);
+}
+
+export function lastRouteFor(mode: AppMode): RouteKey {
   const r = storage.get<RouteKey | null>(LAST[mode], null);
-  if (r && isVideoRoute(r) === (mode === "video")) return r;
+  if (r && !isSharedRoute(r) && isVideoRoute(r) === (mode === "video")) return r;
   return mode === "video" ? "video" : "home";
 }
 
@@ -30,7 +47,8 @@ export function AppModeSwitch({
   vertical?: boolean;
   className?: string;
 }) {
-  const video = isVideoRoute(route);
+  const video = modeOf(route) === "video";
+  const shared = isSharedRoute(route);
   const opts = [
     { mode: "music" as const, label: "Music", icon: Music2, active: !video },
     { mode: "video" as const, label: "Video", icon: Tv, active: video },
@@ -50,7 +68,7 @@ export function AppModeSwitch({
           title={label}
           aria-label={label}
           data-active={active ? "true" : undefined}
-          onClick={() => (active ? undefined : onNavigate(lastRouteFor(mode)))}
+          onClick={() => (active && !shared ? undefined : onNavigate(lastRouteFor(mode)))}
           className={cn(
             "focus-ring flex flex-1 items-center justify-center gap-1.5 text-xs font-bold transition-all",
             vertical ? "rounded-xl" : "rounded-full",

@@ -126,6 +126,9 @@ interface PlayerContextValue {
   updateSettings: (s: Partial<PlayerSettings>) => void;
   toast: (text: string, tone?: ToastMessage["tone"]) => void;
   dismissToast: (id: number) => void;
+  /** Listening history (device-local). */
+  removeHistory: (id: string) => void;
+  clearHistory: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -826,6 +829,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       updateSettings,
       toast,
       dismissToast,
+      removeHistory: (id: string) => setHistory((prev) => prev.filter((t) => t.id !== id)),
+      clearHistory: () => setHistory([]),
     }),
     [
       isPlayingNow,

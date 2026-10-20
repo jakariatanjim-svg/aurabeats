@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
@@ -43,6 +43,10 @@ function Shell() {
     if (main) main.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  // Address last followed; synthetic / sheet popstates for the same address
+  // (closing the phone search, repeating a search) must not jump to the top.
+  const lastLoc = useRef(window.location.pathname + window.location.search);
+
   const navigate = useCallback((next: RouteKey) => {
     const path = routeToPath(next);
     if (window.location.pathname === path) {
@@ -52,6 +56,7 @@ function Shell() {
     // Replace the bare "/" entry with "/home" so back-navigation stays inside the app.
     if (window.location.pathname === "/") window.history.replaceState(null, "", "/home");
     window.history.pushState(null, "", path);
+    lastLoc.current = path;
     setRoute(next);
     scrollTop();
   }, [scrollTop]);
@@ -59,6 +64,9 @@ function Shell() {
   // keep state in sync with the address bar (back / forward / pasted links)
   useEffect(() => {
     const onPop = () => {
+      const loc = window.location.pathname + window.location.search;
+      if (loc === lastLoc.current) return;
+      lastLoc.current = loc;
       setRoute(pathToRoute(window.location.pathname));
       scrollTop();
     };
@@ -74,6 +82,7 @@ function Shell() {
       if (!anchor) return;
       e.preventDefault();
       window.history.pushState(null, "", anchor.pathname + anchor.search);
+      lastLoc.current = anchor.pathname + anchor.search;
       setRoute(pathToRoute(window.location.pathname));
       scrollTop();
     };
@@ -185,7 +194,7 @@ function Shell() {
                 <PlaylistDetailView playlistId={route.slice("playlist:".length)} onBack={() => navigate("library")} />
               )}
               {route === "video" && <VideoHomeView onNavigate={navigate} />}
-              {route === "video-search" && <VideoSearchView onNavigate={navigate} />}
+              {route === "video-search" && <VideoSearchView />}
               {route === "video-subs" && <VideoSubsView onNavigate={navigate} />}
               {route === "video-library" && <VideoLibraryView />}
               {route.startsWith("watch:") && <WatchView key={route} id={route.slice("watch:".length)} onNavigate={navigate} />}

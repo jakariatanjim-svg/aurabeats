@@ -26,6 +26,7 @@ import { storage } from "@/utils/storage";
 import { Button, SectionHeader } from "@/components/ui";
 import type { ThemeName } from "@/types";
 import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
+import { HistorySection } from "@/components/HistorySection";
 
 /** Environment detection */
 const isCapacitor = typeof window !== "undefined" && Boolean((window as any).Capacitor?.isNativePlatform?.());
@@ -350,6 +351,8 @@ export function SettingsView() {
           </div>
         </div>
       </section>
+
+      <HistorySection />
 
       <section>
         <SectionHeader title="Your data" icon={<Database className="h-4 w-4 text-accent" />} />

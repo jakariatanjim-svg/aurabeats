@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Bookmark, Clock, History, Sparkles, Rss, Search, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { Bookmark, Clock, History, Sparkles, Rss, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
 import { followingFeed, recommendedVideos } from "@/services/video/api";
@@ -9,6 +9,7 @@ import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton, VideoRow } from "@/com
 import { Button, Chip, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { routeToPath, type RouteKey } from "@/routes";
+import { openSearch } from "@/utils/searchNav";
 
 function useProgress() {
   const lib = useVideoLibrary();
@@ -57,13 +58,6 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
     <div className="space-y-10">
       {/* Search entry + promise */}
       <section className="space-y-3">
-        <button
-          type="button"
-          onClick={() => onNavigate("video-search")}
-          className="blur-panel glass-inset flex w-full max-w-2xl items-center gap-3 rounded-full px-5 py-3.5 text-left text-[15px] font-semibold text-ink3 transition hover:text-ink"
-        >
-          <Search className="h-5 w-5" /> Search YouTube or paste a link
-        </button>
         <p className="flex items-center gap-1.5 text-xs text-ink3">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
           {isNative
@@ -141,7 +135,7 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
 
 /* ------------------------------- Following ------------------------------- */
 
-export function VideoSubsView({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
+export function VideoSubsView(_props: { onNavigate?: (r: RouteKey) => void }) {
   const lib = useVideoLibrary();
   const progress = useProgress();
   const { ids, feed } = useFollowingFeed();
@@ -153,7 +147,7 @@ export function VideoSubsView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
       <EmptyState
         title="You're not following any channels yet"
         hint="Search for a channel or open any video and tap Follow. Their newest uploads will show up here, straight from YouTube — no account needed."
-        action={<Button onClick={() => onNavigate("video-search")}>Find channels</Button>}
+        action={<Button onClick={openSearch}>Find channels</Button>}
       />
     );
   }
