@@ -1,10 +1,7 @@
 /**
- * "Trending searches" for the top-bar search panel, built from what is
- * trending right now: Music = Trending in Bangladesh songs (the Home feed's
- * cache when it exists), Video = YouTube trending videos. YouTube only.
+ * "Trending searches" for the top-bar search panel. Video mode only
+ * (YouTube trending videos); Music shows search history alone.
  */
-import { storage } from "@/utils/storage";
-import type { Track } from "@/types";
 import type { SearchMode } from "@/utils/searchHistory";
 
 const memo = new Map<SearchMode, { at: number; list: string[] }>();
@@ -41,14 +38,8 @@ function uniq(list: string[], max = 8): string[] {
 }
 
 async function build(mode: SearchMode): Promise<string[]> {
-  if (mode === "music") {
-    let tracks = storage.get<{ value?: Track[] } | null>("feed:cat:trending-v3", null)?.value ?? [];
-    if (!tracks.length) {
-      const { fetchTrendingMusic } = await import("@/services/youtube");
-      tracks = await fetchTrendingMusic(30);
-    }
-    return uniq(tracks.map((t) => (t.title.split(" ").length < 2 && t.artist ? `${t.title} ${t.artist}` : t.title)));
-  }
+  // Music: no trending list (history only).
+  if (mode === "music") return [];
   const { getTrending } = await import("@/services/video/api");
   return uniq((await getTrending()).map((v) => v.title));
 }

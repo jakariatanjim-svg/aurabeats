@@ -18,10 +18,10 @@ import {
   Trash2,
   Moon,
   AlignLeft,
-  MonitorPlay,
-} from "lucide-react";
+  MonitorPlay, Film } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
+import { videoIdOfTrack, watchTrackVideo, canSaveOffline } from "@/utils/watchVideo";
+import { requestVideoDownload } from "@/services/videoDownload";
 import { formatTime, gradientFrom } from "@/utils/format";
 import { usePlaybackClock, usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, Slider } from "@/components/ui";
@@ -343,8 +343,13 @@ export function FullScreenPlayer() {
               </div>
               <div className="flex items-center justify-center gap-1.5 border-t border-line pt-2.5 sm:gap-3">
                 <IconButton aria-label="Favourite" onClick={() => toggleFavorite(current)} className={cn(fav && "text-accent hover:text-accent")}><Heart className={cn("h-5 w-5", fav && "fill-current")} /></IconButton>
-                <IconButton aria-label={offline ? "Remove from offline" : "Save for offline"} onClick={() => offline ? removeOffline(current.id) : saveOffline(current)} className={cn(offline && "text-cyan-500 hover:text-cyan-500")}>{offline ? <Trash2 className="h-5 w-5" /> : <DownloadCloud className="h-5 w-5" />}</IconButton>
-                <IconButton aria-label="Export file" onClick={() => downloadTrack(current)}><Download className="h-5 w-5" /></IconButton>
+                {(offline || canSaveOffline(current)) && (
+                  <IconButton aria-label={offline ? "Remove from offline" : "Save for offline"} onClick={() => offline ? removeOffline(current.id) : saveOffline(current)} className={cn(offline && "text-cyan-500 hover:text-cyan-500")}>{offline ? <Trash2 className="h-5 w-5" /> : <DownloadCloud className="h-5 w-5" />}</IconButton>
+                )}
+                <IconButton aria-label={videoIdOfTrack(current) ? "Download MP3" : "Export file"} onClick={() => downloadTrack(current)}><Download className="h-5 w-5" /></IconButton>
+                {videoIdOfTrack(current) && (
+                  <IconButton aria-label="Download video" onClick={() => requestVideoDownload({ id: videoIdOfTrack(current)!, title: current.title })}><Film className="h-5 w-5" /></IconButton>
+                )}
                 <IconButton onClick={toggleMute} aria-label="Mute"><VolumeIcon className="h-5 w-5" /></IconButton>
                 <div className="w-24 sm:w-36"><Slider ariaLabel="Volume" value={muted ? 0 : volume * 100} max={100} onChange={(v) => setVolume(v / 100)} height="h-1" /></div>
               </div>

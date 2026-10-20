@@ -1,32 +1,18 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Heart, Loader2, Play, RefreshCw, TrendingUp } from "lucide-react";
-import { useFeed } from "@/hooks/useFeed";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Heart, Loader2, Play, RefreshCw } from "lucide-react";
 import { useDiscoverFeed } from "@/hooks/useDiscoverFeed";
-import { fetchTrendingMusic } from "@/services/youtube";
-import { looksLikeMusic } from "@/services/discover";
 import { FeedCard, FeedCardSkeleton } from "@/components/FeedCard";
 import { IconButton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
 import { usePlayer } from "@/hooks/usePlayer";
-import type { Track } from "@/types";
 
 /** One column on phones (like the YouTube app), more as the screen grows. */
 const GRID = "grid grid-cols-1 gap-x-4 gap-y-7 min-[560px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
-const TRENDING_COUNT = 8;
-
-/** Trending in Bangladesh — YouTube / YouTube Music only. */
-async function fetchTrendingSongs(): Promise<Track[]> {
-  const yt = await fetchTrendingMusic(30);
-  return yt.filter(looksLikeMusic);
-}
 
 export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void }) {
   const { playAll, favorites, history } = usePlayer();
 
-  const trending = useFeed<Track[]>("cat:trending-v3", () => fetchTrendingSongs(), { ttl: 20 * 60 * 1000 });
-  const trendingTop = useMemo(() => (trending.data ?? []).slice(0, TRENDING_COUNT), [trending.data]);
-
-  const feed = useDiscoverFeed(favorites, history, trendingTop);
+  const feed = useDiscoverFeed(favorites, history);
   const hasFavourites = favorites.length > 0;
 
   // Infinite scroll: load the next page when the end of the feed comes near.
@@ -48,30 +34,6 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
 
   return (
     <div className="space-y-10 pb-12">
-      {/* Trending */}
-      <section className="animate-fade-in">
-        <FeedHeader
-          icon={<TrendingUp className="h-5 w-5 text-accent" />}
-          title="Trending in Bangladesh"
-          subtitle="What everyone is listening to right now"
-          onPlayAll={trendingTop.length ? () => playAll(trending.data ?? trendingTop, 0) : undefined}
-          onRefresh={trending.refresh}
-        />
-        {trending.loading && !trending.data ? (
-          <div className={GRID}>
-            {Array.from({ length: 4 }).map((_, i) => <FeedCardSkeleton key={i} />)}
-          </div>
-        ) : (trending.error && !trending.data) || (trending.data && trending.data.length === 0) ? (
-          <ErrorState message={trending.error || "Couldn't load trending songs right now."} onRetry={trending.refresh} />
-        ) : (
-          <div className={GRID}>
-            {trendingTop.map((t, i) => (
-              <FeedCard key={t.id} track={t} context={trending.data ?? trendingTop} priority={i < 3} />
-            ))}
-          </div>
-        )}
-      </section>
-
       {/* For you — infinite, from favourites (= subscriptions) + listening */}
       <section>
         <FeedHeader

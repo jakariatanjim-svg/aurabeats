@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
+import { requestVideoDownload } from "@/services/videoDownload";
+import { Bookmark, BookmarkCheck, ChevronDown, Download, ExternalLink, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -324,6 +325,13 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 </Button>
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
                   <Share2 className="h-3.5 w-3.5" /> Share
+                </Button>
+                <Button
+                  variant="outline"
+                  className="px-3.5 text-xs"
+                  onClick={() => requestVideoDownload({ id, title: info.title, streams: details?.streams })}
+                >
+                  <Download className="h-3.5 w-3.5" /> Download
                 </Button>
                 {!embed && (
                   <Button

@@ -7,6 +7,7 @@ import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
 import { TooltipLayer } from "@/components/Tooltips";
+import { DownloadTray, VideoDownloadSheet } from "@/components/VideoDownloads";
 import { storage } from "@/utils/storage";
 import { YouTubeDock } from "@/components/video/YouTubeDock";
 import { isNative } from "@/services/video/net";
@@ -215,6 +216,8 @@ function Shell() {
       </Suspense>
       <Toaster />
       <TooltipLayer />
+      <VideoDownloadSheet />
+      <DownloadTray />
     </div>
   );
 }

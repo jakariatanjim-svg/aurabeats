@@ -14,12 +14,15 @@ import {
   ExternalLink,
   Download,
   DownloadCloud,
+  Film,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, formatTime, gradientFrom, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, Button, Equalizer, IconButton, Modal } from "@/components/ui";
 import type { Track } from "@/types";
+import { canSaveOffline, videoIdOfTrack } from "@/utils/watchVideo";
+import { requestVideoDownload } from "@/services/videoDownload";
 
 /* --------------------------- contextual helpers --------------------------- */
 
@@ -103,13 +106,19 @@ export function TrackMenu({
     };
   }, [open]);
 
+  const ytId = videoIdOfTrack(track);
   const items: { label: string; sub?: string; icon: ReactNode; run: () => void }[] = [
     { label: "Save to playlist", icon: <Plus className="h-4 w-4" />, run: () => setPickerOpen(true) },
-    offline
-      ? { label: "Remove from offline", sub: "Clear app storage", icon: <Trash2 className="h-4 w-4 text-rose-400" />, run: () => removeOffline(track.id) }
-      : { label: "Save for offline", sub: "Play without internet", icon: <DownloadCloud className="h-4 w-4 text-accent" />, run: () => saveOffline(track) },
-    { label: "Export file", sub: "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) },
   ];
+  if (offline) {
+    items.push({ label: "Remove from offline", sub: "Clear app storage", icon: <Trash2 className="h-4 w-4 text-rose-400" />, run: () => removeOffline(track.id) });
+  } else if (canSaveOffline(track)) {
+    items.push({ label: "Save for offline", sub: "Play without internet", icon: <DownloadCloud className="h-4 w-4 text-accent" />, run: () => saveOffline(track) });
+  }
+  items.push({ label: ytId ? "Download MP3" : "Export file", sub: ytId ? undefined : "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) });
+  if (ytId) {
+    items.push({ label: "Download video", icon: <Film className="h-4 w-4" />, run: () => requestVideoDownload({ id: ytId, title: track.title }) });
+  }
   if (settings.queueEnabled) {
     items.unshift(
       { label: "Play next", icon: <ListEnd className="h-4 w-4" />, run: () => playNext(track) },
@@ -381,7 +390,7 @@ export function TrackRow({
         <Heart className={cn("h-4 w-4", fav && "fill-current")} />
       </IconButton>
 
-      {!track.isLive && (
+      {(offline || canSaveOffline(track)) && (
         <IconButton
           size="sm"
           aria-label={offline ? "Remove from downloads" : "Save for offline"}

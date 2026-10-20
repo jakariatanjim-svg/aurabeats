@@ -35,3 +35,13 @@ export function takeHandoffStart(id: string): number | null {
   pending = null;
   return at;
 }
+
+/**
+ * "Save for offline" keeps the audio file inside the app. YouTube / YouTube
+ * Music streams can't be stored that way, so those songs get the external
+ * MP3 download (and "Download video") instead; other sources can be saved.
+ */
+export function canSaveOffline(t: Track | null | undefined): boolean {
+  if (!t || t.isLive) return false;
+  return t.source !== "youtube" && !t.streamUrl?.startsWith("yt-resolve:");
+}

@@ -15,7 +15,7 @@ import { guessRegion } from "./settings";
 import type { AudioStream, MuxedStream, StreamSet, VideoDetails, VideoStream } from "./types";
 import { thumbFor } from "./types";
 
-const UA =
+export const DEVICE_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
 
 const CLIENT = {
@@ -23,7 +23,7 @@ const CLIENT = {
   clientVersion: "1.02",
   deviceMake: "Apple",
   deviceModel: "RealityDevice17,1",
-  userAgent: UA,
+  userAgent: DEVICE_UA,
   osName: "visionOS",
   osVersion: "26.5.23O471",
   hl: "en",
@@ -75,7 +75,7 @@ export async function devicePlayer(videoId: string): Promise<VideoDetails> {
       method: "POST",
       timeout: 10000,
       headers: {
-        "User-Agent": UA,
+        "User-Agent": DEVICE_UA,
         "X-YouTube-Client-Name": CLIENT_ID,
         "X-YouTube-Client-Version": CLIENT.clientVersion,
         Origin: "https://www.youtube.com",
