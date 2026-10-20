@@ -117,7 +117,7 @@ export function TrackMenu({
   }
   if (track.source !== "local") items.push({ label: ytId ? "Download MP3" : "Export file", sub: ytId ? undefined : "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) });
   if (ytId) {
-    items.push({ label: "Download video", icon: <Film className="h-4 w-4" />, run: () => requestVideoDownload({ id: ytId, title: track.title }) });
+    items.push({ label: "Download video", icon: <Film className="h-4 w-4" />, run: () => requestVideoDownload({ id: ytId, title: track.title, author: track.artist }) });
   }
   if (settings.queueEnabled) {
     items.unshift(

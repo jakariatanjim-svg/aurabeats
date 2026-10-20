@@ -272,7 +272,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const dl = await import("@/services/videoDownload");
       if (dl.inAppVideoDownload) {
         toast(`Downloading "${track.title}"…`, "info");
-        void dl.startAudioDownload(videoId, `${track.artist} - ${track.title}`.replace(/ - Topic\b/i, ""));
+        void dl.startAudioDownload(videoId, track.title, track.artist.replace(/ - Topic$/i, "").trim());
         return;
       }
       const downloaderUrl = dl.audioSiteUrl(videoId);

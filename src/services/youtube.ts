@@ -12,8 +12,8 @@
  */
 import type { Track } from "@/types";
 import { http } from "@/services/video/net";
-import { getTrending, relatedFor, searchVideosOnly } from "@/services/video/api";
-import { race } from "@/services/video/providers";
+import { getTrending, relatedFor, searchVideos, searchVideosOnly } from "@/services/video/api";
+import { race, type SearchFilter } from "@/services/video/providers";
 import type { VideoItem } from "@/services/video/types";
 
 /** Small, fast thumbnail (320x180) for lists; the large one for the player. */
@@ -56,6 +56,42 @@ export async function searchTracks(query: string, limit = 60): Promise<Track[]> 
   if (songs.length >= Math.min(limit, 12)) return songs.slice(0, limit);
   const videos = toTracks(await searchVideosOnly(q, "videos").catch(() => [] as VideoItem[]));
   return dedupe([...songs, ...videos]).slice(0, limit);
+}
+
+export interface TrackPage {
+  tracks: Track[];
+  /** opaque — pass back for the next page; absent = nothing more */
+  next?: string;
+}
+interface MusicCursor {
+  f: SearchFilter;
+  c?: string; // the server's continuation token
+  s?: string; // the server that issued it
+}
+
+/**
+ * Endless song search, like the YouTube Music app: YouTube Music's "Songs"
+ * results page after page; when that list runs out, matching videos
+ * (covers, live versions, lyric videos…) keep coming the same way.
+ */
+export async function searchTracksPage(query: string, cursor?: string): Promise<TrackPage> {
+  const q = query.trim();
+  if (!q) return { tracks: [] };
+  const cur: MusicCursor = cursor ? (JSON.parse(cursor) as MusicCursor) : { f: "music_songs" };
+  let page;
+  try {
+    page = await searchVideos(q, cur.c, cur.s, cur.f);
+  } catch (err) {
+    if (cur.f === "music_songs" && !cur.c) return searchTracksPage(q, JSON.stringify({ f: "videos" } satisfies MusicCursor));
+    throw err;
+  }
+  const videos = page.items.filter((i): i is Extract<typeof i, { kind: "video" }> => i.kind === "video").map(({ kind: _k, ...v }) => v as VideoItem);
+  const next: MusicCursor | null = page.next
+    ? { f: cur.f, c: page.next, s: page.source }
+    : cur.f === "music_songs"
+      ? { f: "videos" }
+      : null;
+  return { tracks: toTracks(videos), next: next ? JSON.stringify(next) : undefined };
 }
 
 /**

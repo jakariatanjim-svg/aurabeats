@@ -350,7 +350,7 @@ export function FullScreenPlayer() {
                   <IconButton aria-label={videoIdOfTrack(current) ? "Download MP3" : "Export file"} onClick={() => downloadTrack(current)}><Download className="h-5 w-5" /></IconButton>
                 )}
                 {videoIdOfTrack(current) && (
-                  <IconButton aria-label="Download video" onClick={() => requestVideoDownload({ id: videoIdOfTrack(current)!, title: current.title })}><Film className="h-5 w-5" /></IconButton>
+                  <IconButton aria-label="Download video" onClick={() => requestVideoDownload({ id: videoIdOfTrack(current)!, title: current.title, author: current.artist })}><Film className="h-5 w-5" /></IconButton>
                 )}
                 <IconButton onClick={toggleMute} aria-label="Mute"><VolumeIcon className="h-5 w-5" /></IconButton>
                 <div className="w-24 sm:w-36"><Slider ariaLabel="Volume" value={muted ? 0 : volume * 100} max={100} onChange={(v) => setVolume(v / 100)} height="h-1" /></div>

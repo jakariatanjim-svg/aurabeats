@@ -17,7 +17,7 @@ import {
 
 const mb = (n?: number) => (n && n > 0 ? (n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`) : "");
 
-/** APK: pick a quality, the app downloads it into Download/AuraBeats. */
+/** APK: pick a quality, the app downloads it into Download/AuraBeats/Videos. */
 export function VideoDownloadSheet() {
   const req = useSyncExternalStore(videoRequest.subscribe, videoRequest.get);
   const { toast } = usePlayer();
@@ -71,7 +71,7 @@ export function VideoDownloadSheet() {
               key={o.key}
               type="button"
               onClick={() => {
-                void startVideoDownload(req.id, req.title, o);
+                void startVideoDownload(req.id, req.title, o, req.author);
                 toast(`Downloading ${o.label}…`, "info");
                 close();
               }}
@@ -111,7 +111,7 @@ export function DownloadTray() {
     for (const j of jobs) {
       if (j.status !== "done" || told.current.has(j.id)) continue;
       told.current.add(j.id);
-      toast("Saved to Download/AuraBeats", "success");
+      toast(`Saved to Download/AuraBeats/${j.kind === "audio" ? "Music" : "Videos"}`, "success");
     }
   }, [jobs, toast]);
 

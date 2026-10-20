@@ -62,10 +62,10 @@ function toTrack(t: SCTrack): Track {
   };
 }
 
-export async function searchTracks(query: string, limit = 15): Promise<Track[]> {
+export async function searchTracks(query: string, limit = 15, offset = 0): Promise<Track[]> {
   for (const cid of CLIENT_IDS) {
     try {
-      const url = `${SC_SEARCH}?q=${encodeURIComponent(query)}&limit=${limit}&client_id=${cid}`;
+      const url = `${SC_SEARCH}?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}&client_id=${cid}`;
       const data = await fetchViaProxy<{ collection: SCTrack[] }>(url);
       const tracks = (data.collection ?? []).map(toTrack);
       if (tracks.length > 0) return tracks;

@@ -6,7 +6,7 @@
  *    button uses.
  *  - Android app: downloads inside the app. The phone fetches the streams it
  *    already uses for playback and the native VideoSaver plugin joins picture
- *    + sound into one MP4 in Download/AuraBeats. APKs built before the plugin
+ *    + sound into one MP4 in Download/AuraBeats/Videos. APKs built before the plugin
  *    existed fall back to the website.
  */
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
@@ -16,7 +16,22 @@ import type { StreamSet } from "@/services/video/types";
 export const videoSiteUrl = (id: string) => `https://www.youtubeprint.com/watch?v=${encodeURIComponent(id)}`;
 
 interface VideoSaverPlugin {
-  download(o: { id: string; videoUrl: string; audioUrl?: string; fileName: string; mime: string; userAgent: string }): Promise<void>;
+  download(o: {
+    id: string;
+    videoUrl: string;
+    audioUrl?: string;
+    fileName: string;
+    mime: string;
+    userAgent: string;
+    /** written into the file: cover picture (first URL that loads), title, artist */
+    thumbUrls?: string[];
+    title?: string;
+    artist?: string;
+    /** sub-folder of Download/AuraBeats */
+    folder?: "Music" | "Videos";
+    /** songs: centre square of the 16:9 thumbnail */
+    squareCover?: boolean;
+  }): Promise<void>;
   cancel(o: { id: string }): Promise<void>;
   open(o: { uri: string; mime: string }): Promise<void>;
   addListener(event: "progress", fn: (d: { id: string; phase: "download" | "merge"; done: number; total: number }) => void): Promise<PluginListenerHandle>;
@@ -126,6 +141,9 @@ function wire() {
   });
 }
 
+/** Largest thumbnail first; YouTube has no maxres one for some uploads. */
+const thumbUrls = (id: string) => ["maxresdefault", "sddefault", "hqdefault"].map((n) => `https://i.ytimg.com/vi/${id}/${n}.jpg`);
+
 const safeName = (s: string) =>
   s
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
@@ -133,7 +151,7 @@ const safeName = (s: string) =>
     .trim()
     .slice(0, 120) || "video";
 
-export async function startVideoDownload(videoId: string, title: string, opt: DlOption): Promise<void> {
+export async function startVideoDownload(videoId: string, title: string, opt: DlOption, author?: string): Promise<void> {
   wire();
   const { DEVICE_UA } = await import("@/services/video/innertube");
   const id = `${videoId}-${opt.key}-${Date.now().toString(36)}`;
@@ -147,6 +165,10 @@ export async function startVideoDownload(videoId: string, title: string, opt: Dl
       fileName: `${safeName(title)} (${opt.label}).${opt.ext}`,
       mime: opt.mime,
       userAgent: DEVICE_UA,
+      thumbUrls: thumbUrls(videoId),
+      title,
+      artist: author,
+      folder: "Videos",
     });
   } catch (e) {
     patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
@@ -156,11 +178,13 @@ export async function startVideoDownload(videoId: string, title: string, opt: Dl
 export const audioSiteUrl = (id: string) => `https://www.youtubemz.com/watch?v=${encodeURIComponent(id)}`;
 
 /**
- * APK: a song straight to Download/AuraBeats as .m4a — YouTube's own audio
- * (AAC, best bitrate), no conversion, nothing to tap on a website.
+ * APK: a song straight to Download/AuraBeats/Music as .m4a — YouTube's own
+ * audio (AAC, best bitrate), no conversion, nothing to tap on a website —
+ * with its cover art, title and artist inside the file.
  */
-export async function startAudioDownload(videoId: string, name: string): Promise<void> {
+export async function startAudioDownload(videoId: string, title: string, artist = ""): Promise<void> {
   wire();
+  const name = artist ? `${artist} - ${title}` : title;
   const id = `${videoId}-audio-${Date.now().toString(36)}`;
   jobs = [{ id, kind: "audio", videoId, title: name, label: "M4A", mime: "audio/mp4", status: "running", done: 0, total: 0 }, ...jobs];
   emit();
@@ -170,7 +194,18 @@ export async function startAudioDownload(videoId: string, name: string): Promise
     const aac = [...s.audio.filter((a) => a.mime.startsWith("audio/mp4"))].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
     if (!aac) throw new Error("no audio stream");
     patch(id, { total: clen(aac.url) });
-    await VideoSaver.download({ id, videoUrl: aac.url, fileName: `${safeName(name)}.m4a`, mime: "audio/mp4", userAgent: DEVICE_UA });
+    await VideoSaver.download({
+      id,
+      videoUrl: aac.url,
+      fileName: `${safeName(name)}.m4a`,
+      mime: "audio/mp4",
+      userAgent: DEVICE_UA,
+      thumbUrls: thumbUrls(videoId),
+      title,
+      artist,
+      folder: "Music",
+      squareCover: true,
+    });
   } catch (e) {
     patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
   }
@@ -184,6 +219,7 @@ export const openDownloadedVideo = (j: DlJob) => (j.uri ? VideoSaver.open({ uri:
 export interface VideoRequest {
   id: string;
   title: string;
+  author?: string;
   streams?: StreamSet;
 }
 

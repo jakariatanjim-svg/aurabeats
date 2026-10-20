@@ -329,7 +329,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 <Button
                   variant="outline"
                   className="px-3.5 text-xs"
-                  onClick={() => requestVideoDownload({ id, title: info.title, streams: details?.streams })}
+                  onClick={() => requestVideoDownload({ id, title: info.title, author: info.author, streams: details?.streams })}
                 >
                   <Download className="h-3.5 w-3.5" /> Download
                 </Button>

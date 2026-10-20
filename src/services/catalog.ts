@@ -74,6 +74,20 @@ export async function searchOtherSources(query: string, limit = 60): Promise<Tra
     .slice(0, limit);
 }
 
+/** One page of the other catalogues (page 0, 1, 2…); each source pages itself. */
+export async function searchOtherSourcesPage(query: string, cursor?: string): Promise<{ items: Track[]; next?: string }> {
+  const page = cursor ? Number(cursor) || 0 : 0;
+  const [sc, js, au, ja, ia] = await Promise.all([
+    cap(soundcloud.searchTracks(query, 20, page * 20), []),
+    cap(jiosaavn.searchTracks(query, 25, page), []),
+    cap(audius.searchTracks(query, { limit: 15, offset: page * 15 }), []),
+    cap(jamendo.searchTracks(query, 12, page * 12), []),
+    cap(archive.searchTracks(query, { limit: 10, page: page + 1 }), []),
+  ]);
+  const items = dedupe([...sc, ...js, ...au, ...ja, ...ia]).sort((a, b) => scoreTrack(query, b) - scoreTrack(query, a));
+  return { items, next: items.length ? String(page + 1) : undefined };
+}
+
 /** YouTube Music only (kept for callers that used the old mixed search). */
 export async function searchEverything(query: string, opts: CatalogQuery = {}): Promise<Track[]> {
   return searchYTMusic(query, opts.limit ?? 80);

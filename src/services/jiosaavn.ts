@@ -68,10 +68,10 @@ function normalize(raw: Record<string, unknown>): Track | null {
   };
 }
 
-export async function searchTracks(query: string, limit = 20): Promise<Track[]> {
+export async function searchTracks(query: string, limit = 20, page = 0): Promise<Track[]> {
   try {
     const json = await raceFetch<Record<string, unknown>>(
-      `/api/search/songs?query=${encodeURIComponent(query)}&limit=${limit}`
+      `/api/search/songs?query=${encodeURIComponent(query)}&limit=${limit}${page ? `&page=${page}` : ""}`
     );
     const results = (json.data as { results?: Record<string, unknown>[] } | undefined)?.results ?? [];
     return results.map(normalize).filter((t): t is Track => t !== null);

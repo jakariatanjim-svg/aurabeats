@@ -170,6 +170,13 @@ export async function race<T>(
 }
 
 export const providerKey = keyOf;
+/** Inverse of providerKey — keeps paging on the server that gave page 1. */
+export function providerFromKey(key: string): Provider | null {
+  const i = key.indexOf(":");
+  const kind = key.slice(0, i);
+  const base = key.slice(i + 1);
+  return (kind === "piped" || kind === "invidious") && /^https?:\/\//.test(base) ? { kind, base } : null;
+}
 export function providerLabel(source: string): string {
   if (source === "device") return "on this device";
   const host = source.replace(/^\w+:/, "").replace(/^https?:\/\//, "");

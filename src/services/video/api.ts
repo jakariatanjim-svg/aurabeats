@@ -17,6 +17,7 @@ import {
   EmptyChannelError,
   providerChannel,
   providerDetails,
+  providerFromKey,
   providerKey,
   providerSearch,
   providerTrending,
@@ -224,15 +225,15 @@ export interface SearchResult extends SearchPage {
   source: string;
 }
 
-let lastSearchProvider: Provider | null = null;
-export async function searchVideos(q: string, cursor?: string, source?: string): Promise<SearchResult> {
-  return cached(`s:${q}:${cursor ?? ""}`, 10 * 60 * 1000, async () => {
-    if (cursor && source && lastSearchProvider && providerKey(lastSearchProvider) === source) {
-      const page = await providerSearch(lastSearchProvider, q, cursor);
-      return { ...page, source };
-    }
-    const { value, provider } = await race((p) => providerSearch(p, q), { stagger: 700, max: 6 });
-    lastSearchProvider = provider;
+/**
+ * One page of results. Page 1 races the servers; every later page goes back
+ * to the same server with its continuation token (tokens only work there).
+ */
+export async function searchVideos(q: string, cursor?: string, source?: string, filter: SearchFilter = "all"): Promise<SearchResult> {
+  return cached(`s:${filter}:${q}:${source ?? ""}:${cursor ?? ""}`, 10 * 60 * 1000, async () => {
+    const same = cursor && source ? providerFromKey(source) : null;
+    if (same) return { ...(await providerSearch(same, q, cursor, filter)), source: source! };
+    const { value, provider } = await race((p) => providerSearch(p, q, undefined, filter), { stagger: 700, max: 6 });
     return { ...value, source: providerKey(provider) };
   });
 }
