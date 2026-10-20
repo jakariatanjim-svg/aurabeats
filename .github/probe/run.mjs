@@ -30,7 +30,7 @@ await step("home", async () => {
 });
 
 await step("sheet", async () => {
-  await page.click('header button[aria-label="Search"]');
+  await page.click('header button[aria-label="Search"]:visible');
   await page.waitForSelector('[role=dialog][aria-label=Search] input');
   const focused = await page.evaluate(() => document.activeElement?.tagName);
   await page.waitForTimeout(3000);
@@ -58,7 +58,7 @@ await step("sheet", async () => {
 });
 
 await step("history in sheet", async () => {
-  await page.click('header button[aria-label="Search"]');
+  await page.click('header button[aria-label="Search"]:visible');
   await page.waitForTimeout(800);
   const rows = await page.$$eval('[role=dialog] [role=option]', (r) => r.map((x) => x.textContent.trim()));
   log("sheet rows now:", rows.slice(0, 3).join(" / "));
@@ -67,28 +67,10 @@ await step("history in sheet", async () => {
   log("after back: sheet", !!(await page.$('[role=dialog][aria-label=Search]')), "url", page.url().replace("http://localhost:4173", ""));
 });
 
-await step("mode switch", async () => {
-  await page.click('header [role=tab][aria-label=Video]');
-  await page.waitForTimeout(800);
-  log("-> video:", page.url().replace("http://localhost:4173", ""));
-  await page.click('header button[aria-label="Open settings"]');
-  await page.waitForTimeout(800);
-  const sel = await page.$$eval('header [role=tab]', (t) => t.map((x) => `${x.getAttribute("aria-label")}=${x.getAttribute("aria-selected")}`));
-  log("on settings tabs:", sel.join(" "), page.url().replace("http://localhost:4173", ""));
-  await page.click('header [role=tab][aria-label=Music]');
-  await page.waitForTimeout(800);
-  log("settings -> music:", page.url().replace("http://localhost:4173", ""));
-  await page.click('header [role=tab][aria-label=Video]');
-  await page.waitForTimeout(500);
-  await page.click('header [role=tab][aria-label=Music]');
-  await page.waitForTimeout(500);
-  log("video -> music:", page.url().replace("http://localhost:4173", ""));
-});
-
 await step("video search + watch", async () => {
   await page.goto("http://localhost:4173/video");
   await page.waitForTimeout(1500);
-  await page.click('header button[aria-label="Search"]');
+  await page.click('header button[aria-label="Search"]:visible');
   await page.fill('[role=dialog] input', "coke studio bangla");
   await page.keyboard.press("Enter");
   await page.waitForSelector('main a[href^="/watch/"]', { timeout: 20000 });
@@ -134,33 +116,4 @@ await step("video search + watch", async () => {
   log(`direct watch: title ${tt}ms "${st.h}", desc ${st.d}, upnext ${st.r}, meta "${st.v.slice(0, 40)}"`);
 });
 
-await step("settings history", async () => {
-  await page.goto("http://localhost:4173/settings");
-  await page.waitForSelector("text=Stored only on this device");
-  const tabs = await page.$$eval("section:has-text('Stored only on this device') button", (b) => b.slice(0, 4).map((x) => x.textContent.trim()));
-  log("history tabs:", tabs.join(" | "));
-});
-
-// ---------- desktop ----------
-const d = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
-await step("desktop", async () => {
-  await d.goto("http://localhost:4173/home");
-  await d.waitForTimeout(4000);
-  const side = await d.$$eval("aside button, aside a", (b) => b.map((x) => x.textContent.trim()).filter(Boolean).slice(0, 12));
-  log("sidebar:", side.join(" | "));
-  await d.click('header input[type=search]');
-  await d.waitForTimeout(3000);
-  const rows = await d.$$eval('header [role=option]', (r) => r.map((x) => x.textContent.trim()));
-  log("desktop panel rows:", rows.length, rows.slice(0, 5).join(" / "));
-  await d.keyboard.type("tum hi");
-  await d.waitForTimeout(1500);
-  await d.keyboard.press("ArrowDown");
-  const val = await d.inputValue('header input[type=search]');
-  await d.keyboard.press("Enter");
-  await d.waitForTimeout(600);
-  log("desktop arrow pick:", val, "->", decodeURIComponent(d.url().replace("http://localhost:4173", "")));
-  await d.screenshot({ path: "/tmp/d.png" });
-});
-
 await browser.close(); server.close();
-// 1792496781
