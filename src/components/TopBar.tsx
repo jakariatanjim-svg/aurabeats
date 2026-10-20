@@ -1,3 +1,4 @@
+import { Floating } from "@/components/Floating";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Droplets, Moon, Palette, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -53,11 +54,13 @@ function AccentPicker() {
   const { accent, setAccent } = useTheme();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!wrapRef.current?.contains(t) && !popRef.current?.contains(t)) setOpen(false);
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
@@ -72,7 +75,8 @@ function AccentPicker() {
         />
       </IconButton>
       {open && (
-        <div className="blur-panel surface-raised absolute top-12 right-0 z-[70] w-[15rem] animate-scale-in p-3.5 shadow-2xl">
+        <Floating anchor={wrapRef} align="right" layerRef={popRef}>
+        <div className="blur-panel surface-raised w-[15rem] animate-scale-in p-3.5 shadow-2xl">
           <p className="mb-2.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">
             <Palette className="h-3 w-3" /> Accent colour
           </p>
@@ -109,6 +113,7 @@ function AccentPicker() {
             Accents tint every control, progress bar and glow in real time.
           </p>
         </div>
+        </Floating>
       )}
     </div>
   );

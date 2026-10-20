@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type Keyboa
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowUpLeft, History, Search, TrendingUp, X } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { Floating } from "@/components/Floating";
 import { useDebouncedValue } from "@/hooks/useFeed";
 import { fetchSearchSuggestions } from "@/services/catalog";
 import { cachedTrendingSearches, trendingSearches } from "@/services/trendingSearches";
@@ -67,6 +68,7 @@ export function TopSearch({
   const deskInput = useRef<HTMLInputElement>(null);
   const sheetInput = useRef<HTMLInputElement>(null);
   const deskBox = useRef<HTMLDivElement>(null);
+  const deskPop = useRef<HTMLDivElement>(null);
   const sheetPushed = useRef(false);
 
   const all = useSearchHistory();
@@ -132,7 +134,8 @@ export function TopSearch({
   useEffect(() => {
     if (!panel) return;
     const onDown = (e: PointerEvent) => {
-      if (!deskBox.current?.contains(e.target as Node)) setPanel(false);
+      const t = e.target as Node;
+      if (!deskBox.current?.contains(t) && !deskPop.current?.contains(t)) setPanel(false);
     };
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
@@ -316,10 +319,13 @@ export function TopSearch({
             <Search className="h-4 w-4" />
           </button>
         </div>
+        {/* in <body>, so it stays above the video player */}
         {panel && rows.length > 0 && (
-          <div className="blur-panel surface-raised absolute top-full right-0 left-0 z-[70] mt-2 max-h-[min(70vh,34rem)] animate-fade-in overflow-y-auto rounded-2xl py-2 shadow-2xl">
-            {list}
-          </div>
+          <Floating anchor={deskBox} layerRef={deskPop}>
+            <div className="blur-panel surface-raised max-h-[min(70vh,34rem)] animate-fade-in overflow-y-auto rounded-2xl py-2 shadow-2xl">
+              {list}
+            </div>
+          </Floating>
         )}
       </div>
 

@@ -125,9 +125,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const ended = state === YTState.ENDED;
   const touch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
 
+  // Did WE (the user, music starting…) pause it? Anything else that stops
+  // the video is a stall the player recovers from by itself.
+  const wantPlay = useRef(true);
   const call = useCallback((fn: keyof YTPlayer, ...args: unknown[]): unknown => {
     const p = playerRef.current;
     if (!p || !readyRef.current) return undefined;
+    if (fn === "pauseVideo") wantPlay.current = false;
+    else if (fn === "playVideo" || fn === "loadVideoById") wantPlay.current = true;
     try {
       return (p[fn] as unknown as (...a: unknown[]) => unknown).apply(p, args);
     } catch {
@@ -236,6 +241,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setTime(d.startAt);
     setDuration(0);
     setState(YTState.UNSTARTED);
+    recover.current = { since: 0, step: 0, reloaded: false };
     if (!needsUnmuteRef.current) call("unMute");
     call("loadVideoById", { videoId: d.id!, startSeconds: Math.floor(d.startAt) });
   }, [d.claim, d.id, d.startAt, call]);
@@ -304,6 +310,15 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   /* ------------------------------ polling ------------------------------- */
   const lastSave = useRef(0);
   const stuck = useRef({ t: -1, since: 0 });
+  // Stall recovery. Switching the sound on makes YouTube fetch an ad; when an
+  // extension (or the browser) blocks that request, YouTube sits paused /
+  // buffering until its ad wait times out (~15–20 s). Not an ad and nothing
+  // the user asked for, so: play again → nudge the position → reload the same
+  // video at the same second (with sound). A real ad (YouTube says PLAYING)
+  // is never touched.
+  const recover = useRef({ since: 0, step: 0, reloaded: false });
+  const errRef = useRef<string | null>(null);
+  errRef.current = error;
   useEffect(() => {
     if (!ready) return;
     const iv = setInterval(() => {
@@ -346,6 +361,38 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         leaveAd();
       }
       stuck.current.t = t;
+
+      const rec = recover.current;
+      const stalled =
+        startedRef.current &&
+        wantPlay.current &&
+        dock.get().mode !== "none" &&
+        !adRef.current &&
+        !errRef.current &&
+        !advancing &&
+        (s === YTState.PAUSED || s === YTState.BUFFERING || s === YTState.UNSTARTED || s === YTState.CUED);
+      if (!stalled) {
+        if (advancing) {
+          rec.since = 0;
+          rec.step = 0;
+        }
+      } else {
+        const now = Date.now();
+        if (!rec.since) rec.since = now;
+        const age = now - rec.since;
+        if (rec.step === 0 && age > (s === YTState.BUFFERING ? 1500 : 500)) {
+          rec.step = 1;
+          call("playVideo");
+        } else if (rec.step === 1 && age > 3500) {
+          rec.step = 2;
+          call("seekTo", t + 0.1, true);
+          call("playVideo");
+        } else if (rec.step === 2 && age > 6500 && !rec.reloaded && dock.get().id) {
+          rec.step = 3;
+          rec.reloaded = true; // once per video — a real network problem shouldn't loop
+          call("loadVideoById", { videoId: dock.get().id!, startSeconds: t });
+        }
+      }
 
       const lv = call("getAvailableQualityLevels");
       if (Array.isArray(lv)) {
