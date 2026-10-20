@@ -6,11 +6,12 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - run: npm ci && npm run build
       - run: npm i --no-save playwright@1
         working-directory: .github/probe
       - run: node run.mjs > out.txt 2>&1 || true

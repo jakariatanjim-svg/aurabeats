@@ -1,32 +1,165 @@
 import http from "node:http";
+import fs from "node:fs";
 import { chromium } from "playwright";
-const server = http.createServer((req, res) => { res.setHeader("Content-Type", "text/html"); res.end("<p>x</p>"); });
+const html = fs.readFileSync("../../dist/index.html");
+const server = http.createServer((req, res) => { res.setHeader("Content-Type", "text/html"); res.end(html); });
 await new Promise((r) => server.listen(4173, r));
 const browser = await chromium.launch({ channel: "chrome" });
-const page = await browser.newPage();
-await page.goto("http://localhost:4173/");
-const out = await page.evaluate(async () => {
-  const hit = async (url) => {
-    const t0 = performance.now();
-    try {
-      const c = new AbortController(); setTimeout(() => c.abort(), 12000);
-      const r = await fetch(url, { signal: c.signal });
-      const j = await r.text();
-      let info = "";
-      try { const d = JSON.parse(j); info = d.error ? `error=${String(d.error).slice(0, 40)} ${String(d.message || "").slice(0, 60)}` : `title=${!!d.title} desc=${(d.description || "").length} rel=${(d.relatedStreams || []).length} vs=${(d.videoStreams || []).length} heights=${[...new Set((d.videoStreams || []).map((s) => s.height))].join(",")}`; } catch { info = j.slice(0, 50); }
-      return `${r.status} ${Math.round(performance.now() - t0)}ms ${info}`;
-    } catch (e) { return `ERR ${e.message} ${Math.round(performance.now() - t0)}ms`; }
-  };
-  const ids = ["dQw4w9WgXcQ", "kJQP7kiw5Fk", "JGwWNGJdvx8", "hT_nvWreIhg", "RgKAFK5djSk", "9bZkp7q19f0", "jNQXAC9IVRw", "OPf0YbXqDm0"];
-  const lines = [];
-  await Promise.all(ids.flatMap((id) => [
-    hit(`https://pipedapi.ducks.party/streams/${id}`).then((r) => lines.push(`ducks ${id}: ${r}`)),
-    hit(`https://api.piped.private.coffee/streams/${id}`).then((r) => lines.push(`coffee ${id}: ${r}`)),
-  ]));
-  lines.push("oembed: " + (await hit("https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))));
-  lines.push("noembed: " + (await hit("https://noembed.com/embed?url=" + encodeURIComponent("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))));
-  lines.push("piped trending: " + (await hit("https://pipedapi.ducks.party/trending?region=BD")).slice(0, 40));
-  return lines.sort();
+const log = (...a) => console.log(...a);
+const OTHER = /jiosaavn|saavn|soundcloud|audius|jamendo|archive\.org/i;
+const t0 = Date.now();
+const T = () => ((Date.now() - t0) / 1000).toFixed(1) + "s";
+
+async function step(name, fn) {
+  try { await fn(); } catch (e) { log(`!! ${name}: ${String(e.message).split("\n")[0]}`); }
+}
+
+// ---------- phone ----------
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+const other = [];
+page.on("request", (r) => { if (OTHER.test(r.url())) other.push(r.url().slice(0, 80)); });
+page.on("pageerror", (e) => log("pageerror", e.message));
+
+await step("home", async () => {
+  await page.goto("http://localhost:4173/home");
+  await page.waitForTimeout(6000);
+  const nav = await page.$$eval("nav.ab-navbar button", (b) => b.map((x) => x.textContent.trim()));
+  log("mobile nav:", nav.join(" | "));
+  log("other-source requests on home:", other.length, other.slice(0, 3).join(" "));
 });
-console.log(out.join("\n"));
+
+await step("sheet", async () => {
+  await page.click('header button[aria-label="Search"]');
+  await page.waitForSelector('[role=dialog][aria-label=Search] input');
+  const focused = await page.evaluate(() => document.activeElement?.tagName);
+  await page.waitForTimeout(3000);
+  const rows = await page.$$eval('[role=dialog] [role=option]', (r) => r.map((x) => x.textContent.trim()));
+  const hdr = await page.$$eval('[role=dialog] p', (r) => r.map((x) => x.textContent.trim()));
+  log("sheet focused:", focused, "rows:", rows.length, "headers:", hdr.join(","), "first:", rows.slice(0, 4).join(" / "));
+  await page.fill('[role=dialog] input', "arijit");
+  await page.waitForTimeout(2000);
+  const sug = await page.$$eval('[role=dialog] [role=option]', (r) => r.map((x) => x.textContent.trim()));
+  log("suggestions:", sug.length, sug.slice(0, 4).join(" / "));
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  log("url after enter:", page.url().replace("http://localhost:4173", ""), "sheet open:", !!(await page.$('[role=dialog][aria-label=Search]')));
+  await page.waitForSelector("text=/found/", { timeout: 15000 });
+  log(T(), "music results:", await page.textContent("text=/found/"));
+  const topbar = await page.$eval("header", (h) => h.innerText.replace(/\s+/g, " ").slice(0, 60));
+  log("topbar on results:", topbar);
+  log("other-source requests after yt search:", other.length);
+  await page.click("text=Other Sources");
+  await page.waitForTimeout(6000);
+  log("other-source requests after tab:", other.length);
+  await page.goBack();
+  await page.waitForTimeout(800);
+  log("url after back:", page.url().replace("http://localhost:4173", ""));
+});
+
+await step("history in sheet", async () => {
+  await page.click('header button[aria-label="Search"]');
+  await page.waitForTimeout(800);
+  const rows = await page.$$eval('[role=dialog] [role=option]', (r) => r.map((x) => x.textContent.trim()));
+  log("sheet rows now:", rows.slice(0, 3).join(" / "));
+  await page.goBack(); // android back closes sheet
+  await page.waitForTimeout(500);
+  log("after back: sheet", !!(await page.$('[role=dialog][aria-label=Search]')), "url", page.url().replace("http://localhost:4173", ""));
+});
+
+await step("mode switch", async () => {
+  await page.click('header [role=tab][aria-label=Video]');
+  await page.waitForTimeout(800);
+  log("-> video:", page.url().replace("http://localhost:4173", ""));
+  await page.click('header button[aria-label="Open settings"]');
+  await page.waitForTimeout(800);
+  const sel = await page.$$eval('header [role=tab]', (t) => t.map((x) => `${x.getAttribute("aria-label")}=${x.getAttribute("aria-selected")}`));
+  log("on settings tabs:", sel.join(" "), page.url().replace("http://localhost:4173", ""));
+  await page.click('header [role=tab][aria-label=Music]');
+  await page.waitForTimeout(800);
+  log("settings -> music:", page.url().replace("http://localhost:4173", ""));
+  await page.click('header [role=tab][aria-label=Video]');
+  await page.waitForTimeout(500);
+  await page.click('header [role=tab][aria-label=Music]');
+  await page.waitForTimeout(500);
+  log("video -> music:", page.url().replace("http://localhost:4173", ""));
+});
+
+await step("video search + watch", async () => {
+  await page.goto("http://localhost:4173/video");
+  await page.waitForTimeout(1500);
+  await page.click('header button[aria-label="Search"]');
+  await page.fill('[role=dialog] input', "coke studio bangla");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector('main a[href^="/watch/"]', { timeout: 20000 });
+  log(T(), "video url:", page.url().replace("http://localhost:4173", ""));
+  const hrefs = await page.$$eval('main a[href^="/watch/"]', (a) => [...new Set(a.map((x) => x.getAttribute("href")))]);
+  log("video results:", hrefs.length);
+  for (const h of hrefs.slice(0, 3)) {
+    await page.goto("http://localhost:4173/video/search?q=coke%20studio%20bangla");
+    await page.waitForSelector(`main a[href="${h}"]`, { timeout: 20000 });
+    const s = Date.now();
+    await page.click(`main a[href="${h}"] >> nth=1`);
+    await page.waitForSelector("main h1", { timeout: 15000 });
+    const tTitle = Date.now() - s;
+    let desc = 0, tDesc = -1, rel = 0, tRel = -1, views = "";
+    for (let i = 0; i < 40; i++) {
+      await page.waitForTimeout(250);
+      const st = await page.evaluate(() => ({
+        d: document.querySelector("main .line-clamp-3, main p.whitespace-pre-wrap")?.textContent?.length ?? 0,
+        r: document.querySelectorAll("main aside a[href^='/watch/']").length,
+        v: document.querySelector("main h1 + p")?.textContent ?? "",
+      }));
+      if (st.d && tDesc < 0) { tDesc = Date.now() - s; desc = st.d; }
+      if (st.r && tRel < 0) { tRel = Date.now() - s; rel = st.r; }
+      views = st.v;
+      if (tDesc >= 0 && tRel >= 0 && i > 16) break;
+    }
+    const d2 = await page.evaluate(() => document.querySelector("main p.whitespace-pre-wrap")?.textContent?.length ?? 0);
+    const ch = await page.evaluate(() => [...document.querySelectorAll("main button")].some((b) => /^Follow/.test(b.textContent)));
+    log(`watch ${h}: title ${tTitle}ms, desc ${desc}ch @${tDesc}ms (final ${d2}), upnext ${rel} @${tRel}ms, meta "${views.slice(0, 40)}", follow=${ch}`);
+  }
+  // direct open (no card hint)
+  const s = Date.now();
+  await page.goto("http://localhost:4173/watch/kJQP7kiw5Fk");
+  await page.waitForSelector("main h1", { timeout: 15000 });
+  const tt = Date.now() - s;
+  await page.waitForTimeout(5000);
+  const st = await page.evaluate(() => ({
+    h: document.querySelector("main h1")?.textContent,
+    d: document.querySelector("main p.whitespace-pre-wrap")?.textContent?.length ?? 0,
+    r: document.querySelectorAll("main aside a[href^='/watch/']").length,
+    v: document.querySelector("main h1 + p")?.textContent ?? "",
+  }));
+  log(`direct watch: title ${tt}ms "${st.h}", desc ${st.d}, upnext ${st.r}, meta "${st.v.slice(0, 40)}"`);
+});
+
+await step("settings history", async () => {
+  await page.goto("http://localhost:4173/settings");
+  await page.waitForSelector("text=Stored only on this device");
+  const tabs = await page.$$eval("section:has-text('Stored only on this device') button", (b) => b.slice(0, 4).map((x) => x.textContent.trim()));
+  log("history tabs:", tabs.join(" | "));
+});
+
+// ---------- desktop ----------
+const d = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+await step("desktop", async () => {
+  await d.goto("http://localhost:4173/home");
+  await d.waitForTimeout(4000);
+  const side = await d.$$eval("aside button, aside a", (b) => b.map((x) => x.textContent.trim()).filter(Boolean).slice(0, 12));
+  log("sidebar:", side.join(" | "));
+  await d.click('header input[type=search]');
+  await d.waitForTimeout(3000);
+  const rows = await d.$$eval('header [role=option]', (r) => r.map((x) => x.textContent.trim()));
+  log("desktop panel rows:", rows.length, rows.slice(0, 5).join(" / "));
+  await d.keyboard.type("tum hi");
+  await d.waitForTimeout(1500);
+  await d.keyboard.press("ArrowDown");
+  const val = await d.inputValue('header input[type=search]');
+  await d.keyboard.press("Enter");
+  await d.waitForTimeout(600);
+  log("desktop arrow pick:", val, "->", decodeURIComponent(d.url().replace("http://localhost:4173", "")));
+  await d.screenshot({ path: "/tmp/d.png" });
+});
+
 await browser.close(); server.close();
