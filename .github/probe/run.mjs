@@ -59,58 +59,30 @@ async function ytInfo(page) {
   if (!f) return "noframe";
   return f.evaluate(() => { const p = document.querySelector("#movie_player"); return `q=${p?.getPlaybackQuality?.()} inner=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} st=${p?.getPlayerState?.()}`; }).catch((e) => "err " + e.message.slice(0, 60));
 }
-const t0s = Date.now();
-{
-  const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
-  const page = await ctx.newPage();
-  let t = Date.now();
-  await page.goto("http://localhost:4173/home");
-  const n = await page.waitForFunction(() => document.querySelectorAll("article[role=button]").length >= 3, null, { timeout: 30000 }).then(() => true).catch(() => false);
-  log(`music home: trending cards ${n ? "ok" : "MISSING"} in ${Date.now() - t}ms; first="${await page.evaluate(() => document.querySelector("article[role=button]")?.getAttribute("aria-label"))}" count=${await page.evaluate(() => document.querySelectorAll("article[role=button]").length)}`);
-  const imgs = await page.evaluate(() => [...document.querySelectorAll("article img")].slice(0, 3).map((i) => `${i.currentSrc.split("/").slice(-2).join("/")} ${i.complete ? "loaded" : "pending"}`).join(", "));
-  log(`  imgs: ${imgs}`);
-  t = Date.now();
-  await page.goto("http://localhost:4173/search");
-  const inp = await page.$("input[type=search], input");
-  await inp.fill("arijit singh");
-  await inp.press("Enter");
-  const ok = await page.waitForFunction(() => document.body.innerText.includes("Arijit") && document.querySelectorAll("img").length > 5, null, { timeout: 30000 }).then(() => true).catch(() => false);
-  log(`music search: ${ok ? "results" : "NONE"} in ${Date.now() - t}ms`);
-  await ctx.close();
-}
 for (const [name, ctxOpts] of Object.entries({
   desktop: { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 },
+  laptop2x: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 },
   phone: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
+  tablet: { viewport: { width: 820, height: 1180 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 })) {
   const ctx = await browser.newContext(ctxOpts);
   const page = await ctx.newPage();
-  const t = Date.now();
   await page.goto("http://localhost:4173/watch/dQw4w9WgXcQ");
-  const rel = await page.waitForFunction(() => [...document.querySelectorAll("a[href^='/watch/']")].filter((a) => !a.href.includes("dQw4w9WgXcQ")).length >= 3, null, { timeout: 30000 }).then(() => true).catch(() => false);
-  log(`${name} watch: up next ${rel ? "ok" : "EMPTY"} in ${Date.now() - t}ms (${await page.evaluate(() => new Set([...document.querySelectorAll("a[href^='/watch/']")].map((a) => a.href)).size)} links)`);
-  await page.waitForTimeout(8000);
-  const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
-  const res = [];
-  for (let f = 0; f < 3; f++) { res.push(midScore(await page.screenshot({ clip: box }))); await page.waitForTimeout(600); }
-  log(`  ${await ytInfo(page)} host="${await page.evaluate(() => document.querySelector(".fixed iframe").parentElement.getAttribute("style"))}"\n   ${res.join(" | ")}`);
-  if (name === "desktop") {
-    for (const q of ["1080p", "360p", "2160p", "Auto"]) {
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.move(box.x + box.width / 2 + 5, box.y + box.height / 2);
-      await page.click('.fixed button[aria-label="Settings"]').catch((e) => log("no settings " + e.message.slice(0, 50)));
-      await page.waitForTimeout(300);
-      await page.locator(".fixed button", { hasText: /^Quality/ }).first().click({ timeout: 5000 }).catch((e) => log("no quality row " + e.message.slice(0, 50)));
-      await page.waitForTimeout(300);
-      const items = await page.evaluate(() => [...document.querySelectorAll(".ab-menu-list button")].map((b) => b.innerText.replace(/\s+/g, " ").trim()).join(" / "));
-      await page.locator(".ab-menu-list button", { hasText: q }).first().click({ timeout: 5000 }).catch((e) => log("no item " + q));
-      const t1 = Date.now();
-      let got = "";
-      for (let i = 0; i < 16; i++) { await page.waitForTimeout(500); got = await ytInfo(page); if ((q === "1080p" && got.includes("hd1080")) || (q === "360p" && got.includes("q=medium")) || (q === "2160p" && got.includes("hd2160"))) break; }
-      log(`  pick ${q}: menu=[${items}] -> ${got} after ${Date.now() - t1}ms`);
-    }
-    const res2 = [];
-    for (let f = 0; f < 3; f++) { res2.push(midScore(await page.screenshot({ clip: box }))); await page.waitForTimeout(600); }
-    log(`  after picks: ${res2.join(" | ")}`);
+  await page.waitForTimeout(14000);
+  const f = page.frames().find((fr) => fr.url().includes("youtube-nocookie.com/embed/"));
+  for (const at of [43, 70, 100]) {
+    await f.evaluate((at) => { const p = document.querySelector("#movie_player"); p.pauseVideo(); p.seekTo(at, true); }, at);
+    await page.waitForTimeout(2500);
+    const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
+    // hide our own overlay (controls) so only the picture is measured
+    await page.addStyleTag({ content: ".fixed > .touch-none { opacity: 0 !important }" });
+    const zoom = midScore(await page.screenshot({ clip: box }));
+    const old = await page.evaluate(() => { const h = document.querySelector(".fixed iframe").parentElement; const st = h.getAttribute("style"); const k = parseFloat(h.style.zoom); const fh = h.parentElement.offsetHeight; h.style.zoom = ""; h.style.top = -fh / 2 + "px"; h.style.height = (2 * fh) / k + "px"; h.style.transform = `scale(${k})`; h.style.transformOrigin = "0 0"; return st; });
+    await page.waitForTimeout(1500);
+    const scale = midScore(await page.screenshot({ clip: box }));
+    await page.evaluate((st) => { const h = document.querySelector(".fixed iframe").parentElement; h.setAttribute("style", st); }, old);
+    await page.waitForTimeout(800);
+    log(`${name} t=${at}: NEW zoom ${zoom}  ||  OLD scale ${scale}`);
   }
   await ctx.close();
 }
