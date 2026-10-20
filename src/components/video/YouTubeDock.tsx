@@ -116,7 +116,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [scrub, setScrub] = useState<number | null>(null);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
   const [fs, setFs] = useState<"off" | "native" | "css">("off");
-  const [frame, setFrame] = useState({ w: 0, h: 0, boxH: 0 });
+  const [frame, setFrame] = useState({ w: 0, h: 0, boxH: 0, x: 0, y: 0 });
   const [miniPos, setMiniPos] = useState(() => storage.get<{ side: "l" | "r"; y: number }>("video:miniPos", { side: "r", y: 0 }));
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
 
@@ -526,10 +526,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         const key = `${r.left}|${r.top}|${r.width}|${r.height}|${top}|${bottom}|${radius}`;
         if (key !== last) {
           last = key;
-          box.style.left = `${r.left}px`;
-          box.style.top = `${r.top}px`;
-          box.style.width = `${r.width}px`;
-          box.style.height = `${r.height}px`;
+          // snapped to device pixels (no sub-pixel video layer)
+          const dpr = window.devicePixelRatio || 1;
+          const px = (v: number) => `${Math.round(v * dpr) / dpr}px`;
+          box.style.left = px(r.left);
+          box.style.top = px(r.top);
+          box.style.width = px(r.width);
+          box.style.height = px(r.height);
           box.style.borderRadius = radius;
           box.style.clipPath = top || bottom ? `inset(${top}px 0 ${bottom}px 0 round ${radius})` : "";
           box.style.visibility = r.width && top < r.height && bottom < r.height ? "visible" : "hidden";
@@ -555,8 +558,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     const ro = new ResizeObserver(() => {
       const W = box.clientWidth;
       const H = box.clientHeight;
-      const w = Math.min(W, (H * 16) / 9);
-      setFrame({ w: Math.round(w), h: Math.round((w * 9) / 16), boxH: H });
+      // Whole pixels only (size and position): half-pixel offsets on the
+      // video layer can show up as a thin line on some GPUs.
+      const w = Math.floor(Math.min(W, (H * 16) / 9));
+      const h = Math.floor((w * 9) / 16);
+      setFrame({ w, h, boxH: H, x: Math.round((W - w) / 2), y: Math.round((H - h) / 2) });
     });
     ro.observe(box);
     return () => ro.disconnect();
@@ -796,7 +802,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const hostStyle: React.CSSProperties = ad
     ? { left: 0, top: 0, width: fw, height: fh } // full player while an ad runs (its Skip button is at the bottom)
     : k === 1
-      ? { left: 0, top: -fh / 2, width: layoutW, height: fh * 2 }
+      ? { left: 0, top: -Math.round(fh / 2), width: layoutW, height: fh * 2 }
       : // CSS zoom, not transform: scale(). A scaled iframe is drawn from
         // tiles at full size and then shrunk, which left a thin seam line
         // across the middle of the picture (measured on Chrome; fullscreen
@@ -849,8 +855,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       {/* the YouTube iframe, cropped so only the picture shows */}
       <div
         ref={frameRef}
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden"
-        style={{ width: frame.w || "100%", height: frame.h || "100%" }}
+        className="absolute overflow-hidden"
+        style={frame.w ? { left: frame.x, top: frame.y, width: frame.w, height: frame.h } : { inset: 0 }}
       >
         <div
           ref={hostRef}

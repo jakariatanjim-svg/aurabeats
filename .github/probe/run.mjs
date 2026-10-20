@@ -61,28 +61,23 @@ async function ytInfo(page) {
 }
 for (const [name, ctxOpts] of Object.entries({
   desktop: { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 },
-  laptop2x: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 },
   phone: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
-  tablet: { viewport: { width: 820, height: 1180 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 })) {
   const ctx = await browser.newContext(ctxOpts);
   const page = await ctx.newPage();
   await page.goto("http://localhost:4173/watch/dQw4w9WgXcQ");
-  await page.waitForTimeout(14000);
-  const f = page.frames().find((fr) => fr.url().includes("youtube-nocookie.com/embed/"));
-  for (const at of [43, 70, 100]) {
-    await f.evaluate((at) => { const p = document.querySelector("#movie_player"); p.pauseVideo(); p.seekTo(at, true); }, at);
+  await page.waitForTimeout(12000);
+  const rects = await page.evaluate(() => { const ifr = document.querySelector(".fixed iframe"); const h = ifr.parentElement, w = h.parentElement, box = w.parentElement; const r = (e) => { const b = e.getBoundingClientRect(); return `${b.left.toFixed(2)},${b.top.toFixed(2)} ${b.width.toFixed(2)}x${b.height.toFixed(2)}`; }; return `box=${r(box)} wrap=${r(w)} iframe=${r(ifr)}`; });
+  log(`${name}: ${rects} ${await ytInfo(page)}`);
+  if (name === "desktop") {
+    const box = await page.evaluate(() => { const b = document.querySelector(".fixed").getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(box.x + box.width / 2 + 5, box.y + box.height / 2);
+    await page.click('.fixed button[aria-label="Settings"]');
+    await page.locator(".fixed button", { hasText: /^Quality/ }).first().click({ timeout: 5000 });
+    await page.locator(".ab-menu-list button", { hasText: "1080p" }).first().click({ timeout: 5000 });
     await page.waitForTimeout(2500);
-    const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
-    // hide our own overlay (controls) so only the picture is measured
-    await page.addStyleTag({ content: ".fixed > .touch-none { opacity: 0 !important }" });
-    const zoom = midScore(await page.screenshot({ clip: box }));
-    const old = await page.evaluate(() => { const h = document.querySelector(".fixed iframe").parentElement; const st = h.getAttribute("style"); const k = parseFloat(h.style.zoom); const fh = h.parentElement.offsetHeight; h.style.zoom = ""; h.style.top = -fh / 2 + "px"; h.style.height = (2 * fh) / k + "px"; h.style.transform = `scale(${k})`; h.style.transformOrigin = "0 0"; return st; });
-    await page.waitForTimeout(1500);
-    const scale = midScore(await page.screenshot({ clip: box }));
-    await page.evaluate((st) => { const h = document.querySelector(".fixed iframe").parentElement; h.setAttribute("style", st); }, old);
-    await page.waitForTimeout(800);
-    log(`${name} t=${at}: NEW zoom ${zoom}  ||  OLD scale ${scale}`);
+    log(`  picked 1080p -> ${await ytInfo(page)}`);
   }
   await ctx.close();
 }
