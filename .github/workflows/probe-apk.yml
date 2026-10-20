@@ -1,0 +1,45 @@
+name: "Probe — APK compile (temporary)"
+on:
+  push:
+    paths: [".github/probe/**"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm ci
+      - run: npm run build
+      - run: |
+          npx cap add android
+          npx cap sync android
+      - name: Add native video downloader
+        run: |
+          PKG_DIR=android/app/src/main/java/dev/pages/aurabeats
+          echo "--- generated MainActivity:"; cat "$PKG_DIR/MainActivity.java"
+          cp native/android/VideoSaverPlugin.java native/android/MainActivity.java "$PKG_DIR/"
+          grep -n "minSdkVersion\|compileSdkVersion\|targetSdkVersion" android/variables.gradle || true
+      - name: Resolve Kotlin stdlib conflict
+        run: |
+          cat >> android/build.gradle << 'G'
+
+          subprojects {
+              configurations.all {
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+                  exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+              }
+          }
+          G
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/gradle.log
+          ls -lh app/build/outputs/apk/debug/
+      - name: Report
+        if: always()
+        run: |
+          grep -E "error:|warning: \[|BUILD (SUCCESSFUL|FAILED)" /tmp/gradle.log | head -40 | while read -r l; do echo "::warning::$l"; done
