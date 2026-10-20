@@ -11,11 +11,10 @@ const browser = await chromium.launch({ channel: "chrome", args: ["--host-resolv
 {
   const page = await browser.newPage();
   await page.goto("http://aurabeats.test:4173/");
-  const out = await page.evaluate(() => window.runCors());
-  log("##### innertube from a browser page (origin http://aurabeats.test)");
-  for (const [k, v] of Object.entries(out)) log(" ", k.padEnd(52), v);
+  const out = await page.evaluate(() => window.runNet());
+  for (const v of out) log(v);
 }
-{
+if (false) {
   log("\n##### quality levels per video (embed, getAvailableQualityLevels after playing)");
   const page = await browser.newPage();
   await page.goto("http://localhost:4173/q");

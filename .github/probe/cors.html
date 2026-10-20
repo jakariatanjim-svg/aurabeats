@@ -1,26 +1,55 @@
-<!doctype html><html><body><p>cors</p>
+<!doctype html><html><body><p>net</p>
 <script>
 const KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 const WEB = { clientName: "WEB", clientVersion: "2.20251015.01.00", hl: "en", gl: "BD" };
 const REMIX = { clientName: "WEB_REMIX", clientVersion: "1.20251015.01.00", hl: "en", gl: "BD" };
-async function call(base, ep, client, body) {
+async function hit(url, init) {
   const t0 = performance.now();
   try {
-    const r = await fetch(`${base}/youtubei/v1/${ep}?prettyPrint=false&key=${KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ context: { client }, ...body }) });
+    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(url, { ...init, signal: ctrl.signal });
     const txt = await r.text();
-    return `${r.status} ${Math.round(performance.now() - t0)}ms ${txt.length}B ${txt.slice(0, 0)}` + (txt.includes("videoId") ? " has-videoId" : "") + (txt.includes("musicResponsiveListItemRenderer") ? " music-items" : "") + (txt.includes("compactVideoRenderer") || txt.includes("lockupViewModel") ? " related" : "");
-  } catch (e) { return "CORS/ERR " + e.message + ` ${Math.round(performance.now() - t0)}ms`; }
+    const n = (txt.match(/"videoId"|"url":"\/watch/g) || []).length;
+    return `${r.status} ${Math.round(performance.now() - t0)}ms ${txt.length}B ids=${n}` + (txt.includes("relatedStreams") || txt.includes("recommendedVideos") || txt.includes("compactVideoRenderer") || txt.includes("lockupViewModel") ? " RELATED" : "") + (r.status >= 400 ? " " + txt.slice(0, 80).replace(/\s+/g, " ") : "");
+  } catch (e) { return "ERR " + e.message + ` ${Math.round(performance.now() - t0)}ms`; }
 }
-window.runCors = async () => {
-  const out = {};
-  for (const base of ["https://youtubei.googleapis.com", "https://www.youtube.com", "https://music.youtube.com"]) {
-    out[base + " search WEB"] = await call(base, "search", WEB, { query: "bangla song" });
-    out[base + " next WEB"] = await call(base, "next", WEB, { videoId: "dQw4w9WgXcQ" });
-    out[base + " browse trending"] = await call(base, "browse", WEB, { browseId: "FEtrending" });
-    out[base + " search REMIX"] = await call(base, "search", REMIX, { query: "arijit singh", params: "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D" });
-    out[base + " next REMIX (radio)"] = await call(base, "next", REMIX, { videoId: "dQw4w9WgXcQ", playlistId: "RDAMVMdQw4w9WgXcQ" });
-    out[base + " browse REMIX home"] = await call(base, "browse", REMIX, { browseId: "FEmusic_home" });
+const it = (ep, client, body) => ({ url: `https://www.youtube.com/youtubei/v1/${ep}?prettyPrint=false`, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ context: { client }, ...body }) } });
+const PROX = {
+  corsproxy: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  allorigins: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  codetabs: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+  thingproxy: (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
+  corseu: (u) => `https://cors.eu.org/${u}`,
+  everyorigin: (u) => `https://everyorigin.jwvbremen.nl/api/get?url=${encodeURIComponent(u)}`,
+  whateverorigin: (u) => `https://whateverorigin.org/get?url=${encodeURIComponent(u)}`,
+  cors_lol: (u) => `https://api.cors.lol/?url=${encodeURIComponent(u)}`,
+};
+const PIPED = ["https://pipedapi.ducks.party","https://api.piped.private.coffee","https://pipedapi.reallyaweso.me","https://pipedapi.darkness.services","https://pipedapi.orangenet.cc","https://pipedapi.drgns.space","https://api.piped.yt","https://pipedapi.kavin.rocks","https://pipedapi.adminforge.de","https://pipedapi.leptons.xyz","https://pipedapi.nosebs.ru","https://piped-api.privacy.com.de","https://pipedapi.ngn.tf","https://pipedapi.r4fo.com"];
+const INV = ["https://invidious.f5.si","https://inv.nadeko.net","https://invidious.nerdvpn.de","https://yewtu.be","https://invidious.tiekoetter.com","https://iv.melmac.space","https://invidious.privacyredirect.com","https://inv.tux.pizza","https://invidious.jing.rocks","https://iv.ggtyler.dev","https://invidious.reallyaweso.me","https://invidious.materialio.us"];
+window.runNet = async () => {
+  const out = [];
+  const jobs = [];
+  for (const b of PIPED) {
+    jobs.push(hit(`${b}/search?q=bangla%20song&filter=videos`).then((r) => out.push(`piped ${b} search: ${r}`)));
+    jobs.push(hit(`${b}/streams/dQw4w9WgXcQ`).then((r) => out.push(`piped ${b} streams: ${r}`)));
   }
-  return out;
+  for (const b of INV) {
+    jobs.push(hit(`${b}/api/v1/search?q=bangla%20song&type=video`).then((r) => out.push(`inv ${b} search: ${r}`)));
+    jobs.push(hit(`${b}/api/v1/videos/dQw4w9WgXcQ?fields=recommendedVideos,title`).then((r) => out.push(`inv ${b} video: ${r}`)));
+  }
+  const rss = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw";
+  const sugg = "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&q=arijit";
+  for (const [name, p] of Object.entries(PROX)) {
+    jobs.push(hit(p(rss)).then((r) => out.push(`proxy ${name} GET rss: ${r}`)));
+    const s = it("search", WEB, { query: "bangla song" });
+    jobs.push(hit(p(s.url), s.init).then((r) => out.push(`proxy ${name} POST innertube search: ${r}`)));
+    const n = it("next", WEB, { videoId: "dQw4w9WgXcQ" });
+    jobs.push(hit(p(n.url), n.init).then((r) => out.push(`proxy ${name} POST innertube next: ${r}`)));
+    const m = { url: "https://music.youtube.com/youtubei/v1/search?prettyPrint=false", init: { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ context: { client: REMIX }, query: "arijit singh", params: "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D" }) } };
+    jobs.push(hit(p(m.url), m.init).then((r) => out.push(`proxy ${name} POST ytmusic search: ${r}`)));
+    jobs.push(hit(p("https://www.youtube.com/results?search_query=bangla+song")).then((r) => out.push(`proxy ${name} GET results html: ${r}`)));
+  }
+  await Promise.all(jobs);
+  return out.sort();
 };
 </script></body></html>
