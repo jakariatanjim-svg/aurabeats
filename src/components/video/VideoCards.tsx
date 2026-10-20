@@ -4,6 +4,7 @@ import { cn } from "@/utils/cn";
 import { formatCount, formatTime, gradientFrom, initials, relativeTime } from "@/utils/format";
 import { routeToPath } from "@/routes";
 import type { ChannelItem, VideoItem } from "@/services/video/types";
+import { ytImgProps } from "@/utils/ytImg";
 
 export function Avatar({ name, src, className }: { name: string; src?: string; className?: string }) {
   const [broken, setBroken] = useState(false);
@@ -35,9 +36,10 @@ function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; cl
   return (
     <div className={cn("relative aspect-video w-full overflow-hidden rounded-2xl bg-ink/[0.06]", className)}>
       <img
-        src={src}
+        {...(src === v.thumbnail ? ytImgProps(src) : { src })}
         alt=""
         loading="lazy"
+        decoding="async"
         referrerPolicy="no-referrer"
         onError={() => src !== `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg` && setSrc(`https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`)}
         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"

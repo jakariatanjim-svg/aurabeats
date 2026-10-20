@@ -51,6 +51,9 @@ import { videoLibrary } from "@/hooks/useVideoLibrary";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
 import { loadYT, QUALITY_WIDTH, qualityLabel, qualityTag, YT_ERRORS, YTState, type YTPlayer } from "./yt";
+
+const Q_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
+const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -98,6 +101,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [ad, setAd] = useState(false);
   const [qPref, setQPref] = useState(() => storage.get<string>("video:ytQuality", "auto"));
   const [levels, setLevels] = useState<string[]>([]);
+  // Levels YouTube listed but never delivered for this video (checked live).
+  const [unavailable, setUnavailable] = useState<string[]>([]);
+  const [qNote, setQNote] = useState<string | null>(null);
+  const qCheck = useRef<{ q: string; at: number } | null>(null);
+  const maxSeen = useRef(-1);
   const [tracks, setTracks] = useState<{ languageCode: string; displayName: string }[]>([]);
   const [cc, setCc] = useState<string | null>(null);
   const [controls, setControls] = useState(true);
@@ -217,6 +225,10 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setError(null);
     setAd(false);
     setLevels([]);
+    setUnavailable([]);
+    setQNote(null);
+    qCheck.current = null;
+    maxSeen.current = -1;
     setTracks([]);
     setCc(null);
     setTime(d.startAt);
@@ -309,7 +321,23 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         setLevels((old) => (old.join() === clean.join() ? old : clean));
       }
       const q = call("getPlaybackQuality");
-      if (typeof q === "string" && q) setQuality(q);
+      if (typeof q === "string" && q) {
+        setQuality(q);
+        if (s === YTState.PLAYING) maxSeen.current = Math.max(maxSeen.current, qRank(q));
+        // A picked level that YouTube never reaches isn't really there for this
+        // video (the embed lists the whole ladder for some) → drop it.
+        const chk = qCheck.current;
+        if (chk && s === YTState.PLAYING) {
+          if (qRank(q) >= qRank(chk.q)) qCheck.current = null;
+          else if (Date.now() - chk.at > 12000) {
+            qCheck.current = null;
+            if (qRank(chk.q) > maxSeen.current) {
+              setUnavailable((u) => (u.includes(chk.q) ? u : [...u, chk.q]));
+              setQNote(`${qualityLabel(chk.q)} isn't available for this video`);
+            }
+          }
+        }
+      }
 
       const meta = dock.get().meta;
       if (meta && meta.id === dock.get().id && t > 1 && Date.now() - lastSave.current > 5000) {
@@ -759,15 +787,37 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const fh = frame.h || 1;
   // Auto: like youtube.com — size × screen density, but never below 720p.
   const autoW = Math.max(fw * Math.min(2, window.devicePixelRatio || 1), QUALITY_WIDTH.hd720);
-  const layoutW = ad ? fw : qPref !== "auto" && QUALITY_WIDTH[qPref] ? QUALITY_WIDTH[qPref] : autoW;
+  // Only the levels this video really has: YouTube's list minus the ones it
+  // never delivered. A saved preference above them falls back to the best.
+  const realLevels = levels.filter((q) => !unavailable.includes(q));
+  const effQ = qPref === "auto" ? "auto" : realLevels.length && !realLevels.includes(qPref) ? (realLevels.find((q) => qRank(q) <= qRank(qPref)) ?? realLevels[realLevels.length - 1]) : qPref;
+  const layoutW = ad ? fw : effQ !== "auto" && QUALITY_WIDTH[effQ] ? QUALITY_WIDTH[effQ] : autoW;
   const k = fw / layoutW;
   const hostStyle: React.CSSProperties = ad
     ? { left: 0, top: 0, width: fw, height: fh } // full player while an ad runs (its Skip button is at the bottom)
-    : { left: 0, top: -fh / 2, width: layoutW, height: ((layoutW * 9) / 16) * 2, transform: k === 1 ? undefined : `scale(${k})`, transformOrigin: "0 0" };
+    : k === 1
+      ? { left: 0, top: -fh / 2, width: layoutW, height: fh * 2 }
+      : // CSS zoom, not transform: scale(). A scaled iframe is drawn from
+        // tiles at full size and then shrunk, which left a thin seam line
+        // across the middle of the picture (measured on Chrome; fullscreen
+        // had no line only because it isn't scaled). With zoom the page is
+        // drawn at the final size — no seam — while YouTube still sees the
+        // big layout width and keeps the chosen quality.
+        // Lengths on a zoomed element are in its own (pre-zoom) units.
+        { left: 0, top: -fh / 2 / k, width: layoutW, height: (fh * 2) / k, zoom: k };
   const pickQuality = (q: string) => {
     setQPref(q);
     storage.set("video:ytQuality", q);
     setMenu(null);
+    setQNote(null);
+    qCheck.current = q === "auto" ? null : { q, at: Date.now() };
+    // YouTube keeps playing what it already buffered at the old quality, so a
+    // change could take half a minute to show. Re-seeking to the same moment
+    // (after the new size applies) drops that buffer → switches right away.
+    setTimeout(() => {
+      const t = Number(call("getCurrentTime")) || 0;
+      if (t > 0) call("seekTo", t, true);
+    }, 350);
   };
   const pickCc = (lang: string | null) => {
     if (lang) {
@@ -1082,7 +1132,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                           <MenuRow
                             icon={<SlidersHorizontal className="h-4 w-4" />}
                             label="Quality"
-                            value={qPref === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(qPref)}
+                            value={effQ === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(effQ)}
                             onClick={() => setMenu("quality")}
                           />
                           {tracks.length > 0 && (
@@ -1098,15 +1148,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                         <>
                           <SubHead title="Quality" onBack={() => setMenu("main")} />
                           <div className="ab-menu-list">
-                            {[...levels, "auto"].map((q) => (
-                              <MenuPick key={q} on={qPref === q} onClick={() => pickQuality(q)}>
+                            {[...realLevels, "auto"].map((q) => (
+                              <MenuPick key={q} on={effQ === q} onClick={() => pickQuality(q)}>
                                 {q === "auto" ? `Auto${qualityLabel(quality) !== "Auto" ? ` (${qualityLabel(quality)})` : ""}` : qualityLabel(q)}
                                 {qualityTag(q) && <sup className="ml-1 text-[9px] font-black text-red-400">{qualityTag(q)}</sup>}
                               </MenuPick>
                             ))}
                           </div>
                           {levels.length === 0 && <p className="px-4 py-2 text-[11px] text-white/55">Loading qualities from YouTube…</p>}
-                          {qPref !== "auto" && qualityLabel(quality) !== qualityLabel(qPref) && (
+                          {qNote && <p className="px-4 pt-1 pb-1.5 text-[11px] text-amber-300/90">{qNote}</p>}
+                          {effQ !== "auto" && qualityLabel(quality) !== qualityLabel(effQ) && (
                             <p className="px-4 pt-1 pb-1.5 text-[11px] text-white/55">Switching… now {qualityLabel(quality)}</p>
                           )}
                         </>

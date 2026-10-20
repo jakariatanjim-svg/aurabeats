@@ -21,22 +21,17 @@ export interface Provider {
   base: string; // API base, no trailing slash
 }
 
-// Ordered by what actually played in a real browser (checked Oct 2026).
-// Many big instances have since disabled their API or stream proxy, so the
-// list is short; runtime discovery + scoring keeps it up to date.
+// The only public servers that answered from a browser in Oct 2026 (search,
+// related videos and channel pages ~1 s). Every other built-in instance had
+// died or dropped CORS, and each dead one cost a timeout before the next try.
+// Runtime discovery + scoring still picks up new ones.
 const BUILTIN: Provider[] = [
   { kind: "piped", base: "https://pipedapi.ducks.party" },
-  { kind: "invidious", base: "https://invidious.f5.si" },
   { kind: "piped", base: "https://api.piped.private.coffee" },
-  { kind: "piped", base: "https://pipedapi.reallyaweso.me" },
-  { kind: "piped", base: "https://pipedapi.darkness.services" },
-  { kind: "piped", base: "https://pipedapi.orangenet.cc" },
-  { kind: "piped", base: "https://pipedapi.drgns.space" },
-  { kind: "piped", base: "https://api.piped.yt" },
 ];
 
 /** Instances that answer but have their API / streams disabled. */
-const BLOCKED = /inv\.nadeko\.net|nadeko\.ygg|yewtu\.be|nerdvpn|tiekoetter|chocolatemoo53|thepixora|pipedapi\.kavin\.rocks|adminforge|leptons/;
+const BLOCKED = /inv\.nadeko\.net|nadeko\.ygg|yewtu\.be|nerdvpn|tiekoetter|chocolatemoo53|thepixora|pipedapi\.kavin\.rocks|adminforge|leptons|invidious\.f5\.si|reallyaweso|darkness\.services|orangenet|drgns|api\.piped\.yt|r4fo|nosebs|ngn\.tf|privacy\.com\.de/;
 
 const DISCOVERY_KEY = "video:instances";
 const SCORE_KEY = "video:instanceScore";
@@ -144,30 +139,33 @@ export async function race<T>(
   return new Promise((resolve, reject) => {
     let settled = false;
     let failed = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    list.forEach((p, i) => {
-      timers.push(
-        setTimeout(() => {
+    let started = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Start the next server after `stagger` ms — or right away when one fails,
+    // so a dead server never costs a full wait.
+    const launch = () => {
+      clearTimeout(timer);
+      if (settled || started >= list.length) return;
+      const p = list[started++];
+      task(p)
+        .then((value) => {
+          mark(p, true);
           if (settled) return;
-          task(p)
-            .then((value) => {
-              mark(p, true);
-              if (settled) return;
-              settled = true;
-              timers.forEach(clearTimeout);
-              resolve({ value, provider: p });
-            })
-            .catch(() => {
-              mark(p, false);
-              failed++;
-              if (!settled && failed === list.length) {
-                settled = true;
-                reject(new Error("All ad-free servers are busy right now"));
-              }
-            });
-        }, i * stagger),
-      );
-    });
+          settled = true;
+          clearTimeout(timer);
+          resolve({ value, provider: p });
+        })
+        .catch(() => {
+          mark(p, false);
+          failed++;
+          if (!settled && failed === list.length) {
+            settled = true;
+            reject(new Error("All ad-free servers are busy right now"));
+          } else launch();
+        });
+      if (started < list.length) timer = setTimeout(launch, stagger);
+    };
+    launch();
   });
 }
 
@@ -421,11 +419,13 @@ export interface SearchPage {
   next?: string;
 }
 
-export async function providerSearch(p: Provider, q: string, cursor?: string): Promise<SearchPage> {
+export type SearchFilter = "all" | "videos" | "music_songs";
+
+export async function providerSearch(p: Provider, q: string, cursor?: string, filter: SearchFilter = "all"): Promise<SearchPage> {
   if (p.kind === "piped") {
     const url = cursor
-      ? `${p.base}/nextpage/search?q=${encodeURIComponent(q)}&filter=all&nextpage=${encodeURIComponent(cursor)}`
-      : `${p.base}/search?q=${encodeURIComponent(q)}&filter=all`;
+      ? `${p.base}/nextpage/search?q=${encodeURIComponent(q)}&filter=${filter}&nextpage=${encodeURIComponent(cursor)}`
+      : `${p.base}/search?q=${encodeURIComponent(q)}&filter=${filter}`;
     const r = await http<{ items?: (PipedStream & { name?: string; subscribers?: number; videos?: number })[]; nextpage?: string }>(url, { timeout: 9000 });
     const out: SearchItem[] = [];
     for (const it of r.items ?? []) {
@@ -442,7 +442,7 @@ export async function providerSearch(p: Provider, q: string, cursor?: string): P
   }
   const page = cursor ? Number(cursor) : 1;
   const r = await http<(InvVideo & { authorVerified?: boolean; subCountText?: string; subCount?: number; videoCount?: number })[]>(
-    `${p.base}/api/v1/search?q=${encodeURIComponent(q)}&page=${page}&type=all`,
+    `${p.base}/api/v1/search?q=${encodeURIComponent(q)}&page=${page}&type=${filter === "all" ? "all" : "video"}`,
     { timeout: 9000 },
   );
   const out: SearchItem[] = [];

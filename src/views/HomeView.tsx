@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Heart, Loader2, Play, RefreshCw, Sparkles, TrendingUp } from "lucide-react";
+import { Heart, Loader2, Play, RefreshCw, TrendingUp } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useDiscoverFeed } from "@/hooks/useDiscoverFeed";
 import { fetchPopular } from "@/services/catalog";
@@ -28,7 +28,7 @@ async function fetchTrendingSongs(): Promise<Track[]> {
 export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void }) {
   const { playAll, favorites, history } = usePlayer();
 
-  const trending = useFeed<Track[]>("cat:trending-v2", () => fetchTrendingSongs(), { ttl: 20 * 60 * 1000 });
+  const trending = useFeed<Track[]>("cat:trending-v3", () => fetchTrendingSongs(), { ttl: 20 * 60 * 1000 });
   const trendingTop = useMemo(() => (trending.data ?? []).slice(0, TRENDING_COUNT), [trending.data]);
 
   const feed = useDiscoverFeed(favorites, history, trendingTop);
@@ -67,8 +67,8 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
       <section className="animate-fade-in">
         <FeedHeader
           icon={<TrendingUp className="h-5 w-5 text-accent" />}
-          title="Trending now"
-          subtitle="What everyone is listening to"
+          title="Trending in Bangladesh"
+          subtitle="What everyone is listening to right now"
           onPlayAll={trendingTop.length ? () => playAll(trending.data ?? trendingTop, 0) : undefined}
           onRefresh={trending.refresh}
         />
@@ -80,8 +80,8 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
           <ErrorState message={trending.error || "Couldn't load trending songs right now."} onRetry={trending.refresh} />
         ) : (
           <div className={GRID}>
-            {trendingTop.map((t) => (
-              <FeedCard key={t.id} track={t} context={trending.data ?? trendingTop} />
+            {trendingTop.map((t, i) => (
+              <FeedCard key={t.id} track={t} context={trending.data ?? trendingTop} priority={i < 3} />
             ))}
           </div>
         )}
@@ -90,11 +90,11 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
       {/* For you — infinite, from favourites (= subscriptions) + listening */}
       <section>
         <FeedHeader
-          icon={hasFavourites ? <Heart className="h-5 w-5 fill-current text-rose-500" /> : <Sparkles className="h-5 w-5 text-accent" />}
-          title={hasFavourites ? "For you" : "More to explore"}
-          subtitle={hasFavourites ? "More from artists you love, and songs like them" : "Fresh picks from across YouTube Music"}
+          icon={<Heart className="h-5 w-5 fill-current text-rose-500" />}
+          title="For you"
+          subtitle={hasFavourites ? "Songs like the ones you hearted" : "Built only from songs you heart"}
           onPlayAll={feed.items.length ? () => playAll(feed.items, 0) : undefined}
-          onRefresh={feed.refresh}
+          onRefresh={hasFavourites ? feed.refresh : undefined}
         />
 
         {!hasFavourites && (
@@ -103,8 +103,8 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
               <Heart className="h-5 w-5" />
             </span>
             <p className="text-[13px] leading-snug text-ink2 sm:text-sm">
-              Tap <Heart className="inline h-3.5 w-3.5 -translate-y-px text-rose-500" /> on songs you like. Discover then fills up with
-              more from those artists and songs like them.
+              Tap <Heart className="inline h-3.5 w-3.5 -translate-y-px text-rose-500" /> on songs you like. For you then fills up with
+              songs like them and more from those artists — nothing else.
             </p>
           </div>
         )}

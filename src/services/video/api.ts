@@ -22,6 +22,7 @@ import {
   providerTrending,
   race,
   type Provider,
+  type SearchFilter,
   type SearchPage,
 } from "./providers";
 import { guessRegion } from "./settings";
@@ -106,6 +107,66 @@ export async function getRelated(id: string): Promise<VideoItem[]> {
     const { value } = await race((p) => providerDetails(p, id), { stagger: 900, max: 5 });
     return value.related;
   });
+}
+
+/**
+ * "Up next" when the servers can't open the video itself (YouTube bot-checks
+ * some videos on their IPs, which kills the whole details call). Search still
+ * works then, so build the list the way YouTube's sidebar looks: more like
+ * this title, then more from the same channel.
+ */
+export async function relatedFallback(id: string, title: string, author: string): Promise<VideoItem[]> {
+  return cached(`relfb:${id}`, 15 * 60 * 1000, async () => {
+    const words = title
+      .replace(/\[[^\]]*\]|\([^)]*\)|official|video|lyrics?|hd|4k|mv|full/gi, " ")
+      .split(/[\s|\-–—:,]+/)
+      .filter((w) => w.length > 1)
+      .slice(0, 6)
+      .join(" ");
+    const queries = [words || title, author].filter((q, i, a) => q && a.indexOf(q) === i);
+    const pages = await Promise.all(queries.map((q) => searchVideosOnly(q).catch(() => [] as VideoItem[])));
+    const seen = new Set([id]);
+    const out: VideoItem[] = [];
+    // interleave: similar, channel, similar, channel…
+    for (let i = 0; i < 25; i++) {
+      for (const list of pages) {
+        const v = list[i];
+        if (v && !seen.has(v.id) && !v.live) {
+          seen.add(v.id);
+          out.push(v);
+        }
+      }
+    }
+    if (!out.length) throw new Error("no related");
+    return out;
+  }, (v) => v.length > 0);
+}
+
+/** Related list for any path: the server's own list, else the search fallback. */
+export async function relatedFor(id: string, title?: string, author?: string): Promise<VideoItem[]> {
+  try {
+    const r = await getRelated(id);
+    if (r.length) return r;
+  } catch {
+    /* fall back */
+  }
+  let t = title || "";
+  let a = author || "";
+  if (!t) {
+    const m = await getVideoMeta(id).catch(() => null);
+    t = m?.title || "";
+    a = a || m?.author || "";
+  }
+  if (!t && !a) return [];
+  return relatedFallback(id, t, a);
+}
+
+/** Plain video results (no channels / playlists) for one query. */
+export async function searchVideosOnly(q: string, filter: SearchFilter = "videos"): Promise<VideoItem[]> {
+  return cached(`sv:${filter}:${q}`, 15 * 60 * 1000, async () => {
+    const { value } = await race((p) => providerSearch(p, q, undefined, filter), { stagger: 500, max: 5 });
+    return value.items.filter((i): i is Extract<typeof i, { kind: "video" }> => i.kind === "video").map(({ kind: _k, ...v }) => v as VideoItem);
+  }, (v) => v.length > 0);
 }
 
 /* ------------------------------ discover -------------------------------- */
@@ -220,10 +281,19 @@ export async function channelRss(channelId: string): Promise<{ name: string; vid
 }
 
 async function latestFor(channelId: string): Promise<VideoItem[]> {
+  // App: YouTube's RSS directly (fast, always fresh). Website: the servers
+  // first — the RSS needs a public CORS proxy there, which is slow / flaky.
+  if (isNative) {
+    try {
+      return (await channelRss(channelId)).videos;
+    } catch {
+      return (await getChannel(channelId)).videos;
+    }
+  }
   try {
-    return (await channelRss(channelId)).videos;
-  } catch {
     return (await getChannel(channelId)).videos;
+  } catch {
+    return (await channelRss(channelId)).videos;
   }
 }
 
@@ -247,6 +317,37 @@ export async function followingFeed(channelIds: string[]): Promise<VideoItem[]> 
   return out
     .filter((v) => (seen.has(v.id) ? false : (seen.add(v.id), true)))
     .sort((a, b) => (b.published ?? 0) - (a.published ?? 0));
+}
+
+/**
+ * Home recommendations from the user's own signals only — like YouTube's home:
+ * videos related to what they watched recently (newest first) mixed with
+ * uploads from the channels they follow. No generic trending.
+ */
+export async function recommendedVideos(
+  watched: { id: string; title?: string; author?: string }[],
+  follows: string[],
+  skip: string[] = [],
+): Promise<VideoItem[]> {
+  const seeds = watched.slice(0, 6);
+  const [relLists, following] = await Promise.all([
+    Promise.all(seeds.map((w) => relatedFor(w.id, w.title, w.author).catch(() => [] as VideoItem[]))),
+    follows.length ? followingFeed(follows).catch(() => [] as VideoItem[]) : Promise.resolve([] as VideoItem[]),
+  ]);
+  const seen = new Set([...watched.map((w) => w.id), ...skip]);
+  const lists = [...relLists.map((l) => l.slice(0, 12)), following.slice(0, 24)];
+  const out: VideoItem[] = [];
+  for (let i = 0; i < 24; i++) {
+    for (const list of lists) {
+      const v = list[i];
+      if (v && !seen.has(v.id) && !v.live) {
+        seen.add(v.id);
+        out.push(v);
+      }
+    }
+  }
+  if (!out.length && (seeds.length || follows.length)) throw new Error("Couldn't load recommendations right now");
+  return out;
 }
 
 /** Extract an 11-char video id from a pasted link, if any. */

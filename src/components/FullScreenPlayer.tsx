@@ -18,8 +18,10 @@ import {
   Trash2,
   Moon,
   AlignLeft,
+  MonitorPlay,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
 import { formatTime, gradientFrom } from "@/utils/format";
 import { usePlaybackClock, usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, Slider } from "@/components/ui";
@@ -61,6 +63,7 @@ export function FullScreenPlayer() {
     removeOffline,
     updateSettings,
     toast,
+    pause,
   } = usePlayer();
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -173,6 +176,20 @@ export function FullScreenPlayer() {
                 )}
               >
                 {romanized ? "Original" : "Aa"}
+              </button>
+            )}
+            {videoIdOfTrack(current) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setExpanded(false);
+                  watchTrackVideo(current, currentTime, pause);
+                }}
+                aria-label="Watch the video"
+                className={cn(chip, "flex h-10 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-accent")}
+              >
+                <MonitorPlay className="h-4 w-4" />
+                <span className="hidden min-[400px]:inline">Video</span>
               </button>
             )}
             <IconButton

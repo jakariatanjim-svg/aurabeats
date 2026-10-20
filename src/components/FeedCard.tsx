@@ -6,6 +6,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { Equalizer } from "@/components/ui";
 import { TrackMenu } from "@/components/TrackList";
 import type { Track } from "@/types";
+import { ytImgProps } from "@/utils/ytImg";
 
 const SOURCE_LABEL: Record<string, string> = {
   youtube: "YouTube Music",
@@ -21,7 +22,7 @@ const SOURCE_LABEL: Record<string, string> = {
  * YouTube-style song card: big 16:9 thumbnail, channel avatar, title, artist
  * and plays. The whole card plays the song.
  */
-export function FeedCard({ track, context }: { track: Track; context?: Track[] }) {
+export function FeedCard({ track, context, priority = false }: { track: Track; context?: Track[]; /** above the fold: load first */ priority?: boolean }) {
   const { playNow, current, isPlaying, toggle, isFavorite, toggleFavorite } = usePlayer();
   const isCurrent = current?.id === track.id;
   const fav = isFavorite(track.id);
@@ -58,9 +59,10 @@ export function FeedCard({ track, context }: { track: Track; context?: Track[] }
         {img ? (
           wide ? (
             <img
-              src={img}
+              {...(imgStage === 0 ? ytImgProps(img) : { src: img })}
               alt=""
-              loading="lazy"
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : "auto"}
               decoding="async"
               onError={() => setImgStage((s) => s + 1)}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"

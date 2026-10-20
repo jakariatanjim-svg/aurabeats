@@ -22,7 +22,7 @@
  * keeps growing as the user scrolls.
  */
 import * as youtube from "@/services/youtube";
-import { fetchPopular, searchYTMusic } from "@/services/catalog";
+import { searchYTMusic } from "@/services/catalog";
 import type { Track } from "@/types";
 
 export interface FeedJob {
@@ -32,20 +32,6 @@ export interface FeedJob {
   run: () => Promise<Track[]>;
 }
 
-const EXPLORE_QUERIES = [
-  "top hits 2026",
-  "new music this week",
-  "viral songs 2026",
-  "best hindi songs 2026",
-  "bangla new song 2026",
-  "chill hits",
-  "party songs 2026",
-  "romantic songs",
-  "acoustic covers",
-  "top english songs",
-  "lofi songs",
-  "workout music",
-];
 
 const NOT_MUSIC = /\b(podcast|interview|reaction|trailer|teaser|episode|vlog|full movie|news|gameplay|unboxing|review|tutorial|lesson|shorts?)\b/i;
 
@@ -72,68 +58,50 @@ export function looksLikeMusic(t: Track) {
 }
 
 /**
- * Builds the ordered list of candidate jobs from favourites + history.
- * Favourites are newest-first; history is most-recent-first.
+ * Builds the ordered list of candidate jobs — from HEARTED songs only.
+ * Listening history and generic "explore" queries are deliberately not used:
+ * the feed should be exactly "more like what I liked". Favourites are
+ * newest-first, so a fresh heart shapes the top of the feed.
  */
-export function buildFeedJobs(favorites: Track[], history: Track[]): FeedJob[] {
-  // --- interest profile: artists ("channels") weighted like subscriptions ---
+export function buildFeedJobs(favorites: Track[], _history: Track[] = []): FeedJob[] {
+  // --- artists you hearted, like channel subscriptions ---
   const artistScore = new Map<string, { name: string; score: number }>();
-  const bump = (name: string, score: number) => {
-    const key = norm(name);
+  favorites.forEach((t, i) => {
+    const key = norm(t.artist);
     if (!key || key === "unknown artist") return;
     const cur = artistScore.get(key);
-    artistScore.set(key, { name: cur?.name ?? name, score: (cur?.score ?? 0) + score });
-  };
-  favorites.forEach((t, i) => bump(t.artist, 3 * Math.pow(0.93, i))); // recent favourites count more
-  history.slice(0, 40).forEach((t, i) => bump(t.artist, 1 * Math.pow(0.9, i)));
-  const artists = [...artistScore.values()].sort((a, b) => b.score - a.score).slice(0, 10);
+    artistScore.set(key, { name: cur?.name ?? t.artist, score: (cur?.score ?? 0) + 3 * Math.pow(0.93, i) });
+  });
+  const artists = [...artistScore.values()].sort((a, b) => b.score - a.score).slice(0, 12);
 
-  // --- seeds for YouTube's related-videos graph ---
+  // --- YouTube's related-songs graph of each hearted song ---
   const seen = new Set<string>();
-  const relatedSeeds: { id: string; weight: number }[] = [];
+  const related: FeedJob[] = [];
   favorites.forEach((t, i) => {
     const id = videoIdOf(t);
-    if (id && !seen.has(id)) { seen.add(id); relatedSeeds.push({ id, weight: 3 * Math.pow(0.93, i) }); }
+    if (id && !seen.has(id) && related.length < 20) {
+      seen.add(id);
+      related.push({ key: `rel:${id}`, weight: 2 + 3 * Math.pow(0.93, i), run: () => youtube.fetchRelated(id, 20, t.title, t.artist) });
+    } else if (!id && related.length < 20) {
+      // Hearted from another source: songs like it, found on YouTube Music.
+      const q = `${t.title} ${t.artist}`.trim();
+      if (q && !seen.has(q)) {
+        seen.add(q);
+        related.push({ key: `like:${norm(q)}`, weight: 2 + 3 * Math.pow(0.93, i), run: () => searchYTMusic(q, 20) });
+      }
+    }
   });
-  history.slice(0, 15).forEach((t, i) => {
-    const id = videoIdOf(t);
-    if (id && !seen.has(id)) { seen.add(id); relatedSeeds.push({ id, weight: 1.2 * Math.pow(0.9, i) }); }
-  });
-  // keep the best 14, favourites first
-  relatedSeeds.sort((a, b) => b.weight - a.weight).splice(14);
-
-  const related: FeedJob[] = relatedSeeds.map((s) => ({
-    key: `rel:${s.id}`,
-    weight: 2 + s.weight,
-    run: () => youtube.fetchRelated(s.id, 20),
-  }));
   const channel: FeedJob[] = artists.map((a) => ({
     key: `artist:${norm(a.name)}`,
     weight: 2 + a.score,
     run: () => searchYTMusic(a.name, 20),
   }));
-  const explore: FeedJob[] = [
-    { key: "explore:trending", weight: 1.5, run: () => youtube.fetchTrendingMusic(30) },
-    { key: "explore:popular", weight: 1.2, run: () => fetchPopular({ limit: 30 }) },
-    ...EXPLORE_QUERIES.map((q) => ({ key: `explore:${q}`, weight: 1, run: () => searchYTMusic(q, 20) })),
-  ];
-
-  // Interleave like a YouTube home feed: mostly personal, regularly mixed with
-  // exploration. Without any signals it is simply the explore feed.
-  const personal: FeedJob[] = [];
-  for (let i = 0; i < Math.max(related.length, channel.length); i++) {
-    if (related[i]) personal.push(related[i]);
-    if (channel[i]) personal.push(channel[i]);
-  }
-  if (personal.length === 0) return explore;
 
   const jobs: FeedJob[] = [];
-  let e = 0;
-  personal.forEach((job, i) => {
-    jobs.push(job);
-    if (i % 3 === 2 && explore[e]) jobs.push(explore[e++]); // ~1 explore job per 3 personal
-  });
-  while (e < explore.length) jobs.push(explore[e++]);
+  for (let i = 0; i < Math.max(related.length, channel.length); i++) {
+    if (related[i]) jobs.push(related[i]);
+    if (channel[i]) jobs.push(channel[i]);
+  }
   return jobs;
 }
 

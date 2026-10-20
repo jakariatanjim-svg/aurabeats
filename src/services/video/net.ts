@@ -34,10 +34,10 @@ export interface HttpOptions {
   signal?: AbortSignal;
 }
 
-const CORS_PROXIES = [
-  (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-  (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-];
+// corsproxy.io now answers 401 (API key required) and allorigins often hangs,
+// so proxies are opt-in ("only") with a short timeout — never an automatic
+// fallback that makes a dead server cost 10+ seconds.
+const CORS_PROXIES = [(u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`];
 
 function withTimeout(ms: number, outer?: AbortSignal) {
   const ctrl = new AbortController();
@@ -100,7 +100,7 @@ export async function http<T = unknown>(
   url: string,
   o: HttpOptions = {},
   as: "json" | "text" = "json",
-  viaProxy: "never" | "fallback" | "only" = "fallback",
+  viaProxy: "never" | "fallback" | "only" = "never",
 ): Promise<T> {
   if (isNative) return (await nativeRequest(url, o, as)) as T;
   if (viaProxy !== "only") {
@@ -113,7 +113,7 @@ export async function http<T = unknown>(
   let lastErr: unknown = new Error("no proxy");
   for (const proxy of CORS_PROXIES) {
     try {
-      return (await browserFetch(proxy(url), { ...o, timeout: o.timeout ?? 10000 }, as)) as T;
+      return (await browserFetch(proxy(url), { ...o, timeout: Math.min(o.timeout ?? 5000, 5000) }, as)) as T;
     } catch (err) {
       lastErr = err;
       if (o.signal?.aborted) break;

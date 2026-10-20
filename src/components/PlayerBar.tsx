@@ -1,4 +1,5 @@
-import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download } from "lucide-react";
+import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download, MonitorPlay } from "lucide-react";
+import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -31,9 +32,11 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
     queue,
     settings,
     downloadTrack,
+    pause,
   } = usePlayer();
 
   const fav = current ? isFavorite(current.id) : false;
+  const hasVideo = Boolean(videoIdOfTrack(current));
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   // Nothing has ever been played this session — stay hidden, keep the UI clean.
@@ -183,6 +186,17 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
           <div className="mr-2 hidden h-7 w-16 lg:block">
             <Visualizer variant="wave" barCount={28} active={isPlaying} />
           </div>
+          {current && hasVideo && (
+            <IconButton
+              size="sm"
+              onClick={() => watchTrackVideo(current, currentTime, pause)}
+              aria-label="Watch the video"
+              tooltip="Watch video"
+              className="text-accent"
+            >
+              <MonitorPlay className="h-4 w-4" />
+            </IconButton>
+          )}
           {current && (
             <IconButton size="sm" onClick={() => downloadTrack(current)} aria-label="Download">
               <Download className="h-4 w-4" />

@@ -85,21 +85,20 @@
     <link rel="apple-touch-icon" sizes="152x152" href="/icon-512.png" />
     <link rel="apple-touch-icon" sizes="120x120" href="/icon-512.png" />
     <link rel="apple-touch-startup-image" href="/icon-512.png" />
-    <!-- DNS prefetch & preconnect — fastest possible connection setup -->
-    <!-- Primary music APIs (preconnect = DNS + TCP + TLS upfront) -->
-    <link rel="preconnect" href="https://saavn.sumit.co" crossorigin />
-    <link rel="preconnect" href="https://api.jamendo.com" crossorigin />
-    <link rel="preconnect" href="https://archive.org" crossorigin />
-    <link rel="preconnect" href="https://discoveryprovider.audius.co" crossorigin />
-    <!-- Secondary mirrors (dns-prefetch only — lighter, covers fallbacks) -->
-    <link rel="dns-prefetch" href="https://discoveryprovider2.audius.co" />
-    <link rel="dns-prefetch" href="https://discoveryprovider3.audius.co" />
-    <link rel="dns-prefetch" href="https://api.audius.co" />
-    <link rel="dns-prefetch" href="https://jiosaavn-api-liart-three.vercel.app" />
-    <link rel="dns-prefetch" href="https://jiosaavn-api-sumit.vercel.app" />
-    <link rel="dns-prefetch" href="https://pipedapi.kavin.rocks" />
+    <!-- Main content = YouTube / YouTube Music: connect to those first.
+         i.ytimg.com serves every thumbnail; the two Piped servers answer
+         search / related / trending. -->
+    <link rel="preconnect" href="https://i.ytimg.com" />
+    <link rel="preconnect" href="https://pipedapi.ducks.party" crossorigin />
+    <link rel="preconnect" href="https://api.piped.private.coffee" crossorigin />
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <link rel="dns-prefetch" href="https://suggestqueries-clients6.youtube.com" />
+    <!-- Fallback sources: DNS only (they load later, never first) -->
+    <link rel="dns-prefetch" href="https://saavn.sumit.co" />
+    <link rel="dns-prefetch" href="https://api.jamendo.com" />
+    <link rel="dns-prefetch" href="https://archive.org" />
+    <link rel="dns-prefetch" href="https://discoveryprovider.audius.co" />
     <link rel="dns-prefetch" href="https://de1.api.radio-browser.info" />
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

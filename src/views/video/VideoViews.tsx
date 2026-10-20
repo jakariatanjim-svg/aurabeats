@@ -1,23 +1,14 @@
-import { useMemo, useState } from "react";
-import { Bookmark, Clock, Flame, History, Rss, Search, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Bookmark, Clock, History, Sparkles, Rss, Search, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
-import { followingFeed, getTrending } from "@/services/video/api";
+import { followingFeed, recommendedVideos } from "@/services/video/api";
 import { isNative, playbackMethodLabel } from "@/services/video/net";
-import { guessRegion } from "@/services/video/settings";
 import type { VideoItem } from "@/services/video/types";
 import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton, VideoRow } from "@/components/video/VideoCards";
 import { Button, Chip, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { routeToPath, type RouteKey } from "@/routes";
-
-const regionName = (code: string) => {
-  try {
-    return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-};
 
 function useProgress() {
   const lib = useVideoLibrary();
@@ -43,9 +34,20 @@ function useFollowingFeed() {
 export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
   const lib = useVideoLibrary();
   const progress = useProgress();
-  const region = guessRegion();
-  const trending = useFeed<VideoItem[]>(`video:trending:${region}`, () => getTrending(region), { ttl: 30 * 60 * 1000 });
   const { ids, feed } = useFollowingFeed();
+
+  // Recommended: only from what you watched + channels you follow.
+  const seeds = lib.history.slice(0, 6);
+  const recKey = `video:rec:${seeds.map((h) => h.id).join(",")}:${ids.slice().sort().join(",")}`;
+  const shownFollow = (feed.data ?? []).slice(0, 8).map((v) => v.id);
+  const rec = useFeed<VideoItem[]>(recKey, () => recommendedVideos(seeds, ids, shownFollow), {
+    enabled: seeds.length > 0 || ids.length > 0,
+    ttl: 20 * 60 * 1000,
+  });
+  // Keep the previous list on screen while a new one loads (no blank flash).
+  const lastRec = useRef<VideoItem[] | null>(null);
+  if (rec.data?.length) lastRec.current = rec.data;
+  const recList = rec.data?.length ? rec.data : lastRec.current;
 
   const continueWatching = lib.history
     .filter((h) => h.duration > 0 && h.position > 30 && h.position < h.duration - 30)
@@ -114,20 +116,25 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
         </section>
       )}
 
-      <section>
-        <SectionHeader title={`Trending in ${regionName(region)}`} icon={<Flame className="h-5 w-5 text-accent" />} />
-        {trending.data ? (
-          <VideoGrid>
-            {trending.data.map((v) => (
-              <VideoCard key={v.id} v={v} progress={progress.get(v.id)} />
-            ))}
-          </VideoGrid>
-        ) : trending.error ? (
-          <ErrorState message={trending.error} onRetry={trending.refresh} />
-        ) : (
-          <VideoGridSkeleton />
-        )}
-      </section>
+      {(seeds.length > 0 || ids.length > 0) && (
+        <section>
+          <SectionHeader title="Recommended for you" icon={<Sparkles className="h-5 w-5 text-accent" />} />
+          {recList ? (
+            <VideoGrid>
+              {recList.map((v) => (
+                <VideoCard key={v.id} v={v} progress={progress.get(v.id)} />
+              ))}
+            </VideoGrid>
+          ) : rec.error ? (
+            <ErrorState message={rec.error} onRetry={rec.refresh} />
+          ) : (
+            <VideoGridSkeleton />
+          )}
+        </section>
+      )}
+      {seeds.length === 0 && ids.length === 0 && (
+        <p className="text-center text-[13px] text-ink3">Watch a few videos or follow channels — recommendations here come only from those.</p>
+      )}
     </div>
   );
 }

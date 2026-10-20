@@ -4,7 +4,8 @@ import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
-import { getRelated, getVideo, getVideoInfo } from "@/services/video/api";
+import { getVideo, getVideoInfo, relatedFor } from "@/services/video/api";
+import { takeHandoffStart } from "@/utils/watchVideo";
 import { isNative } from "@/services/video/net";
 import { providerLabel, reportPlayback } from "@/services/video/providers";
 import { getVideoSettings } from "@/services/video/settings";
@@ -30,6 +31,8 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   // streams directly). The app plays ad-free streams and never uses it.
   const embed = !isNative;
   const [startAt, setStartAt] = useState(() => {
+    const handoff = takeHandoffStart(id); // "Watch video" from the music player
+    if (handoff !== null) return handoff;
     const p = videoLibrary.positionOf(id);
     const h = videoLibrary.get().history.find((x) => x.id === id);
     // resume unless it was (nearly) finished
@@ -68,9 +71,18 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
       .then((m) => {
         if (!alive) return;
         setMeta(m);
-        setRelated(m.related);
+        if (m.related.length) setRelated(m.related);
+        else
+          // No server could open this video: build Up next from search.
+          relatedFor(id, m.title, m.author)
+            .then((r) => alive && setRelated(r))
+            .catch(() => alive && setRelated([]));
       })
-      .catch(() => alive && setRelated([]));
+      .catch(() => {
+        relatedFor(id)
+          .then((r) => alive && setRelated(r))
+          .catch(() => alive && setRelated([]));
+      });
     return () => {
       alive = false;
     };
@@ -80,7 +92,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   useEffect(() => {
     if (related || !details || details.related.length) return;
     let alive = true;
-    getRelated(id)
+    relatedFor(id, details.title, details.author)
       .then((r) => alive && setRelated(r))
       .catch(() => alive && setRelated([]));
     return () => {
