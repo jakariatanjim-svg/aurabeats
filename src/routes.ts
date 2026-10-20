@@ -10,6 +10,7 @@ export type RouteKey =
   | "about"
   | "privacy"
   | "downloads"
+  | "device"
   | `playlist:${string}`
   // Video mode (ad-free YouTube)
   | "video"
@@ -69,7 +70,7 @@ export function pathToRoute(pathname: string): RouteKey {
     return (["search", "subs", "library"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
   }
   const key = clean.slice(1);
-  const valid: RouteKey[] = ["home", "search", "radio", "library", "favorites", "history", "settings", "about", "privacy", "downloads"];
+  const valid: RouteKey[] = ["home", "search", "radio", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device"];
   return valid.includes(key as RouteKey) ? (key as RouteKey) : "home";
 }
 
@@ -98,6 +99,8 @@ export function routeLabel(route: RouteKey): string {
       return "Favourites";
     case "history":
       return "Recently Played";
+    case "device":
+      return "On this device";
     case "settings":
       return "Settings";
     case "about":

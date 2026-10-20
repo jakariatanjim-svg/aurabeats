@@ -96,15 +96,30 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      # In-app video downloader: a small native plugin (native/android) that
-      # joins YouTube's separate picture + sound files with Android's own
-      # MediaMuxer. MainActivity registers it.
-      - name: Add native video downloader
+      # Native plugins (native/android): VideoSaver = in-app video / song
+      # downloads (joins YouTube's picture + sound with Android's MediaMuxer),
+      # DeviceMusic = songs already on the phone. MainActivity registers them.
+      - name: Add native plugins
         run: |
           PKG_DIR=android/app/src/main/java/dev/pages/aurabeats
           test -f "$PKG_DIR/MainActivity.java" || { echo "::error::MainActivity.java not found in $PKG_DIR"; exit 1; }
-          cp native/android/VideoSaverPlugin.java native/android/MainActivity.java "$PKG_DIR/"
+          cp native/android/*.java "$PKG_DIR/"
           ls -l "$PKG_DIR"
+          python3 - <<'PY'
+          import pathlib
+
+          path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
+          perms = [
+              '<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />',
+              '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
+          ]
+          add = "".join("    " + p + "\n" for p in perms if p.split('"')[1] not in text)
+          if add:
+              text = text.replace("</manifest>", add + "</manifest>", 1)
+              path.write_text(text)
+          print("Declared:", add or "already present")
+          PY
 
       - name: Set app icon
         run: |

@@ -43,5 +43,5 @@ export function takeHandoffStart(id: string): number | null {
  */
 export function canSaveOffline(t: Track | null | undefined): boolean {
   if (!t || t.isLive) return false;
-  return t.source !== "youtube" && !t.streamUrl?.startsWith("yt-resolve:");
+  return t.source !== "youtube" && t.source !== "local" && !t.streamUrl?.startsWith("yt-resolve:");
 }

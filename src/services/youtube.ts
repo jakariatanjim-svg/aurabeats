@@ -68,7 +68,7 @@ export async function fetchRelated(videoId: string, limit = 20, title?: string, 
   return toTracks(await relatedFor(videoId, title, artist).catch(() => [] as VideoItem[])).slice(0, limit);
 }
 
-/** What's trending in Bangladesh on YouTube, music only, then YouTube Music's popular songs. */
+/** What is trending on YouTube (local region), music only, then YouTube Music's popular songs. */
 export async function fetchTrendingMusic(limit = 30): Promise<Track[]> {
   const [trend, songs] = await Promise.all([
     getTrending("BD").catch(() => [] as VideoItem[]),

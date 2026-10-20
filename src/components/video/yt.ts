@@ -15,6 +15,7 @@ export interface YTPlayer {
   getCurrentTime(): number;
   getDuration(): number;
   getVideoLoadedFraction(): number;
+  getVideoData?(): { video_id?: string; title?: string };
   getPlayerState(): number;
   getPlaybackQuality(): string;
   getAvailableQualityLevels(): string[];

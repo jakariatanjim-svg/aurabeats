@@ -346,7 +346,9 @@ export function FullScreenPlayer() {
                 {(offline || canSaveOffline(current)) && (
                   <IconButton aria-label={offline ? "Remove from offline" : "Save for offline"} onClick={() => offline ? removeOffline(current.id) : saveOffline(current)} className={cn(offline && "text-cyan-500 hover:text-cyan-500")}>{offline ? <Trash2 className="h-5 w-5" /> : <DownloadCloud className="h-5 w-5" />}</IconButton>
                 )}
-                <IconButton aria-label={videoIdOfTrack(current) ? "Download MP3" : "Export file"} onClick={() => downloadTrack(current)}><Download className="h-5 w-5" /></IconButton>
+                {current.source !== "local" && (
+                  <IconButton aria-label={videoIdOfTrack(current) ? "Download MP3" : "Export file"} onClick={() => downloadTrack(current)}><Download className="h-5 w-5" /></IconButton>
+                )}
                 {videoIdOfTrack(current) && (
                   <IconButton aria-label="Download video" onClick={() => requestVideoDownload({ id: videoIdOfTrack(current)!, title: current.title })}><Film className="h-5 w-5" /></IconButton>
                 )}

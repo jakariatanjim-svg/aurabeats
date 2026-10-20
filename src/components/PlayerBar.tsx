@@ -197,7 +197,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               <MonitorPlay className="h-4 w-4" />
             </IconButton>
           )}
-          {current && (
+          {current && current.source !== "local" && (
             <IconButton size="sm" onClick={() => downloadTrack(current)} aria-label="Download">
               <Download className="h-4 w-4" />
             </IconButton>

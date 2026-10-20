@@ -4,6 +4,7 @@ import { Modal } from "@/components/ui";
 import { usePlayer } from "@/hooks/usePlayer";
 import { cn } from "@/utils/cn";
 import {
+  audioSiteUrl,
   cancelVideoDownload,
   downloadJobs,
   downloadOptions,
@@ -139,7 +140,7 @@ export function DownloadTray() {
               {j.status === "done" && j.uri && (
                 <button
                   type="button"
-                  onClick={() => openDownloadedVideo(j).catch(() => toast("No app found to open the video", "error"))}
+                  onClick={() => openDownloadedVideo(j).catch(() => toast("No app found to open this file", "error"))}
                   className="flex h-8 items-center gap-1 rounded-full bg-accent px-3 text-[12px] font-bold text-white"
                 >
                   <Play className="h-3.5 w-3.5 fill-current" /> Open
@@ -149,7 +150,8 @@ export function DownloadTray() {
                 <button
                   type="button"
                   onClick={() => {
-                    openVideoSite(j.videoId);
+                    if (j.kind === "audio") window.open(audioSiteUrl(j.videoId), "_blank", "noopener,noreferrer");
+                    else openVideoSite(j.videoId);
                     downloadJobs.dismiss(j.id);
                   }}
                   className="flex h-8 items-center gap-1 rounded-full border border-line px-3 text-[12px] font-bold text-ink2"

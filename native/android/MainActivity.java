@@ -8,8 +8,9 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // In-app video downloader (native/android/VideoSaverPlugin.java).
+        // native/android: in-app downloads + songs already on the phone.
         registerPlugin(VideoSaverPlugin.class);
+        registerPlugin(DeviceMusicPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

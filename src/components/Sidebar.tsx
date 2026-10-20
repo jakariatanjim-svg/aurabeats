@@ -11,6 +11,7 @@ import {
   Settings,
   DownloadCloud,
   Rss,
+  Smartphone,
 } from "lucide-react";
 import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
 import { Avatar } from "@/components/video/VideoCards";
@@ -19,6 +20,7 @@ import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, WaveformLogo } from "@/components/ui";
 import type { RouteKey } from "@/routes";
+import { deviceMusicAvailable } from "@/services/deviceMusic";
 
 interface NavItem {
   key: RouteKey;
@@ -46,6 +48,7 @@ const VIDEO_COLLECTION: NavItem[] = [
 const COLLECTION: NavItem[] = [
   { key: "favorites", label: "Favourites", icon: Heart },
   { key: "downloads", label: "Downloads", icon: DownloadCloud },
+  ...(deviceMusicAvailable ? [{ key: "device" as const, label: "On this device", icon: Smartphone }] : []),
   { key: "history", label: "Recently Played", icon: Clock },
   { key: "settings", label: "Settings", icon: Settings },
   { key: "about", label: "About", icon: Info },

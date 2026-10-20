@@ -1,6 +1,6 @@
 import { Music2, Tv } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { storage } from "@/utils/storage";
+import { session, storage } from "@/utils/storage";
 import { isVideoRoute, type RouteKey } from "@/routes";
 
 const LAST = { music: "lastRoute:music", video: "lastRoute:video" } as const;
@@ -19,16 +19,19 @@ export function modeOf(route: RouteKey): AppMode {
 }
 
 /** Called by the shell on every navigation so each mode reopens where you
- *  left it. Shared pages are never remembered (that sent Music → Settings). */
+ *  left it — within this visit only: a fresh launch opens Music on Discover.
+ *  Shared pages and search results are never remembered (an empty results
+ *  page is not a place to come back to). */
 export function rememberRoute(route: RouteKey) {
   if (isSharedRoute(route)) return;
   const mode: AppMode = isVideoRoute(route) ? "video" : "music";
-  storage.set(LAST[mode], route);
   storage.set(MODE, mode);
+  if (route === "search" || route === "video-search") return;
+  session.set(LAST[mode], route);
 }
 
 export function lastRouteFor(mode: AppMode): RouteKey {
-  const r = storage.get<RouteKey | null>(LAST[mode], null);
+  const r = session.get<RouteKey | null>(LAST[mode], null);
   if (r && !isSharedRoute(r) && isVideoRoute(r) === (mode === "video")) return r;
   return mode === "video" ? "video" : "home";
 }

@@ -1,6 +1,6 @@
 /**
- * "Trending searches" for the top-bar search panel. Video mode only
- * (YouTube trending videos); Music shows search history alone.
+ * "Trending searches" for the top-bar search panel: Music = trending songs
+ * on YouTube Music, Video = YouTube trending videos. No country labels.
  */
 import type { SearchMode } from "@/utils/searchHistory";
 
@@ -38,8 +38,11 @@ function uniq(list: string[], max = 8): string[] {
 }
 
 async function build(mode: SearchMode): Promise<string[]> {
-  // Music: no trending list (history only).
-  if (mode === "music") return [];
+  if (mode === "music") {
+    const { fetchTrendingMusic } = await import("@/services/youtube");
+    const tracks = await fetchTrendingMusic(30);
+    return uniq(tracks.map((t) => (t.title.split(" ").length < 2 && t.artist ? `${t.title} ${t.artist}` : t.title)));
+  }
   const { getTrending } = await import("@/services/video/api");
   return uniq((await getTrending()).map((v) => v.title));
 }

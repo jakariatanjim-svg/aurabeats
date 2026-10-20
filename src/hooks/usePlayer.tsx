@@ -5,6 +5,7 @@
  * engine. Everything user-specific is mirrored into localStorage.
  */
 
+import { videoIdOfTrack } from "@/utils/watchVideo";
 import {
   createContext,
   useCallback,
@@ -266,8 +267,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const downloadTrack = useCallback(async (track: Track) => {
     // YouTube tracks — direct MZ shortcut for faster conversion
     if (track.streamUrl.startsWith("yt-resolve:") || track.source === "youtube") {
-      const videoId = track.streamUrl.replace("yt-resolve:", "");
-      const downloaderUrl = `https://www.youtubemz.com/watch?v=${videoId}`;
+      const videoId = videoIdOfTrack(track) ?? track.streamUrl.replace("yt-resolve:", "");
+      // Android app: straight to the phone, no website in between.
+      const dl = await import("@/services/videoDownload");
+      if (dl.inAppVideoDownload) {
+        toast(`Downloading "${track.title}"…`, "info");
+        void dl.startAudioDownload(videoId, `${track.artist} - ${track.title}`.replace(/ - Topic\b/i, ""));
+        return;
+      }
+      const downloaderUrl = dl.audioSiteUrl(videoId);
 
       toast(`Opening converter for: ${track.title}`, "info");
       const win = window.open(downloaderUrl, "_blank", "noopener,noreferrer");

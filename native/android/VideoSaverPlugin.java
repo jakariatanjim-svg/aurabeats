@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * In-app video downloader. YouTube serves HD picture and sound as two
+ * In-app video + song downloader. YouTube serves HD picture and sound as two
  * separate files; this downloads both (in 10 MB ranges, the way yt-dlp does,
  * so the server never throttles) and joins them with Android's own
  * MediaMuxer — no re-encoding, no ffmpeg, nothing added to the APK size.
@@ -131,6 +131,17 @@ public class VideoSaverPlugin extends Plugin {
                 emitProgress(id, "merge", done[0], total);
                 mux(v, a, out, mime);
                 result = out;
+            } else if (mime.startsWith("audio/")) {
+                // A song: YouTube's audio comes as a streaming (fragmented)
+                // file; rewrite it as a plain .m4a so every player shows the
+                // right length and can seek. Keep the original if that fails.
+                emitProgress(id, "merge", done[0], total);
+                try {
+                    remux(v, out);
+                    result = out;
+                } catch (Exception ignored) {
+                    result = v;
+                }
             }
             if (cancel.get()) throw new IOException("cancelled");
             Uri uri = publish(result, fileName, mime);
@@ -296,6 +307,43 @@ public class VideoSaverPlugin extends Plugin {
             }
             ve.release();
             ae.release();
+        }
+    }
+
+    /** Copy the single audio track into a fresh MP4 container (no re-encoding). */
+    private void remux(File in, File out) throws IOException {
+        MediaExtractor ex = new MediaExtractor();
+        MediaMuxer m = null;
+        try {
+            ex.setDataSource(in.getAbsolutePath());
+            int t = pickTrack(ex, "audio/");
+            if (t < 0) throw new IOException("no audio track");
+            ex.selectTrack(t);
+            m = new MediaMuxer(out.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            int mt = m.addTrack(ex.getTrackFormat(t));
+            m.start();
+            ByteBuffer buf = ByteBuffer.allocate(1024 * 1024);
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            while (true) {
+                buf.clear();
+                int n = ex.readSampleData(buf, 0);
+                if (n < 0) break;
+                info.offset = 0;
+                info.size = n;
+                info.presentationTimeUs = ex.getSampleTime();
+                info.flags = (ex.getSampleFlags() & MediaExtractor.SAMPLE_FLAG_SYNC) != 0 ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0;
+                m.writeSampleData(mt, buf, info);
+                ex.advance();
+            }
+            m.stop();
+        } finally {
+            if (m != null) {
+                try {
+                    m.release();
+                } catch (Exception ignored) {
+                }
+            }
+            ex.release();
         }
     }
 

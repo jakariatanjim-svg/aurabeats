@@ -115,7 +115,7 @@ export function TrackMenu({
   } else if (canSaveOffline(track)) {
     items.push({ label: "Save for offline", sub: "Play without internet", icon: <DownloadCloud className="h-4 w-4 text-accent" />, run: () => saveOffline(track) });
   }
-  items.push({ label: ytId ? "Download MP3" : "Export file", sub: ytId ? undefined : "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) });
+  if (track.source !== "local") items.push({ label: ytId ? "Download MP3" : "Export file", sub: ytId ? undefined : "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) });
   if (ytId) {
     items.push({ label: "Download video", icon: <Film className="h-4 w-4" />, run: () => requestVideoDownload({ id: ytId, title: track.title }) });
   }
@@ -356,6 +356,8 @@ export function TrackRow({
                       ? "Independent CC library"
                       : track.source === "youtube"
                           ? "YouTube Music mirror · 320kbps"
+                          : track.source === "local"
+                            ? "File on this phone"
                           : "Open radio directory"
             }
           >
@@ -365,6 +367,7 @@ export function TrackRow({
               track.source === "jiosaavn" ? "database" :
               track.source === "jamendo" ? "CC library" :
               track.source === "youtube" ? "yt mirror" :
+              track.source === "local" ? "on device" :
               "radio"
             }
           </span>

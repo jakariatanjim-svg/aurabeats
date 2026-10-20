@@ -64,8 +64,21 @@ export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void 
               {feed.items.map((t) => (
                 <FeedCard key={t.id} track={t} context={feed.items} />
               ))}
-              {feed.loading && Array.from({ length: feed.items.length ? 3 : 6 }).map((_, i) => <FeedCardSkeleton key={`s${i}`} />)}
+              {(feed.loading || (hasFavourites && !feed.done && feed.items.length === 0)) &&
+                Array.from({ length: feed.items.length ? 3 : 6 }).map((_, i) => <FeedCardSkeleton key={`s${i}`} />)}
             </div>
+            {hasFavourites && !feed.loading && feed.done && feed.items.length === 0 && (
+              <div className="flex flex-col items-center gap-3 py-16 text-ink3">
+                <p className="text-sm font-semibold">Nothing new right now</p>
+                <button
+                  type="button"
+                  onClick={feed.refresh}
+                  className="flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink2 transition hover:border-accent hover:text-accent"
+                >
+                  <RefreshCw className="h-4 w-4" /> Refresh
+                </button>
+              </div>
+            )}
             <div ref={sentinelRef} className="h-px" />
             {!feed.loading && !feed.done && feed.items.length > 0 && (
               <div className="mt-8 flex justify-center">
