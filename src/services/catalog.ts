@@ -46,30 +46,19 @@ function cap<T>(p: Promise<T>, fallback: T): Promise<T> {
 
 export interface CatalogQuery { limit?: number; signal?: AbortSignal }
 
+/**
+ * YouTube Music is the catalogue. The other sources (JioSaavn, SoundCloud,
+ * Audius, Jamendo, Internet Archive) are a separate catalogue that is only
+ * ever asked from Search → "Other Sources" — never mixed into YouTube lists,
+ * never as a fallback.
+ */
 export async function fetchPopular(opts: CatalogQuery = {}): Promise<Track[]> {
   const { limit = 40 } = opts;
-  const [yt, js, sc, au] = await Promise.all([
-    cap(youtube.searchTracks("popular music hits 2026", 15), []),
-    cap(jiosaavn.fetchTrending(12), []),
-    cap(soundcloud.searchTracks("trending popular", 10), []),
-    cap(audius.fetchTrending({ limit: 8 }), []),
-  ]);
-  const merged = dedupe([...yt, ...js, ...sc, ...au]);
-  return merged.slice(0, limit);
-}
-
-export async function fetchFresh(opts: CatalogQuery = {}): Promise<Track[]> {
-  const { limit = 24 } = opts;
-  const [yt, sc, au] = await Promise.all([
-    cap(youtube.searchTracks("new music 2026", 10), []),
-    cap(soundcloud.searchTracks("new releases", 8), []),
-    cap(audius.fetchUnderground({ limit: 8 }), []),
-  ]);
-  return dedupe([...yt, ...sc, ...au]).slice(0, limit);
+  return (await youtube.searchTracks("popular music hits 2026", limit).catch(() => [] as Track[])).slice(0, limit);
 }
 
 export async function searchYTMusic(query: string, limit = 100): Promise<Track[]> {
-  return cap(youtube.searchTracks(query, limit), []);
+  return youtube.searchTracks(query, limit).catch(() => []);
 }
 
 export async function searchOtherSources(query: string, limit = 60): Promise<Track[]> {
@@ -85,24 +74,26 @@ export async function searchOtherSources(query: string, limit = 60): Promise<Tra
     .slice(0, limit);
 }
 
-export async function searchEverything(query: string, opts: CatalogQuery = {}): Promise<Track[]> {
-  const { limit = 80 } = opts;
-  const [yt, others] = await Promise.all([
-    searchYTMusic(query, 30),
-    searchOtherSources(query, 50),
+/** One page of the other catalogues (page 0, 1, 2…); each source pages itself. */
+export async function searchOtherSourcesPage(query: string, cursor?: string): Promise<{ items: Track[]; next?: string }> {
+  const page = cursor ? Number(cursor) || 0 : 0;
+  const [sc, js, au, ja, ia] = await Promise.all([
+    cap(soundcloud.searchTracks(query, 20, page * 20), []),
+    cap(jiosaavn.searchTracks(query, 25, page), []),
+    cap(audius.searchTracks(query, { limit: 15, offset: page * 15 }), []),
+    cap(jamendo.searchTracks(query, 12, page * 12), []),
+    cap(archive.searchTracks(query, { limit: 10, page: page + 1 }), []),
   ]);
-  return dedupe([...yt, ...others])
-    .sort((a, b) => scoreTrack(query, b) - scoreTrack(query, a))
-    .slice(0, limit);
+  const items = dedupe([...sc, ...js, ...au, ...ja, ...ia]).sort((a, b) => scoreTrack(query, b) - scoreTrack(query, a));
+  return { items, next: items.length ? String(page + 1) : undefined };
 }
 
-export async function fetchSearchSuggestions(query: string): Promise<string[]> {
-  const [yt, js] = await Promise.all([
-    cap(youtube.fetchSuggestions(query), [] as string[]),
-    cap(jiosaavn.fetchSuggestions(query), [] as string[]),
-  ]);
-  return [...new Set([...yt, ...js])].slice(0, 10);
+/** YouTube Music only (kept for callers that used the old mixed search). */
+export async function searchEverything(query: string, opts: CatalogQuery = {}): Promise<Track[]> {
+  return searchYTMusic(query, opts.limit ?? 80);
 }
+
+export { fetchSearchSuggestions } from "./suggest";
 
 export async function fetchForYou(favorites: Track[]): Promise<Track[]> {
   if (favorites.length === 0) return [];

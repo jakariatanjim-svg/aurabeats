@@ -55,7 +55,7 @@ export function PrivacyView() {
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-8">
       <section className="blur-panel glass-inset rounded-[2rem] px-6 py-8 sm:px-10 sm:py-10">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.05] px-3.5 py-1.5">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-ink/[0.05] px-3.5 py-1.5">
           <Shield className="h-4 w-4 text-accent" />
           <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink2">Privacy Policy</span>
         </div>

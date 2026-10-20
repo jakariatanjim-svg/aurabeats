@@ -10,7 +10,20 @@ export type RouteKey =
   | "about"
   | "privacy"
   | "downloads"
-  | `playlist:${string}`;
+  | "device"
+  | `playlist:${string}`
+  // Video mode (ad-free YouTube)
+  | "video"
+  | "video-search"
+  | "video-subs"
+  | "video-library"
+  | `watch:${string}`
+  | `channel:${string}`;
+
+/** Video-mode routes; everything else is Music mode. */
+export function isVideoRoute(route: RouteKey): boolean {
+  return route === "video" || route.startsWith("video-") || route.startsWith("watch:") || route.startsWith("channel:");
+}
 
 export interface RouteMeta {
   key: RouteKey;
@@ -30,6 +43,9 @@ export interface RouteMeta {
 
 export function routeToPath(route: RouteKey): string {
   if (route.startsWith("playlist:")) return `/playlist/${route.slice("playlist:".length)}`;
+  if (route.startsWith("watch:")) return `/watch/${encodeURIComponent(route.slice("watch:".length))}`;
+  if (route.startsWith("channel:")) return `/channel/${encodeURIComponent(route.slice("channel:".length))}`;
+  if (route.startsWith("video-")) return `/video/${route.slice("video-".length)}`;
   return route === "home" ? "/home" : `/${route}`;
 }
 
@@ -40,14 +56,37 @@ export function pathToRoute(pathname: string): RouteKey {
     const id = clean.slice("/playlist/".length);
     return id ? (`playlist:${id}` as RouteKey) : "library";
   }
+  if (clean.startsWith("/watch/")) {
+    const id = decodeURIComponent(clean.slice("/watch/".length));
+    return id ? (`watch:${id}` as RouteKey) : "video";
+  }
+  if (clean.startsWith("/channel/")) {
+    const id = decodeURIComponent(clean.slice("/channel/".length));
+    return id ? (`channel:${id}` as RouteKey) : "video";
+  }
+  if (clean === "/video") return "video";
+  if (clean.startsWith("/video/")) {
+    const sub = clean.slice("/video/".length);
+    return (["search", "subs", "library"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
+  }
   const key = clean.slice(1);
-  const valid: RouteKey[] = ["home", "search", "radio", "library", "favorites", "history", "settings", "about", "privacy", "downloads"];
+  const valid: RouteKey[] = ["home", "search", "radio", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device"];
   return valid.includes(key as RouteKey) ? (key as RouteKey) : "home";
 }
 
 export function routeLabel(route: RouteKey): string {
   if (route.startsWith("playlist:")) return "Playlist";
+  if (route.startsWith("watch:")) return "Watch";
+  if (route.startsWith("channel:")) return "Channel";
   switch (route) {
+    case "video":
+      return "Video";
+    case "video-search":
+      return "Search videos";
+    case "video-subs":
+      return "Following";
+    case "video-library":
+      return "Video library";
     case "home":
       return "Discover";
     case "search":
@@ -60,6 +99,8 @@ export function routeLabel(route: RouteKey): string {
       return "Favourites";
     case "history":
       return "Recently Played";
+    case "device":
+      return "On this device";
     case "settings":
       return "Settings";
     case "about":

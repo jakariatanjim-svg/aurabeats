@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,12 +14,15 @@ import {
   ExternalLink,
   Download,
   DownloadCloud,
+  Film,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, formatTime, gradientFrom, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, Button, Equalizer, IconButton, Modal } from "@/components/ui";
 import type { Track } from "@/types";
+import { canSaveOffline, videoIdOfTrack } from "@/utils/watchVideo";
+import { requestVideoDownload } from "@/services/videoDownload";
 
 /* --------------------------- contextual helpers --------------------------- */
 
@@ -42,16 +46,19 @@ function PlayOverlay({ playing, onClick, size = "md" }: { playing: boolean; onCl
   );
 }
 
-function TrackMenu({
+export function TrackMenu({
   track,
   context,
   onRemove,
   removeLabel,
+  triggerClassName,
 }: {
   track: Track;
   context?: Track[];
   onRemove?: () => void;
   removeLabel?: string;
+  /** replaces the default hover-only trigger styling (e.g. always visible on cards) */
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -99,13 +106,19 @@ function TrackMenu({
     };
   }, [open]);
 
+  const ytId = videoIdOfTrack(track);
   const items: { label: string; sub?: string; icon: ReactNode; run: () => void }[] = [
     { label: "Save to playlist", icon: <Plus className="h-4 w-4" />, run: () => setPickerOpen(true) },
-    offline
-      ? { label: "Remove from offline", sub: "Clear app storage", icon: <Trash2 className="h-4 w-4 text-rose-400" />, run: () => removeOffline(track.id) }
-      : { label: "Save for offline", sub: "Play without internet", icon: <DownloadCloud className="h-4 w-4 text-accent" />, run: () => saveOffline(track) },
-    { label: "Export file", sub: "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) },
   ];
+  if (offline) {
+    items.push({ label: "Remove from offline", sub: "Clear app storage", icon: <Trash2 className="h-4 w-4 text-rose-400" />, run: () => removeOffline(track.id) });
+  } else if (canSaveOffline(track)) {
+    items.push({ label: "Save for offline", sub: "Play without internet", icon: <DownloadCloud className="h-4 w-4 text-accent" />, run: () => saveOffline(track) });
+  }
+  if (track.source !== "local") items.push({ label: ytId ? "Download MP3" : "Export file", sub: ytId ? undefined : "Download MP3/M4A", icon: <Download className="h-4 w-4" />, run: () => downloadTrack(track) });
+  if (ytId) {
+    items.push({ label: "Download video", icon: <Film className="h-4 w-4" />, run: () => requestVideoDownload({ id: ytId, title: track.title, author: track.artist }) });
+  }
   if (settings.queueEnabled) {
     items.unshift(
       { label: "Play next", icon: <ListEnd className="h-4 w-4" />, run: () => playNext(track) },
@@ -128,7 +141,7 @@ function TrackMenu({
       <IconButton
         ref={btnRef}
         size="sm"
-        className="opacity-0 group-hover/row:opacity-100 focus:opacity-100 data-[open=true]:opacity-100"
+        className={triggerClassName ?? "opacity-0 group-hover/row:opacity-100 focus:opacity-100 data-[open=true]:opacity-100"}
         data-open={open}
         aria-label="Track options"
         onClick={(e) => {
@@ -139,10 +152,13 @@ function TrackMenu({
         <MoreHorizontal className="h-4 w-4" />
       </IconButton>
 
-      {open && (
+      {/* Portalled to <body>: the menu is placed with viewport coordinates,
+          which only hold when no ancestor is transformed or clips it. */}
+      {open && createPortal(
         <div
-          className="blur-panel fixed z-[80] w-[210px] animate-scale-in overflow-hidden p-1.5 shadow-2xl"
+          className="blur-panel surface-raised fixed z-[80] w-[210px] animate-scale-in overflow-hidden p-1.5 shadow-2xl"
           style={{ top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
         >
           {items.map((it) => (
             <button
@@ -162,7 +178,8 @@ function TrackMenu({
               </div>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
 
       <PlaylistPicker
@@ -339,6 +356,8 @@ export function TrackRow({
                       ? "Independent CC library"
                       : track.source === "youtube"
                           ? "YouTube Music mirror · 320kbps"
+                          : track.source === "local"
+                            ? "File on this phone"
                           : "Open radio directory"
             }
           >
@@ -348,6 +367,7 @@ export function TrackRow({
               track.source === "jiosaavn" ? "database" :
               track.source === "jamendo" ? "CC library" :
               track.source === "youtube" ? "yt mirror" :
+              track.source === "local" ? "on device" :
               "radio"
             }
           </span>
@@ -373,7 +393,7 @@ export function TrackRow({
         <Heart className={cn("h-4 w-4", fav && "fill-current")} />
       </IconButton>
 
-      {!track.isLive && (
+      {(offline || canSaveOffline(track)) && (
         <IconButton
           size="sm"
           aria-label={offline ? "Remove from downloads" : "Save for offline"}
@@ -503,7 +523,7 @@ export function HeroCard({ track, context, eager = false }: { track: Track; cont
   return (
     <div className="blur-panel relative overflow-hidden p-5 sm:p-7">
       <div
-        className="pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full opacity-40 blur-3xl gradient-drift"
+        className="ab-decor pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full opacity-40 blur-3xl gradient-drift"
         style={{ backgroundImage: gradientFrom(track.title) }}
       />
       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">

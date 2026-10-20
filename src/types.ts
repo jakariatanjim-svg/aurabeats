@@ -4,7 +4,7 @@
  * network services (audius.ts / radio.ts) — nothing is authored statically.
  */
 
-export type TrackSource = "archive" | "audius" | "radio" | "jiosaavn" | "jamendo" | "youtube" | "soundcloud";
+export type TrackSource = "archive" | "audius" | "radio" | "jiosaavn" | "jamendo" | "youtube" | "soundcloud" | "local";
 
 export interface PlayerSettings {
   queueEnabled: boolean;
@@ -64,7 +64,8 @@ export interface UserPlaylist {
   tracks: Track[];
 }
 
-export type ThemeName = "glassy" | "modern";
+/** Selectable theme cores. */
+export type ThemeName = "glassmorphism" | "material" | "liquid";
 export type ThemeMode = "dark" | "light";
 
 export interface ViewDescriptor {

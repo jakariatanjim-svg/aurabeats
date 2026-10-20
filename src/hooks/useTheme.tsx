@@ -1,5 +1,5 @@
 /**
- * Theme engine — dual core (glassy glassmorphism / modern flat) plus dark and
+ * Theme engine — Glassmorphism, Material UI (Material 3) or Liquid Glass (iOS 26) cores, plus dark and
  * light modes and a live accent colour system. Everything is written to CSS
  * custom properties on <html> so the whole UI re-tints instantly with zero
  * re-render cost, and persisted to localStorage.
@@ -93,8 +93,22 @@ export function accentRgbString(hex: string): string {
   return hexToRgb(hex).join(" ");
 }
 
+export const THEMES: { key: ThemeName; name: string }[] = [
+  { key: "glassmorphism", name: "Glassmorphism" },
+  { key: "material", name: "Material UI" },
+  { key: "liquid", name: "Liquid Glass" },
+];
+
+/** Reads the saved core, migrating the old "glassy" / "modern" keys. */
+function loadTheme(): ThemeName {
+  const saved = storage.get<string>("theme", "glassmorphism");
+  if (saved === "material" || saved === "modern") return "material";
+  if (saved === "liquid") return "liquid";
+  return "glassmorphism";
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeName>(() => storage.get<ThemeName>("theme", "glassy"));
+  const [theme, setThemeState] = useState<ThemeName>(loadTheme);
   const [mode, setModeState] = useState<ThemeMode>(() => storage.get<ThemeMode>("mode", "dark"));
   // Default accent: Ocean (#3b82f6) — index 7 in ACCENTS
   const [accent, setAccentState] = useState<string>(() => storage.get<string>("accent", ACCENTS[7].value));
@@ -113,10 +127,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     storage.set("accent", accent);
   }, [theme, mode, accent]);
 
+  // Android app only: status-bar icons follow the in-app mode, not the phone's
+  // system theme, so they stay readable over the app background.
+  useEffect(() => {
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (!cap?.isNativePlatform?.()) return;
+    import("@capacitor/core")
+      .then(({ SystemBars, SystemBarsStyle }) =>
+        SystemBars.setStyle({ style: mode === "dark" ? SystemBarsStyle.Dark : SystemBarsStyle.Light }),
+      )
+      .catch(() => {});
+  }, [mode]);
+
   const setTheme = useCallback((t: ThemeName) => setThemeState(t), []);
   const setMode = useCallback((m: ThemeMode) => setModeState(m), []);
   const setAccent = useCallback((hex: string) => setAccentState(hex), []);
-  const toggleTheme = useCallback(() => setThemeState((t) => (t === "glassy" ? "modern" : "glassy")), []);
+  const toggleTheme = useCallback(() => setThemeState((t) => {
+    const i = THEMES.findIndex((x) => x.key === t);
+    return THEMES[(i + 1) % THEMES.length].key;
+  }), []);
   const toggleMode = useCallback(() => setModeState((m) => (m === "dark" ? "light" : "dark")), []);
 
   const value = useMemo(

@@ -1,4 +1,5 @@
-import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download } from "lucide-react";
+import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download, MonitorPlay } from "lucide-react";
+import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -31,9 +32,11 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
     queue,
     settings,
     downloadTrack,
+    pause,
   } = usePlayer();
 
   const fav = current ? isFavorite(current.id) : false;
+  const hasVideo = Boolean(videoIdOfTrack(current));
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   // Nothing has ever been played this session — stay hidden, keep the UI clean.
@@ -42,10 +45,10 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
   if (!current) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-[calc(4.85rem+env(safe-area-inset-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
-      <div className="blur-panel glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[1.6rem]! px-4 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.55rem)] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.7)] md:rounded-[2rem]! md:px-6 md:py-3 md:pb-3">
+    <div className="ab-playerbar-wrap fixed inset-x-0 bottom-[calc(4.85rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
+      <div className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[calc(var(--sa-bottom)+0.55rem)] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
         {/* mobile progress line - moved to absolute top for better layout */}
-        <div className="absolute top-0 left-0 right-0 md:hidden">
+        <div className="absolute top-[3px] left-6 right-6 md:hidden">
           <Slider
           ariaLabel="Seek"
           value={isLive ? 0 : currentTime}
@@ -71,7 +74,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               src={current?.artwork || undefined}
               fallbackSrc={current?.artworkFallback}
               alt={current?.title ?? "AuraBeats"}
-              className={cn("h-full w-full", isPlaying && "shadow-[0_0_20px_-4px_var(--c-accent)]")}
+              className={cn("h-full w-full", isPlaying && "shadow-[0_0_20px_-4px_var(--glow)]")}
               rounded={isPlaying ? "rounded-full" : "rounded-lg"}
             />
             {isPlaying && (
@@ -134,8 +137,8 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               onClick={toggle}
               aria-label={isPlaying ? "Pause" : "Play"}
               className={cn(
-                "focus-ring relative flex h-9 w-9 items-center justify-center rounded-full bg-ink text-base transition-all duration-200 hover:scale-105 active:scale-95 sm:h-11 sm:w-11",
-                isPlaying && "bg-accent text-white shadow-[0_0_20px_-4px_var(--c-accent)]",
+                "focus-ring relative flex h-9 w-9 items-center justify-center rounded-full ab-primary transition-all duration-200 hover:scale-105 active:scale-95 sm:h-11 sm:w-11",
+                isPlaying && "bg-accent text-white shadow-[0_0_20px_-4px_var(--glow)]",
               )}
             >
               {isBuffering ? (
@@ -183,7 +186,18 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
           <div className="mr-2 hidden h-7 w-16 lg:block">
             <Visualizer variant="wave" barCount={28} active={isPlaying} />
           </div>
-          {current && (
+          {current && hasVideo && (
+            <IconButton
+              size="sm"
+              onClick={() => watchTrackVideo(current, currentTime, pause)}
+              aria-label="Watch the video"
+              tooltip="Watch video"
+              className="text-accent"
+            >
+              <MonitorPlay className="h-4 w-4" />
+            </IconButton>
+          )}
+          {current && current.source !== "local" && (
             <IconButton size="sm" onClick={() => downloadTrack(current)} aria-label="Download">
               <Download className="h-4 w-4" />
             </IconButton>

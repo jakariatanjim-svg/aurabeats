@@ -33,7 +33,7 @@ export function RadioView() {
   return (
     <div className="space-y-6 pb-4">
       <div className="blur-panel relative overflow-hidden p-5">
-        <div className="pointer-events-none absolute -top-16 -right-10 h-52 w-52 rounded-full bg-rose-500/30 opacity-60 blur-3xl gradient-drift" />
+        <div className="ab-decor pointer-events-none absolute -top-16 -right-10 h-52 w-52 rounded-full bg-rose-500/30 opacity-60 blur-3xl gradient-drift" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="flex items-center gap-2 text-[11px] font-bold tracking-[0.18em] text-rose-400 uppercase">
@@ -43,11 +43,12 @@ export function RadioView() {
               </span>
               Broadcasting now
             </p>
-            <h2 className="mt-1.5 text-2xl font-black tracking-tight text-ink sm:text-3xl">Open Live Radio</h2>
-            <p className="mt-1 max-w-lg text-xs leading-relaxed text-ink3">
-              Community-maintained archive of worldwide stations. Streams are direct HTTPS audio, checked continuously by
-              the network — if one drops, AuraBeats hops to another automatically.
-            </p>
+            <h2
+              className="mt-1.5 text-2xl font-black tracking-tight text-ink sm:text-3xl"
+              data-tip="Worldwide stations from the open Radio Browser archive. If a stream drops, the next one takes over automatically."
+            >
+              Open Live Radio
+            </h2>
           </div>
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 rounded-full border border-line px-3 py-2 text-xs text-ink2">

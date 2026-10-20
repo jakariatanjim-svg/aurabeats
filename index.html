@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="glassy" data-mode="dark">
+<html lang="en" data-theme="glassmorphism" data-mode="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -41,17 +41,17 @@
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta
       name="description"
-      content="Unlimited music and live radio. No sign-up. No ads. Just play."
+      content="Unlimited music, live radio and ad-free YouTube videos. No sign-up. No ads. Just play."
     />
     <link rel="canonical" href="https://aurabeats.pages.dev/" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://aurabeats.pages.dev/" />
     <meta property="og:title" content="AuraBeats" />
-    <meta property="og:description" content="Unlimited music and live radio. No sign-up. No ads." />
+    <meta property="og:description" content="Music, live radio and ad-free YouTube videos. No sign-up. No ads." />
     <meta property="og:image" content="https://aurabeats.pages.dev/og-card.svg" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="AuraBeats" />
-    <meta name="twitter:description" content="Unlimited music and live radio. No sign-up. No ads." />
+    <meta name="twitter:description" content="Music, live radio and ad-free YouTube videos. No sign-up. No ads." />
     <meta name="twitter:image" content="https://aurabeats.pages.dev/og-card.svg" />
     <script type="application/ld+json">
       {
@@ -59,7 +59,7 @@
         "@type": ["WebSite", "WebApplication"],
         "name": "AuraBeats",
         "url": "https://aurabeats.pages.dev/",
-        "description": "Stream millions of songs and live radio in a sleek browser player — no sign-up required.",
+        "description": "Stream millions of songs, live radio and ad-free YouTube videos in every quality — no sign-up required.",
         "applicationCategory": "MusicApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires JavaScript",
@@ -85,25 +85,24 @@
     <link rel="apple-touch-icon" sizes="152x152" href="/icon-512.png" />
     <link rel="apple-touch-icon" sizes="120x120" href="/icon-512.png" />
     <link rel="apple-touch-startup-image" href="/icon-512.png" />
-    <!-- DNS prefetch & preconnect — fastest possible connection setup -->
-    <!-- Primary music APIs (preconnect = DNS + TCP + TLS upfront) -->
-    <link rel="preconnect" href="https://saavn.sumit.co" crossorigin />
-    <link rel="preconnect" href="https://api.jamendo.com" crossorigin />
-    <link rel="preconnect" href="https://archive.org" crossorigin />
-    <link rel="preconnect" href="https://discoveryprovider.audius.co" crossorigin />
-    <!-- Secondary mirrors (dns-prefetch only — lighter, covers fallbacks) -->
-    <link rel="dns-prefetch" href="https://discoveryprovider2.audius.co" />
-    <link rel="dns-prefetch" href="https://discoveryprovider3.audius.co" />
-    <link rel="dns-prefetch" href="https://api.audius.co" />
-    <link rel="dns-prefetch" href="https://jiosaavn-api-liart-three.vercel.app" />
-    <link rel="dns-prefetch" href="https://jiosaavn-api-sumit.vercel.app" />
-    <link rel="dns-prefetch" href="https://pipedapi.kavin.rocks" />
+    <!-- Main content = YouTube / YouTube Music: connect to those first.
+         i.ytimg.com serves every thumbnail; the two Piped servers answer
+         search / related / trending. -->
+    <link rel="preconnect" href="https://i.ytimg.com" />
+    <link rel="preconnect" href="https://pipedapi.ducks.party" crossorigin />
+    <link rel="preconnect" href="https://api.piped.private.coffee" crossorigin />
+    <link rel="preconnect" href="https://www.youtube.com" />
+    <link rel="dns-prefetch" href="https://suggestqueries-clients6.youtube.com" />
+    <!-- Fallback sources: DNS only (they load later, never first) -->
+    <link rel="dns-prefetch" href="https://saavn.sumit.co" />
+    <link rel="dns-prefetch" href="https://api.jamendo.com" />
+    <link rel="dns-prefetch" href="https://archive.org" />
+    <link rel="dns-prefetch" href="https://discoveryprovider.audius.co" />
     <link rel="dns-prefetch" href="https://de1.api.radio-browser.info" />
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <!-- Favicon: blue-to-cyan waveform logo — same on tab, PWA, homescreen -->

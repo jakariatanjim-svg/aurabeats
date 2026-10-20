@@ -1,32 +1,40 @@
+import { Floating } from "@/components/Floating";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Moon, Palette, Search, Settings, Sparkles, Sun, Wifi } from "lucide-react";
+import { ArrowLeft, Check, Droplets, Moon, Palette, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
-import { routeLabel, type RouteKey } from "@/routes";
+import { isVideoRoute, routeLabel, type RouteKey } from "@/routes";
+import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
+import { TopSearch, usePcSearch } from "@/components/TopSearch";
+import { useUrlQuery } from "@/utils/searchNav";
+import { isNative, playbackMethodLabel } from "@/services/video/net";
 import { IconButton, WaveformLogo } from "@/components/ui";
 import { usePlayer } from "@/hooks/usePlayer";
 
 function ThemeSwitch({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
   return (
-    <div className={cn("blur-panel flex items-center gap-0.5 p-1", className)}>
+    <div className={cn("ab-seg blur-panel flex items-center gap-0.5 p-1", className)}>
       {(
         [
-          { key: "glassy", label: "Glassy", icon: Sparkles },
-          { key: "modern", label: "Modern", icon: Palette },
+          { key: "glassmorphism", label: "Glassmorphism", icon: Sparkles },
+          { key: "material", label: "Material UI", icon: Shapes },
+          { key: "liquid", label: "Liquid Glass", icon: Droplets },
         ] as const
       ).map(({ key, label, icon: Icon }) => (
         <button
           key={key}
           type="button"
           onClick={() => setTheme(key)}
+          title={label}
+          aria-pressed={theme === key}
           className={cn(
             "focus-ring flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold transition-all duration-200 sm:px-3 sm:text-[11px]",
-            theme === key ? "bg-accent text-white shadow-[0_4px_18px_-6px_var(--c-accent)]" : "text-ink3 hover:text-ink",
+            theme === key ? "bg-accent text-white shadow-[0_4px_18px_-6px_var(--glow)]" : "text-ink3 hover:text-ink",
           )}
         >
           <Icon className="h-3.5 w-3.5" />
-          <span className="hidden lg:inline">{label}</span>
+          <span className={cn("hidden", theme === key ? "lg:inline" : "2xl:inline")}>{label}</span>
         </button>
       ))}
     </div>
@@ -46,11 +54,13 @@ function AccentPicker() {
   const { accent, setAccent } = useTheme();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!wrapRef.current?.contains(t) && !popRef.current?.contains(t)) setOpen(false);
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
@@ -65,7 +75,8 @@ function AccentPicker() {
         />
       </IconButton>
       {open && (
-        <div className="blur-panel absolute top-12 right-0 z-[70] w-[15rem] animate-scale-in p-3.5 shadow-2xl">
+        <Floating anchor={wrapRef} align="right" layerRef={popRef}>
+        <div className="blur-panel surface-raised w-[15rem] animate-scale-in p-3.5 shadow-2xl">
           <p className="mb-2.5 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">
             <Palette className="h-3 w-3" /> Accent colour
           </p>
@@ -102,6 +113,7 @@ function AccentPicker() {
             Accents tint every control, progress bar and glow in real time.
           </p>
         </div>
+        </Floating>
       )}
     </div>
   );
@@ -116,13 +128,24 @@ export function TopBar({
 }) {
   const { failoverNote } = usePlayer();
   const live = route === "radio";
+  const video = isVideoRoute(route);
+  const mode = modeOf(route);
+  const q = useUrlQuery();
+  // Phone results page: the bar becomes ← + the search term (YouTube).
+  const pc = usePcSearch();
+  const resultsBar = !pc && (route === "search" || route === "video-search") && Boolean(q);
 
   return (
-    <header className="blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
+    <header className="ab-topbar blur-panel glass-inset sticky top-0 z-40 flex items-center gap-2.5 rounded-none! border-x-0! border-t-0! px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3">
+      {resultsBar && (
+        <IconButton onClick={() => (window.history.length > 1 ? window.history.back() : onNavigate(video ? "video" : "home"))} aria-label="Back" className="-ml-1 shrink-0">
+          <ArrowLeft className="h-5 w-5" />
+        </IconButton>
+      )}
       <button
         type="button"
-        onClick={() => onNavigate("home")}
-        className="focus-ring flex min-w-0 shrink items-center gap-2.5 rounded-2xl md:hidden"
+        onClick={() => onNavigate(video ? "video" : "home")}
+        className={cn("focus-ring flex min-w-0 shrink items-center gap-2.5 rounded-2xl md:hidden", resultsBar && "hidden")}
         aria-label="AuraBeats — go to home"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3b82f6] to-[#22d3ee] text-white shadow-[0_8px_20px_-6px_rgba(59,130,246,0.5)]">
@@ -134,31 +157,24 @@ export function TopBar({
         </span>
       </button>
 
-      <div className="hidden min-w-0 flex-1 md:block">
-        <p className="truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl">{routeLabel(route)}</p>
-        <p className="mt-0.5 hidden items-center gap-1.5 text-[11px] font-medium text-ink3 sm:flex sm:text-xs">
-          <Wifi className="h-3.5 w-3.5 shrink-0 text-accent drop-shadow-[0_0_8px_var(--c-accent)]" />
-          {failoverNote ? (
-            <span className="truncate text-accent">{failoverNote}</span>
-          ) : live ? (
-            "Open radio archive · live streams"
-          ) : (
-            "Multi-source streaming engine"
-          )}
+      <div className={cn("hidden min-w-0 flex-1", pc ? "lg:block" : "md:block", resultsBar && "md:hidden")}>
+        <p
+          className="w-fit max-w-full truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl"
+          data-tip={live ? "Live radio streams" : video ? `${isNative ? "Ad-free YouTube" : "YouTube"} · ${playbackMethodLabel()}` : undefined}
+        >
+          {routeLabel(route)}
         </p>
+        {failoverNote && (
+          <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-accent sm:text-xs">
+            <Wifi className="h-3.5 w-3.5 shrink-0" /> {failoverNote}
+          </p>
+        )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => onNavigate("search")}
-        className="focus-ring glass-inset hidden items-center gap-2 rounded-full border border-line/80 bg-white/[0.03] px-4 py-2.5 text-xs text-ink3 transition hover:border-accent hover:text-accent lg:flex"
-      >
-        <Search className="h-3.5 w-3.5" />
-        Search millions of tracks
-        <ChevronDown className="h-3 w-3 -rotate-90 opacity-60" />
-      </button>
+      <TopSearch mode={mode} route={route} onNavigate={onNavigate} className="flex-[1.4]" />
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-2.5">
+      <div className={cn("flex shrink-0 items-center gap-2 sm:gap-2.5", resultsBar ? "hidden" : "md:ml-auto")}>
+        <AppModeSwitch route={route} onNavigate={onNavigate} compact className="md:hidden" />
         <IconButton
           onClick={() => onNavigate("settings")}
           aria-label="Open settings"

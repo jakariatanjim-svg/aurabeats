@@ -346,9 +346,9 @@ export async function tracksFromAlbums(
   return out.slice(0, max);
 }
 
-export async function searchTracks(query: string, opts: { limit?: number; signal?: AbortSignal } = {}): Promise<Track[]> {
-  const { limit = 30, signal } = opts;
-  const albums = await searchAlbums({ query, rows: 22, signal });
+export async function searchTracks(query: string, opts: { limit?: number; page?: number; signal?: AbortSignal } = {}): Promise<Track[]> {
+  const { limit = 30, page = 1, signal } = opts;
+  const albums = await searchAlbums({ query, rows: 22, page, signal });
   return tracksFromAlbums(albums, { perAlbum: 3, max: limit, signal });
 }
 

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App";
+import { installRipple } from "./utils/ripple";
 
 // Hide splash immediately before first React paint
 const splash = document.getElementById("app-loading");
@@ -10,6 +11,9 @@ if (splash) {
   splash.style.pointerEvents = "none";
   setTimeout(() => splash.remove(), 400);
 }
+
+// Material UI theme core: touch ripple (no-op while another core is active).
+installRipple();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
@@ -6,8 +6,13 @@ import { MobileNav } from "@/components/MobileNav";
 import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
+import { TooltipLayer } from "@/components/Tooltips";
+import { DownloadTray, VideoDownloadSheet } from "@/components/VideoDownloads";
 import { storage } from "@/utils/storage";
-import { pathToRoute, routeToPath, type RouteKey } from "@/routes";
+import { YouTubeDock } from "@/components/video/YouTubeDock";
+import { isNative } from "@/services/video/net";
+import { isVideoRoute, pathToRoute, routeToPath, type RouteKey } from "@/routes";
+import { rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
@@ -19,8 +24,15 @@ const PrivacyView = lazy(() => import("@/views/PrivacyView").then((m) => ({ defa
 const FavoritesView = lazy(() => import("@/views/LibraryViews").then((m) => ({ default: m.FavoritesView })));
 const HistoryView = lazy(() => import("@/views/LibraryViews").then((m) => ({ default: m.HistoryView })));
 const DownloadsView = lazy(() => import("@/views/LibraryViews").then((m) => ({ default: m.DownloadsView })));
+const DeviceMusicView = lazy(() => import("@/views/DeviceMusicView").then((m) => ({ default: m.DeviceMusicView })));
 const LibraryView = lazy(() => import("@/views/LibraryViews").then((m) => ({ default: m.LibraryView })));
 const PlaylistDetailView = lazy(() => import("@/views/LibraryViews").then((m) => ({ default: m.PlaylistDetailView })));
+const VideoHomeView = lazy(() => import("@/views/video/VideoViews").then((m) => ({ default: m.VideoHomeView })));
+const VideoSubsView = lazy(() => import("@/views/video/VideoViews").then((m) => ({ default: m.VideoSubsView })));
+const VideoLibraryView = lazy(() => import("@/views/video/VideoViews").then((m) => ({ default: m.VideoLibraryView })));
+const VideoSearchView = lazy(() => import("@/views/video/VideoSearchView").then((m) => ({ default: m.VideoSearchView })));
+const WatchView = lazy(() => import("@/views/video/WatchView").then((m) => ({ default: m.WatchView })));
+const ChannelView = lazy(() => import("@/views/video/ChannelView").then((m) => ({ default: m.ChannelView })));
 const FullScreenPlayer = lazy(() => import("@/components/FullScreenPlayer").then((m) => ({ default: m.FullScreenPlayer })));
 const QueuePanel = lazy(() => import("@/components/FullScreenPlayer").then((m) => ({ default: m.QueuePanel })));
 
@@ -34,6 +46,10 @@ function Shell() {
     if (main) main.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  // Address last followed; synthetic / sheet popstates for the same address
+  // (closing the phone search, repeating a search) must not jump to the top.
+  const lastLoc = useRef(window.location.pathname + window.location.search);
+
   const navigate = useCallback((next: RouteKey) => {
     const path = routeToPath(next);
     if (window.location.pathname === path) {
@@ -43,6 +59,7 @@ function Shell() {
     // Replace the bare "/" entry with "/home" so back-navigation stays inside the app.
     if (window.location.pathname === "/") window.history.replaceState(null, "", "/home");
     window.history.pushState(null, "", path);
+    lastLoc.current = path;
     setRoute(next);
     scrollTop();
   }, [scrollTop]);
@@ -50,6 +67,9 @@ function Shell() {
   // keep state in sync with the address bar (back / forward / pasted links)
   useEffect(() => {
     const onPop = () => {
+      const loc = window.location.pathname + window.location.search;
+      if (loc === lastLoc.current) return;
+      lastLoc.current = loc;
       setRoute(pathToRoute(window.location.pathname));
       scrollTop();
     };
@@ -65,6 +85,7 @@ function Shell() {
       if (!anchor) return;
       e.preventDefault();
       window.history.pushState(null, "", anchor.pathname + anchor.search);
+      lastLoc.current = anchor.pathname + anchor.search;
       setRoute(pathToRoute(window.location.pathname));
       scrollTop();
     };
@@ -79,12 +100,21 @@ function Shell() {
     });
   }, []);
 
+  // Each mode (Music / Video) reopens where you left it.
+  useEffect(() => {
+    rememberRoute(route);
+  }, [route]);
+  const videoMode = isVideoRoute(route);
+  const watching = route.startsWith("watch:");
+
   const { setExpanded, setQueueOpen, queueOpen, next, previous, toggle, current, favorites, volume, setVolume, settings, expanded } = usePlayer();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      // The video player owns the keyboard while a video is open.
+      if (watching && !expanded) return;
       if (e.code === "Space") {
         e.preventDefault();
         toggle();
@@ -107,7 +137,7 @@ function Shell() {
       const isFullScreen = expanded;
       
       // If NOT in full screen, disable volume wheel over scrollable areas (so page can scroll normally)
-      if (!isFullScreen && target?.closest(".scroll-area, main, aside, [role=dialog]")) return;
+      if (!isFullScreen && target?.closest(".scroll-area, main, aside, [role=dialog], [data-video-player]")) return;
       
       // If IN full screen, ONLY disable volume wheel if hovering over the "Up Next" queue area
       if (isFullScreen && target?.closest(".scroll-area")) return;
@@ -122,22 +152,22 @@ function Shell() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("wheel", onWheel);
     };
-  }, [toggle, next, previous, setExpanded, setQueueOpen, queueOpen, current, volume, setVolume, expanded]);
+  }, [toggle, next, previous, setExpanded, setQueueOpen, queueOpen, current, volume, setVolume, expanded, watching]);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden p-0 sm:p-3 md:p-5 gap-4 relative z-0">
+    <div data-app-mode={videoMode ? "video" : "music"} className="app-shell flex w-full overflow-hidden gap-4 relative z-0">
       <Sidebar route={route} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
 
-      <div className="flex min-w-0 flex-1 flex-col relative z-10 h-full rounded-[2rem] blur-panel overflow-hidden border border-white/5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.5)]">
+      <div className="shell-panel flex min-w-0 flex-1 flex-col relative z-10 h-full overflow-hidden">
         <TopBar route={route} onNavigate={navigate} />
         <main
           id="ab-scroll"
           className={cn(
             "scroll-area min-h-0 flex-1 overflow-y-auto px-4 pt-4 sm:px-8 transition-[padding] duration-300",
             // reserve room for the floating player bar only once it actually exists
-            current
-              ? "pb-[calc(env(safe-area-inset-bottom)+12rem)] md:pb-[calc(env(safe-area-inset-bottom)+9rem)]"
-              : "pb-[calc(env(safe-area-inset-bottom)+6.5rem)] md:pb-10",
+            current && !watching
+              ? "pb-[calc(var(--sa-bottom)+12rem)] md:pb-[calc(var(--sa-bottom)+9rem)]"
+              : "pb-[calc(var(--sa-bottom)+6.5rem)] md:pb-10",
           )}
         >
           <Suspense
@@ -163,21 +193,33 @@ function Shell() {
               {route === "about" && <AboutView />}
               {route === "privacy" && <PrivacyView />}
               {route === "downloads" && <DownloadsView />}
+              {route === "device" && <DeviceMusicView />}
               {route.startsWith("playlist:") && (
                 <PlaylistDetailView playlistId={route.slice("playlist:".length)} onBack={() => navigate("library")} />
               )}
+              {route === "video" && <VideoHomeView onNavigate={navigate} />}
+              {route === "video-search" && <VideoSearchView />}
+              {route === "video-subs" && <VideoSubsView onNavigate={navigate} />}
+              {route === "video-library" && <VideoLibraryView />}
+              {route.startsWith("watch:") && <WatchView key={route} id={route.slice("watch:".length)} onNavigate={navigate} />}
+              {route.startsWith("channel:") && <ChannelView id={route.slice("channel:".length)} />}
             </div>
           </Suspense>
         </main>
       </div>
 
-      <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />
+      {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
       <MobileNav route={route} onNavigate={navigate} favoritesCount={favorites.length} />
+      {/* Website video player: one YouTube iframe for watch page + miniplayer */}
+      {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
       <Suspense fallback={null}>
         {settings.queueEnabled && <QueuePanel />}
         <FullScreenPlayer />
       </Suspense>
       <Toaster />
+      <TooltipLayer />
+      <VideoDownloadSheet />
+      <DownloadTray />
     </div>
   );
 }

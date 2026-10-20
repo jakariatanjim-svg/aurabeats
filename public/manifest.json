@@ -1,7 +1,7 @@
 {
   "name": "AuraBeats — Streaming Engine",
   "short_name": "AuraBeats",
-  "description": "Stream millions of songs and live radio. YouTube Music, JioSaavn, Audius and more. No sign-up required.",
+  "description": "Music and ad-free YouTube videos in one app. Millions of songs, live radio and every video quality — no ads, no sign-up.",
   "start_url": "/home",
   "scope": "/",
   "display": "standalone",
@@ -9,7 +9,7 @@
   "orientation": "any",
   "background_color": "#06030f",
   "theme_color": "#7c5cff",
-  "categories": ["music", "entertainment"],
+  "categories": ["music", "entertainment", "video"],
   "prefer_related_applications": false,
   "icons": [
     {
@@ -45,6 +45,12 @@
       "short_name": "Search",
       "url": "/search",
       "description": "Search millions of songs"
+    },
+    {
+      "name": "Watch Videos",
+      "short_name": "Video",
+      "url": "/video",
+      "description": "Ad-free YouTube videos"
     },
     {
       "name": "Live Radio",

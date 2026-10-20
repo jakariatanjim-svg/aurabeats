@@ -5,6 +5,7 @@
  * engine. Everything user-specific is mirrored into localStorage.
  */
 
+import { videoIdOfTrack } from "@/utils/watchVideo";
 import {
   createContext,
   useCallback,
@@ -17,6 +18,7 @@ import {
 } from "react";
 import { useAudioEngine, type AudioEngine } from "@/hooks/useAudioEngine";
 import { reportListen } from "@/services/radio";
+import { isYouTubePlayerReady } from "@/services/youtubePlayer";
 import { resolveStreamUrls as resolveSC } from "@/services/soundcloud";
 import { storage, session } from "@/utils/storage";
 import { db } from "@/utils/db";
@@ -101,6 +103,8 @@ interface PlayerContextValue {
   next: () => void;
   previous: () => void;
   toggle: () => void;
+  /** Pause music if it is playing (safe to call repeatedly). */
+  pause: () => void;
   seek: (seconds: number) => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
@@ -123,6 +127,9 @@ interface PlayerContextValue {
   updateSettings: (s: Partial<PlayerSettings>) => void;
   toast: (text: string, tone?: ToastMessage["tone"]) => void;
   dismissToast: (id: number) => void;
+  /** Listening history (device-local). */
+  removeHistory: (id: string) => void;
+  clearHistory: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -260,8 +267,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const downloadTrack = useCallback(async (track: Track) => {
     // YouTube tracks — direct MZ shortcut for faster conversion
     if (track.streamUrl.startsWith("yt-resolve:") || track.source === "youtube") {
-      const videoId = track.streamUrl.replace("yt-resolve:", "");
-      const downloaderUrl = `https://www.youtubemz.com/watch?v=${videoId}`;
+      const videoId = videoIdOfTrack(track) ?? track.streamUrl.replace("yt-resolve:", "");
+      // Android app: straight to the phone, no website in between.
+      const dl = await import("@/services/videoDownload");
+      if (dl.inAppVideoDownload) {
+        toast(`Downloading "${track.title}"…`, "info");
+        void dl.startAudioDownload(videoId, track.title, track.artist.replace(/ - Topic$/i, "").trim());
+        return;
+      }
+      const downloaderUrl = dl.audioSiteUrl(videoId);
 
       toast(`Opening converter for: ${track.title}`, "info");
       const win = window.open(downloaderUrl, "_blank", "noopener,noreferrer");
@@ -355,7 +369,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const doLoad = async () => {
       try {
         // 1. Try local offline storage first
-        const offlineBlob = await db.getTrackBlob(current.id);
+        // Never let this lookup hold up playback: on a first launch the
+        // database is still being created, and it can fail outright (private
+        // mode). Missing / slow / failed simply means "not downloaded".
+        const offlineBlob = await Promise.race([
+          db.getTrackBlob(current.id).catch(() => null),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
+        ]);
         if (offlineBlob && alive) {
           const localUrl = URL.createObjectURL(offlineBlob);
           engine.load(localUrl, { autoplay: !restorePauseRef.current, live: current.isLive });
@@ -395,7 +415,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!current) return;
     const timeoutMs = 12000;
-    const timer = window.setTimeout(() => {
+    const isYt = current.source === "youtube" || current.streamUrl.startsWith("yt-resolve:");
+    let timer = 0;
+    // YouTube tracks: the clock only starts once the hidden player has booted.
+    // On a cold first launch that boot alone can take longer than the timeout,
+    // and counting it used to burn the retry and skip / stall the track.
+    const arm = () => {
+      if (isYt && !isYouTubePlayerReady()) {
+        timer = window.setTimeout(arm, 1000);
+        return;
+      }
+      // YouTube gets longer: a stuck track triggers an automatic player
+      // rebuild (~7s) inside this window before we give up on it.
+      timer = window.setTimeout(check, isYt ? 20000 : timeoutMs);
+    };
+    const check = () => {
+      // Player being rebuilt right now — wait for it instead of failing.
+      if (isYt && !isYouTubePlayerReady()) { arm(); return; }
       const el = engineRef.current;
       if (el.currentTime > 0.2 || el.isPlaying || !el.isBuffering) return;
       const track = queueRef.current[indexRef.current];
@@ -409,7 +445,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         toast(`"${track.title}" timed out — skipping`, "error");
         goToRef.current?.(indexRef.current + 1);
       }
-    }, timeoutMs);
+    };
+    arm();
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, attempt]);
@@ -612,6 +649,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggle = useCallback(() => engineRef.current.toggle(), []);
+  const pause = useCallback(() => engineRef.current.pause(), []);
   const seek = useCallback((seconds: number) => engineRef.current.seek(seconds), []);
 
   const toggleShuffle = useCallback(() => {
@@ -777,6 +815,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       next,
       previous,
       toggle,
+      pause,
       seek,
       toggleShuffle,
       cycleRepeat,
@@ -798,6 +837,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       updateSettings,
       toast,
       dismissToast,
+      removeHistory: (id: string) => setHistory((prev) => prev.filter((t) => t.id !== id)),
+      clearHistory: () => setHistory([]),
     }),
     [
       isPlayingNow,
@@ -828,6 +869,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       next,
       previous,
       toggle,
+      pause,
       seek,
       toggleShuffle,
       cycleRepeat,

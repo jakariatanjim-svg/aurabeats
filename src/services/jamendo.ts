@@ -35,9 +35,9 @@ function normalize(raw: any): Track {
   };
 }
 
-export async function searchTracks(query: string, limit = 12): Promise<Track[]> {
+export async function searchTracks(query: string, limit = 12, offset = 0): Promise<Track[]> {
   try {
-    const json = await fetchJamendo(`/tracks/?search=${encodeURIComponent(query)}&limit=${limit}&include=musicinfo`);
+    const json = await fetchJamendo(`/tracks/?search=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}&include=musicinfo`);
     return (json.results || []).map(normalize);
   } catch {
     return [];

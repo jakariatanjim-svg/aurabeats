@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   DownloadCloud,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatDurationList, gradientFrom, relativeTime } from "@/utils/format";
@@ -16,6 +17,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { Button, IconButton, Modal, SectionHeader } from "@/components/ui";
 import { EmptyState } from "@/components/states";
 import { TrackRow } from "@/components/TrackList";
+import { cachedDeviceSongs, deviceMusicAvailable } from "@/services/deviceMusic";
 import type { UserPlaylist } from "@/types";
 import type { Track } from "@/types";
 import type { RouteKey } from "@/routes";
@@ -98,8 +100,7 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
         <div>
           <h2 className="text-2xl font-black tracking-tight text-ink">Your library</h2>
           <p className="mt-1 text-xs text-ink3">
-            {playlists.length} playlists · {favorites.length} favourites · {history.length} in history — all stored
-            locally on this device
+            {playlists.length} playlists · {favorites.length} favourites · {history.length} in history
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
@@ -109,7 +110,7 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
 
       <section>
         <SectionHeader title="Quick access" subtitle="Auto-curated collections" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={cn("grid grid-cols-1 gap-3", deviceMusicAvailable ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3")}>
           <CollectionTile
             title="Favourites"
             count={favorites.length}
@@ -126,6 +127,16 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
             tracks={offlineTracks}
             onOpen={() => onNavigate("downloads")}
           />
+          {deviceMusicAvailable && (
+            <CollectionTile
+              title="On this device"
+              count={cachedDeviceSongs?.length ?? null}
+              icon={<Smartphone className="h-5 w-5" />}
+              tint="bg-emerald-500/20 text-emerald-400"
+              tracks={cachedDeviceSongs ?? []}
+              onOpen={() => onNavigate("device")}
+            />
+          )}
           <CollectionTile
             title="Recently played"
             count={history.length}
@@ -203,7 +214,7 @@ function CollectionTile({
   onOpen,
 }: {
   title: string;
-  count: number;
+  count: number | null;
   icon: React.ReactNode;
   tint: string;
   tracks: Track[];
@@ -215,9 +226,11 @@ function CollectionTile({
       <span className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl", tint)}>{icon}</span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-bold text-ink">{title}</p>
-        <p className="truncate text-[11px] text-ink3">
-          {count} {count === 1 ? "track" : "tracks"}
-        </p>
+        {count !== null && (
+          <p className="truncate text-[11px] text-ink3">
+            {count} {count === 1 ? "track" : "tracks"}
+          </p>
+        )}
       </div>
       <div className="flex gap-1.5">
         <IconButton size="sm" aria-label={`Play ${title}`} onClick={() => tracks.length > 0 && playAll(tracks, 0)}>
@@ -419,7 +432,7 @@ export function FavoritesView() {
           <p className="text-[10px] font-bold tracking-[0.2em] text-ink3 uppercase">Collection</p>
           <h2 className="mt-1 text-3xl font-black tracking-tight text-ink">Favourites</h2>
           <p className="mt-1 text-xs text-ink3">
-            {favorites.length} {favorites.length === 1 ? "track" : "tracks"} · saved on this device
+            {favorites.length} {favorites.length === 1 ? "track" : "tracks"}
           </p>
           {favorites.length > 0 && (
             <Button className="mt-4" onClick={() => playAll(favorites, 0)}>
@@ -490,17 +503,16 @@ export function DownloadsView() {
   return (
     <div className="space-y-6 pb-4">
       <section className="blur-panel glass-inset rounded-[2rem] px-6 py-8 sm:px-10 sm:py-10">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-white/[0.05] px-3.5 py-1.5">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-ink/[0.05] px-3.5 py-1.5">
           <DownloadCloud className="h-4 w-4 text-accent" />
           <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink2">Offline Music</span>
         </div>
-        <h1 className="mb-3 text-3xl font-black tracking-tight text-ink sm:text-4xl">
+        <h1
+          className="text-3xl font-black tracking-tight text-ink sm:text-4xl"
+          data-tip="Saved inside the app; plays without internet"
+        >
           Your Downloads
         </h1>
-        <p className="max-w-xl text-sm leading-relaxed text-ink2">
-          Tracks saved for offline playback. These are stored in your browser's internal database
-          and can be played even without an internet connection.
-        </p>
         {offlineTracks.length > 0 && (
           <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={() => playAll(offlineTracks, 0)}>
