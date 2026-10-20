@@ -59,32 +59,58 @@ async function ytInfo(page) {
   if (!f) return "noframe";
   return f.evaluate(() => { const p = document.querySelector("#movie_player"); return `q=${p?.getPlaybackQuality?.()} inner=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} st=${p?.getPlayerState?.()}`; }).catch((e) => "err " + e.message.slice(0, 60));
 }
+const t0s = Date.now();
+{
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  const page = await ctx.newPage();
+  let t = Date.now();
+  await page.goto("http://localhost:4173/home");
+  const n = await page.waitForFunction(() => document.querySelectorAll("article[role=button]").length >= 3, null, { timeout: 30000 }).then(() => true).catch(() => false);
+  log(`music home: trending cards ${n ? "ok" : "MISSING"} in ${Date.now() - t}ms; first="${await page.evaluate(() => document.querySelector("article[role=button]")?.getAttribute("aria-label"))}" count=${await page.evaluate(() => document.querySelectorAll("article[role=button]").length)}`);
+  const imgs = await page.evaluate(() => [...document.querySelectorAll("article img")].slice(0, 3).map((i) => `${i.currentSrc.split("/").slice(-2).join("/")} ${i.complete ? "loaded" : "pending"}`).join(", "));
+  log(`  imgs: ${imgs}`);
+  t = Date.now();
+  await page.goto("http://localhost:4173/search");
+  const inp = await page.$("input[type=search], input");
+  await inp.fill("arijit singh");
+  await inp.press("Enter");
+  const ok = await page.waitForFunction(() => document.body.innerText.includes("Arijit") && document.querySelectorAll("img").length > 5, null, { timeout: 30000 }).then(() => true).catch(() => false);
+  log(`music search: ${ok ? "results" : "NONE"} in ${Date.now() - t}ms`);
+  await ctx.close();
+}
 for (const [name, ctxOpts] of Object.entries({
-  phone: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 },
-  laptop2x: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 },
+  phone: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
 })) {
   const ctx = await browser.newContext(ctxOpts);
   const page = await ctx.newPage();
+  const t = Date.now();
   await page.goto("http://localhost:4173/watch/dQw4w9WgXcQ");
-  await page.waitForTimeout(2500);
-  await page.waitForTimeout(12000);
-  const info = await page.evaluate(() => {
-    const ifr = document.querySelector(".fixed iframe");
-    if (!ifr) return "no iframe";
-    const h = ifr.parentElement, w = h.parentElement, box = w.parentElement;
-    const r = (e) => { const b = e.getBoundingClientRect(); return `${b.left.toFixed(2)},${b.top.toFixed(2)} ${b.width.toFixed(2)}x${b.height.toFixed(2)}`; };
-    return `box=${r(box)} wrap=${r(w)} host=${r(h)} hostStyle="${h.getAttribute("style")}"`;
-  });
-  log(`${name}: ${info}`);
-  for (const [v, fn] of Object.entries(variants)) {
-    if (fn) await page.evaluate(`(${fn.toString()})(document.querySelector(".fixed iframe").parentElement)`);
-    await page.waitForTimeout(6000);
-    const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
-    const res = [];
-    for (let f = 0; f < 3; f++) { res.push(midScore(await page.screenshot({ clip: box }))); await page.waitForTimeout(600); }
-    const hb = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").getBoundingClientRect(); return `${b.top.toFixed(2)}/${b.height.toFixed(2)}`; });
-    log(`  ${name}-${v} ${await ytInfo(page)} iframe=${hb}\n     ${res.join(" | ")}`);
+  const rel = await page.waitForFunction(() => [...document.querySelectorAll("a[href^='/watch/']")].filter((a) => !a.href.includes("dQw4w9WgXcQ")).length >= 3, null, { timeout: 30000 }).then(() => true).catch(() => false);
+  log(`${name} watch: up next ${rel ? "ok" : "EMPTY"} in ${Date.now() - t}ms (${await page.evaluate(() => new Set([...document.querySelectorAll("a[href^='/watch/']")].map((a) => a.href)).size)} links)`);
+  await page.waitForTimeout(8000);
+  const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
+  const res = [];
+  for (let f = 0; f < 3; f++) { res.push(midScore(await page.screenshot({ clip: box }))); await page.waitForTimeout(600); }
+  log(`  ${await ytInfo(page)} host="${await page.evaluate(() => document.querySelector(".fixed iframe").parentElement.getAttribute("style"))}"\n   ${res.join(" | ")}`);
+  if (name === "desktop") {
+    for (const q of ["1080p", "360p", "2160p", "Auto"]) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.move(box.x + box.width / 2 + 5, box.y + box.height / 2);
+      await page.click('.fixed button[aria-label="Settings"]').catch((e) => log("no settings " + e.message.slice(0, 50)));
+      await page.waitForTimeout(300);
+      await page.locator(".ab-menu-list button", { hasText: "Quality" }).first().click().catch((e) => log("no quality row " + e.message.slice(0, 50)));
+      await page.waitForTimeout(300);
+      const items = await page.evaluate(() => [...document.querySelectorAll(".ab-menu-list button")].map((b) => b.innerText.replace(/\s+/g, " ").trim()).join(" / "));
+      await page.locator(".ab-menu-list button", { hasText: q }).first().click().catch((e) => log("no item " + q));
+      const t1 = Date.now();
+      let got = "";
+      for (let i = 0; i < 16; i++) { await page.waitForTimeout(500); got = await ytInfo(page); if ((q === "1080p" && got.includes("hd1080")) || (q === "360p" && got.includes("q=medium")) || (q === "2160p" && got.includes("hd2160"))) break; }
+      log(`  pick ${q}: menu=[${items}] -> ${got} after ${Date.now() - t1}ms`);
+    }
+    const res2 = [];
+    for (let f = 0; f < 3; f++) { res2.push(midScore(await page.screenshot({ clip: box }))); await page.waitForTimeout(600); }
+    log(`  after picks: ${res2.join(" | ")}`);
   }
   await ctx.close();
 }
