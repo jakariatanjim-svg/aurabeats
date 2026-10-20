@@ -104,7 +104,9 @@ export async function getVideoMeta(id: string): Promise<VideoDetails> {
 /** Related videos for the APK path (device extraction has none). */
 export async function getRelated(id: string): Promise<VideoItem[]> {
   return cached(`rel:${id}`, 15 * 60 * 1000, async () => {
-    const { value } = await race((p) => providerDetails(p, id), { stagger: 900, max: 5 });
+    // Related videos don't need playable streams (and must not fail on them).
+    const { value } = await race((p) => providerDetails(p, id, false), { stagger: 600, max: 5 });
+    if (!value.related.length) throw new Error("no related");
     return value.related;
   });
 }

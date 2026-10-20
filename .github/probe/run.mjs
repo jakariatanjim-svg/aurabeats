@@ -55,7 +55,7 @@ const variants = {
   gpu: (h) => { const w = h.parentElement; const fw = w.offsetWidth, fh = w.offsetHeight; const L = 1280, k = fw / L; Object.assign(h.style, { zoom: "", width: L + "px", height: (2 * fh) / k + "px", top: -Math.round(fh / 2) + "px", transform: `scale(${k}) translateZ(0)`, willChange: "transform" }); },
 };
 async function ytInfo(page) {
-  const f = page.frames().find((fr) => fr.url().includes("/embed/"));
+  const f = page.frames().find((fr) => fr.url().includes("youtube-nocookie.com/embed/"));
   if (!f) return "noframe";
   return f.evaluate(() => { const p = document.querySelector("#movie_player"); return `q=${p?.getPlaybackQuality?.()} inner=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} st=${p?.getPlayerState?.()}`; }).catch((e) => "err " + e.message.slice(0, 60));
 }
@@ -99,10 +99,10 @@ for (const [name, ctxOpts] of Object.entries({
       await page.mouse.move(box.x + box.width / 2 + 5, box.y + box.height / 2);
       await page.click('.fixed button[aria-label="Settings"]').catch((e) => log("no settings " + e.message.slice(0, 50)));
       await page.waitForTimeout(300);
-      await page.locator(".ab-menu-list button", { hasText: "Quality" }).first().click().catch((e) => log("no quality row " + e.message.slice(0, 50)));
+      await page.locator(".fixed button", { hasText: /^Quality/ }).first().click({ timeout: 5000 }).catch((e) => log("no quality row " + e.message.slice(0, 50)));
       await page.waitForTimeout(300);
       const items = await page.evaluate(() => [...document.querySelectorAll(".ab-menu-list button")].map((b) => b.innerText.replace(/\s+/g, " ").trim()).join(" / "));
-      await page.locator(".ab-menu-list button", { hasText: q }).first().click().catch((e) => log("no item " + q));
+      await page.locator(".ab-menu-list button", { hasText: q }).first().click({ timeout: 5000 }).catch((e) => log("no item " + q));
       const t1 = Date.now();
       let got = "";
       for (let i = 0; i < 16; i++) { await page.waitForTimeout(500); got = await ytInfo(page); if ((q === "1080p" && got.includes("hd1080")) || (q === "360p" && got.includes("q=medium")) || (q === "2160p" && got.includes("hd2160"))) break; }
