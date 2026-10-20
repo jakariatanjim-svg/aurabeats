@@ -34,12 +34,31 @@ function rows(buf) {
   thin.sort((a, b) => b[1] - a[1]);
   return `H=${H} med=${med.toFixed(2)} thinTop=${thin.slice(0, 4).map((t) => t.join(":")).join(" ")}`;
 }
+function midScore(buf) {
+  const png = PNG.sync.read(buf);
+  const { width: W, height: H, data } = png;
+  const lum = (x, y) => { const i = (y * W + x) * 4; return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]; };
+  const thin = (y) => { let s = 0; for (let x = 0; x < W; x++) { const c = lum(x, y); s += Math.min(Math.abs(c - lum(x, y - 1)), Math.abs(c - lum(x, y + 1))); } return s / W; };
+  const all = []; for (let y = 2; y < H - 2; y++) all.push(thin(y));
+  const med = [...all].sort((a, b) => a - b)[Math.floor(all.length / 2)];
+  const m = Math.floor(H / 2);
+  const mid = Math.max(thin(m - 2), thin(m - 1), thin(m), thin(m + 1), thin(m + 2));
+  const top = all.map((v, i) => [i + 2, v]).sort((a, b) => b[1] - a[1])[0];
+  return `mid=${mid.toFixed(2)} med=${med.toFixed(2)} max=${top[0]}:${top[1].toFixed(2)}`;
+}
+// h = host div (holds the iframe), w = 16:9 wrap (fw x fh)
 const variants = {
   base: null,
-  gpu: (h) => { h.style.transform = h.style.transform + " translateZ(0)"; h.style.backfaceVisibility = "hidden"; },
-  int: (h) => { const w = h.parentElement, box = w.parentElement; const W = box.clientWidth, H = box.clientHeight; w.style.transform = "none"; w.style.left = Math.round((W - w.offsetWidth) / 2) + "px"; w.style.top = Math.round((H - w.offsetHeight) / 2) + "px"; h.style.top = Math.round(parseFloat(h.style.top)) + "px"; },
-  noscale: (h) => { const w = h.parentElement; h.style.transform = "none"; h.style.width = w.offsetWidth + "px"; h.style.height = 2 * w.offsetHeight + "px"; h.style.top = -Math.round(w.offsetHeight / 2) + "px"; },
+  noscale: (h) => { const w = h.parentElement; const fw = w.offsetWidth, fh = w.offsetHeight; Object.assign(h.style, { transform: "none", width: fw + "px", height: 2 * fh + "px", top: -Math.round(fh / 2) + "px" }); },
+  half: (h) => { const w = h.parentElement; const fw = w.offsetWidth, fh = w.offsetHeight; const L = 2 * fw; Object.assign(h.style, { transform: "scale(0.5)", width: L + "px", height: 4 * fh + "px", top: -Math.round(fh / 2) + "px" }); },
+  zoom: (h) => { const w = h.parentElement; const fw = w.offsetWidth, fh = w.offsetHeight; const L = 1280, k = fw / L; Object.assign(h.style, { transform: "none", zoom: String(k), width: L + "px", height: (2 * fh) / k + "px", top: -(fh / 2) / k + "px" }); },
+  gpu: (h) => { const w = h.parentElement; const fw = w.offsetWidth, fh = w.offsetHeight; const L = 1280, k = fw / L; Object.assign(h.style, { zoom: "", width: L + "px", height: (2 * fh) / k + "px", top: -Math.round(fh / 2) + "px", transform: `scale(${k}) translateZ(0)`, willChange: "transform" }); },
 };
+async function ytInfo(page) {
+  const f = page.frames().find((fr) => fr.url().includes("/embed/"));
+  if (!f) return "noframe";
+  return f.evaluate(() => { const p = document.querySelector("#movie_player"); return `q=${p?.getPlaybackQuality?.()} inner=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} st=${p?.getPlayerState?.()}`; }).catch((e) => "err " + e.message.slice(0, 60));
+}
 for (const [name, ctxOpts] of Object.entries({
   phone: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 },
@@ -49,7 +68,6 @@ for (const [name, ctxOpts] of Object.entries({
   const page = await ctx.newPage();
   await page.goto("http://localhost:4173/watch/dQw4w9WgXcQ");
   await page.waitForTimeout(2500);
-  if (ctxOpts.hasTouch) await page.touchscreen.tap(200, 140); else await page.mouse.click(600, 200);
   await page.waitForTimeout(12000);
   const info = await page.evaluate(() => {
     const ifr = document.querySelector(".fixed iframe");
@@ -61,15 +79,12 @@ for (const [name, ctxOpts] of Object.entries({
   log(`${name}: ${info}`);
   for (const [v, fn] of Object.entries(variants)) {
     if (fn) await page.evaluate(`(${fn.toString()})(document.querySelector(".fixed iframe").parentElement)`);
-    await page.waitForTimeout(2500);
-    const el = await page.$(".fixed iframe");
+    await page.waitForTimeout(6000);
     const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
     const res = [];
-    for (let f = 0; f < 3; f++) {
-      res.push(rows(await page.screenshot({ clip: box })));
-      await page.waitForTimeout(700);
-    }
-    log(`  ${name}-${v} ${JSON.stringify(box)} ${el ? "" : "noel"}\n     ` + res.join("\n     "));
+    for (let f = 0; f < 3; f++) { res.push(midScore(await page.screenshot({ clip: box }))); await page.waitForTimeout(600); }
+    const hb = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").getBoundingClientRect(); return `${b.top.toFixed(2)}/${b.height.toFixed(2)}`; });
+    log(`  ${name}-${v} ${await ytInfo(page)} iframe=${hb}\n     ${res.join(" | ")}`);
   }
   await ctx.close();
 }
