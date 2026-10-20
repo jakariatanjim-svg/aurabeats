@@ -1,0 +1,26 @@
+<!doctype html><html><body><p>cors</p>
+<script>
+const KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+const WEB = { clientName: "WEB", clientVersion: "2.20251015.01.00", hl: "en", gl: "BD" };
+const REMIX = { clientName: "WEB_REMIX", clientVersion: "1.20251015.01.00", hl: "en", gl: "BD" };
+async function call(base, ep, client, body) {
+  const t0 = performance.now();
+  try {
+    const r = await fetch(`${base}/youtubei/v1/${ep}?prettyPrint=false&key=${KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ context: { client }, ...body }) });
+    const txt = await r.text();
+    return `${r.status} ${Math.round(performance.now() - t0)}ms ${txt.length}B ${txt.slice(0, 0)}` + (txt.includes("videoId") ? " has-videoId" : "") + (txt.includes("musicResponsiveListItemRenderer") ? " music-items" : "") + (txt.includes("compactVideoRenderer") || txt.includes("lockupViewModel") ? " related" : "");
+  } catch (e) { return "CORS/ERR " + e.message + ` ${Math.round(performance.now() - t0)}ms`; }
+}
+window.runCors = async () => {
+  const out = {};
+  for (const base of ["https://youtubei.googleapis.com", "https://www.youtube.com", "https://music.youtube.com"]) {
+    out[base + " search WEB"] = await call(base, "search", WEB, { query: "bangla song" });
+    out[base + " next WEB"] = await call(base, "next", WEB, { videoId: "dQw4w9WgXcQ" });
+    out[base + " browse trending"] = await call(base, "browse", WEB, { browseId: "FEtrending" });
+    out[base + " search REMIX"] = await call(base, "search", REMIX, { query: "arijit singh", params: "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D" });
+    out[base + " next REMIX (radio)"] = await call(base, "next", REMIX, { videoId: "dQw4w9WgXcQ", playlistId: "RDAMVMdQw4w9WgXcQ" });
+    out[base + " browse REMIX home"] = await call(base, "browse", REMIX, { browseId: "FEmusic_home" });
+  }
+  return out;
+};
+</script></body></html>
