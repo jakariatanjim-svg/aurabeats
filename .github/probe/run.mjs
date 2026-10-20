@@ -15,10 +15,30 @@ await new Promise((r) => server.listen(4173, r));
 const log = (...a) => console.log(...a);
 fs.mkdirSync("shots", { recursive: true });
 const browser = await chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
+import { PNG } from "pngjs";
+function rows(buf) {
+  const png = PNG.sync.read(buf);
+  const { width: W, height: H, data } = png;
+  const lum = (x, y) => { const i = (y * W + x) * 4; return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]; };
+  const d = [];
+  for (let y = 1; y < H; y++) { let s = 0; for (let x = 0; x < W; x++) s += Math.abs(lum(x, y) - lum(x, y - 1)); d.push([y, s / W]); }
+  const sorted = d.map((e) => e[1]).sort((a, b) => a - b);
+  const med = sorted[Math.floor(sorted.length / 2)];
+  // a seam = a row that differs from BOTH neighbours (thin line)
+  const thin = [];
+  for (let y = 1; y < H - 1; y++) {
+    let s = 0;
+    for (let x = 0; x < W; x++) { const c = lum(x, y); s += Math.min(Math.abs(c - lum(x, y - 1)), Math.abs(c - lum(x, y + 1))); }
+    thin.push([y, +(s / W).toFixed(2)]);
+  }
+  thin.sort((a, b) => b[1] - a[1]);
+  return `H=${H} med=${med.toFixed(2)} thinTop=${thin.slice(0, 4).map((t) => t.join(":")).join(" ")}`;
+}
 const variants = {
   base: null,
-  gpu: (h) => { h.style.willChange = "transform"; h.style.backfaceVisibility = "hidden"; },
-  snap: (h) => { const w = h.parentElement; w.style.transform = "none"; const r = w.getBoundingClientRect(); w.style.left = Math.round(parseFloat(getComputedStyle(w).left) - r.width / 2) + "px"; w.style.top = Math.round(parseFloat(getComputedStyle(w).top) - r.height / 2) + "px"; h.style.top = Math.round(parseFloat(h.style.top)) + "px"; },
+  gpu: (h) => { h.style.transform = h.style.transform + " translateZ(0)"; h.style.backfaceVisibility = "hidden"; },
+  int: (h) => { const w = h.parentElement, box = w.parentElement; const W = box.clientWidth, H = box.clientHeight; w.style.transform = "none"; w.style.left = Math.round((W - w.offsetWidth) / 2) + "px"; w.style.top = Math.round((H - w.offsetHeight) / 2) + "px"; h.style.top = Math.round(parseFloat(h.style.top)) + "px"; },
+  noscale: (h) => { const w = h.parentElement; h.style.transform = "none"; h.style.width = w.offsetWidth + "px"; h.style.height = 2 * w.offsetHeight + "px"; h.style.top = -Math.round(w.offsetHeight / 2) + "px"; },
 };
 for (const [name, ctxOpts] of Object.entries({
   phone: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true },
@@ -44,13 +64,16 @@ for (const [name, ctxOpts] of Object.entries({
     await page.waitForTimeout(2500);
     const el = await page.$(".fixed iframe");
     const box = await page.evaluate(() => { const b = document.querySelector(".fixed iframe").parentElement.parentElement.getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; });
-    await page.screenshot({ path: `shots/${name}-${v}.png`, clip: box });
-    log(`  shot ${name}-${v} ${JSON.stringify(box)} ${el ? "" : "noel"}`);
+    const res = [];
+    for (let f = 0; f < 3; f++) {
+      res.push(rows(await page.screenshot({ clip: box })));
+      await page.waitForTimeout(700);
+    }
+    log(`  ${name}-${v} ${JSON.stringify(box)} ${el ? "" : "noel"}\n     ` + res.join("\n     "));
   }
   await ctx.close();
 }
-{
-  log("\n##### quality levels (youtube.com host)");
+if (false) {
   const page = await browser.newPage();
   await page.goto("http://localhost:4173/q");
   await page.waitForFunction(() => window.ready, null, { timeout: 30000 }).catch(() => {});
