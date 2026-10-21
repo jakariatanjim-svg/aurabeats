@@ -36,9 +36,9 @@ for (const u of ["https://oauth2.googleapis.com/token", "https://www.youtube.com
 }
 // TV browse as a "simple" request (text/plain, no auth header) — CORS headers?
 const ctx = { client: { clientName: "TVHTML5", clientVersion: "7.20260707.07.00", hl: "en", gl: "US" } };
-for (const u of ["https://youtubei.googleapis.com/youtubei/v1/browse", "https://www.youtube.com/youtubei/v1/browse", "https://youtubei.googleapis.com/youtubei/v1/browse?access_token=abc"]) {
+for (const u of ["https://youtubei.googleapis.com/youtubei/v1/browse", "https://www.youtube.com/youtubei/v1/browse", "https://youtubei.googleapis.com/youtubei/v1/browse?access_token=abc", "https://www.youtube.com/youtubei/v1/browse?access_token=abc", "https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&access_token=abc"]) {
   try {
-    const r = await fetch(u, { method: "POST", headers: { Origin: ORIGIN, "Content-Type": "text/plain;charset=UTF-8" }, body: JSON.stringify({ context: ctx, browseId: "FEtopics" }) });
+    const r = await fetch(u, { method: u.includes("/v3/") ? "GET" : "POST", headers: { Origin: ORIGIN, ...(u.includes("/v3/") ? {} : { "Content-Type": "text/plain;charset=UTF-8" }) }, body: u.includes("/v3/") ? undefined : JSON.stringify({ context: ctx, browseId: "FEtopics" }) });
     const t = await r.text();
     console.log("BROWSE(text)", r.status, u, hdrs(r), t.slice(0, 200).replace(/\s+/g, " "));
   } catch (e) { console.log("BROWSE ERR", u, String(e)); }
