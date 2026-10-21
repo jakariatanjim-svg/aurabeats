@@ -3,14 +3,14 @@ import { execSync } from "node:child_process";
 const yt = await Innertube.create({ retrieve_player: false });
 const cid = await yt.session.oauth.getClientID();
 const scope = "http://gdata.youtube.com https://www.googleapis.com/auth/youtube-paid-content";
-const dc = await (await fetch("https://oauth2.googleapis.com/device/code", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: cid.client_id, scope, device_id: crypto.randomUUID(), device_model: "ytlr::" }) })).json();
+const dc = await (await fetch("https://www.youtube.com/o/oauth2/device/code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_id: cid.client_id, scope, device_id: crypto.randomUUID(), device_model: "ytlr::" }) })).json();
 console.log("USER_CODE", dc.user_code, dc.verification_url, "expires", dc.expires_in);
 execSync(`gh api repos/${process.env.GITHUB_REPOSITORY}/issues/5/comments -f body=${JSON.stringify(`Test sign-in code: **${dc.user_code}** at ${dc.verification_url} (temporary probe, token is revoked right after)`)}`, { stdio: "inherit" });
 let tok;
 const end = Date.now() + 14 * 60e3;
 while (Date.now() < end) {
   await new Promise((r) => setTimeout(r, (dc.interval || 5) * 1000));
-  const r = await (await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: cid.client_id, client_secret: cid.client_secret, code: dc.device_code, grant_type: "http://oauth.net/grant_type/device/1.0" }) })).json();
+  const r = await (await fetch("https://www.youtube.com/o/oauth2/token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_id: cid.client_id, client_secret: cid.client_secret, code: dc.device_code, grant_type: "http://oauth.net/grant_type/device/1.0" }) })).json();
   if (r.access_token) { tok = r; break; }
   if (r.error && r.error !== "authorization_pending" && r.error !== "slow_down") { console.log("TOKEN_ERR", r.error); break; }
 }
