@@ -17,6 +17,7 @@
  *    fixed quality or skip an ad); it is also shown automatically when the
  *    video doesn't start or seems stuck on an ad.
  */
+import { showVolumeUi } from "@/utils/device";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import {
   Check,
@@ -34,6 +35,8 @@ import {
   PictureInPicture2,
   Play,
   RectangleHorizontal,
+  Repeat,
+  Repeat1,
   RotateCcw,
   RotateCw,
   Settings2,
@@ -91,7 +94,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [duration, setDuration] = useState(0);
   const [loaded, setLoaded] = useState(0);
   const [muted, setMuted] = useState(false);
-  const [volume, setVolumeState] = useState(() => storage.get<number>("video:ytVolume", 100));
+  // phones: no volume control in the player, the phone's buttons do it
+  const [volume, setVolumeState] = useState(() => (showVolumeUi ? storage.get<number>("video:ytVolume", 100) : 100));
   const [rate, setRate] = useState(1);
   const [quality, setQuality] = useState("auto");
   const [needsUnmute, setNeedsUnmute] = useState(false);
@@ -119,6 +123,10 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [frame, setFrame] = useState({ w: 0, h: 0, boxH: 0, x: 0, y: 0 });
   const [miniPos, setMiniPos] = useState(() => storage.get<{ side: "l" | "r"; y: number }>("video:miniPos", { side: "r", y: 0 }));
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
+  // full-screen pinch zoom: 1 = Fit, then Fill (no black bars), then any %
+  const [zoom, setZoom] = useState(1);
+  const [zoomSnap, setZoomSnap] = useState(true);
+  const [zoomPill, setZoomPill] = useState<string | null>(null);
 
   const mode = fs !== "off" ? "full" : d.mode; // "inline" | "mini" | "full"
   const playing = state === YTState.PLAYING || state === YTState.BUFFERING;
@@ -176,7 +184,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               ifr.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
               ifr.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen");
               ifr.tabIndex = -1;
-              e.target.setVolume(storage.get<number>("video:ytVolume", 100));
+              e.target.setVolume(showVolumeUi ? storage.get<number>("video:ytVolume", 100) : 100);
               e.target.unMute(); // YouTube remembers "muted" across embeds; every video starts with sound
               e.target.playVideo();
               setReady(true);
@@ -427,14 +435,26 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     return () => clearInterval(iv);
   }, [ready, call]);
 
+  // Loop: plays the same video again and again (per video, like YouTube).
+  const [loop, setLoop] = useState(false);
+  const loopRef = useRef(loop);
+  loopRef.current = loop;
+  useEffect(() => setLoop(false), [d.id]);
+
   // Ended → history + autoplay next (handled by the watch page when inline).
   useEffect(() => {
     if (!ended) return;
+    if (loopRef.current) {
+      call("seekTo", 0, true);
+      call("playVideo");
+      return;
+    }
     dockRefs.ended = true;
     setControls(true);
     const meta = dock.get().meta;
     if (meta) videoLibrary.recordProgress(meta, meta.duration || duration);
     dockRefs.onEnded?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ended, duration]);
   useEffect(() => {
     if (playing) dockRefs.ended = false;
@@ -557,9 +577,24 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     navigate("video");
   };
   const expand = () => navigate(`watch:${d.id}`);
-  const close = () => {
+  const closeNow = () => {
     call("pauseVideo");
     dock.close();
+  };
+  // Never just vanish: slide (or shrink) away first, then close.
+  const close = (to?: { x: number; y: number }) => {
+    const box = boxRef.current;
+    if (!box) return closeNow();
+    const st = box.style;
+    st.transition = "translate 240ms cubic-bezier(.4,0,1,1), scale 240ms ease, opacity 240ms ease";
+    if (to) st.translate = `${to.x}px ${to.y}px`;
+    else st.scale = "0.85";
+    st.opacity = "0";
+    window.setTimeout(() => {
+      closeNow();
+      st.transition = st.translate = st.scale = st.opacity = "";
+      setDrag(null);
+    }, 240);
   };
   const playNext = () => {
     if (d.next) navigate(`watch:${d.next.id}`);
@@ -568,10 +603,31 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   /* ------------------- position: follow slot / mini --------------------- */
   const mobileNav = typeof window !== "undefined" && innerWidth < 768;
   const miniW = mobileNav ? Math.min(innerWidth * 0.62, 300) : 400;
+  const prevMode = useRef(mode);
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box) return;
     const st = box.style;
+    // inline ↔ mini is animated: the player glides from where it was
+    const from = prevMode.current;
+    prevMode.current = mode;
+    const before = from !== mode && (from === "inline" || from === "mini") && (mode === "inline" || mode === "mini") ? box.getBoundingClientRect() : null;
+    const glide = () => {
+      if (!before || !before.width) return;
+      const after = box.getBoundingClientRect();
+      if (!after.width || st.visibility === "hidden") return;
+      st.transition = "none";
+      st.transformOrigin = "0 0";
+      st.translate = `${before.left - after.left}px ${before.top - after.top}px`;
+      st.scale = `${before.width / after.width} ${before.height / after.height}`;
+      void box.offsetWidth;
+      st.transition = "translate 320ms cubic-bezier(.2,.8,.2,1), scale 320ms cubic-bezier(.2,.8,.2,1)";
+      st.translate = "";
+      st.scale = "";
+      window.setTimeout(() => {
+        st.transition = "";
+      }, 340);
+    };
     for (const k of ["left", "top", "right", "bottom", "width", "height", "clipPath", "visibility", "borderRadius", "inset"] as const) st[k] = "";
     if (mode === "full") {
       if (fs === "css") {
@@ -589,6 +645,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       if (miniPos.side === "r") st.right = "max(12px, var(--sa-right, 0px))";
       else st.left = "max(12px, var(--sa-left, 0px))";
       st.borderRadius = "14px";
+      glide();
       return;
     }
     const scroller = document.getElementById("ab-scroll");
@@ -620,6 +677,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       raf = requestAnimationFrame(tick);
     };
     tick();
+    glide();
     return () => cancelAnimationFrame(raf);
   }, [mode, fs, miniPos, musicBar, miniW, mobileNav]);
 
@@ -678,8 +736,54 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     dragging: false,
   });
 
+  const pts = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<null | { d0: number; z0: number }>(null);
+  const ptDist = () => {
+    const [a, b] = [...pts.current.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+  const fillScale = () => {
+    const box = boxRef.current;
+    if (!box || !frame.w || !frame.h) return 1;
+    return Math.max(box.clientWidth / frame.w, box.clientHeight / frame.h);
+  };
+  const zoomLabel = (z: number, fill: number) =>
+    Math.abs(z - 1) < 0.01 ? "Fit" : Math.abs(z - fill) < 0.01 ? "Fill screen" : `${Math.round(z * 100)}%`;
+  const endPinch = () => {
+    if (!pinch.current) return;
+    pinch.current = null;
+    const fill = fillScale();
+    setZoom((z) => {
+      const next = z < 1 + (fill - 1) * 0.5 ? 1 : z < fill * 1.06 ? fill : z;
+      setZoomPill(zoomLabel(next, fill));
+      return next;
+    });
+    setZoomSnap(true);
+  };
+  useEffect(() => {
+    if (fs === "off") setZoom(1);
+  }, [fs]);
+  useEffect(() => {
+    if (!zoomPill) return;
+    const t = setTimeout(() => setZoomPill(null), 1100);
+    return () => clearTimeout(t);
+  }, [zoomPill, zoom]);
+
   const onDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.current.size >= 2) {
+      // second finger: zoom in full screen; never a tap / swipe / hold
+      const s = g.current;
+      clearTimeout(s.holdTimer);
+      s.moved = true;
+      if (pts.current.size === 2 && fs !== "off") {
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        pinch.current = { d0: ptDist() || 1, z0: zoom };
+        setZoomSnap(false);
+      }
+      return;
+    }
     const s = g.current;
     s.x = e.clientX;
     s.y = e.clientY;
@@ -701,6 +805,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   };
 
   const onMove = (e: RPointerEvent<HTMLDivElement>) => {
+    if (pts.current.has(e.pointerId)) pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current) {
+      const z = Math.min(4, Math.max(0.85, (pinch.current.z0 * ptDist()) / pinch.current.d0));
+      setZoom(z);
+      setZoomPill(zoomLabel(Math.max(1, z), fillScale()));
+      return;
+    }
+    if (pts.current.size > 1) return;
     const s = g.current;
     if (e.pointerType === "mouse" && e.buttons === 0) {
       if (mode !== "mini") poke();
@@ -732,6 +844,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   };
 
   const onUp = (e: RPointerEvent<HTMLDivElement>) => {
+    const multi = pts.current.size > 1 || pinch.current !== null;
+    pts.current.delete(e.pointerId);
+    if (multi) {
+      if (pts.current.size < 2) endPinch();
+      g.current.id = -1;
+      return;
+    }
     const s = g.current;
     if (s.id !== e.pointerId) return;
     s.id = -1;
@@ -743,6 +862,23 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (mode === "mini") {
       if (s.dragging) {
         const box = boxRef.current;
+        // Pushed clearly off the screen (or flung out) → close; merely
+        // touching the edge just parks it there.
+        if (box) {
+          const r = box.getBoundingClientRect();
+          const dt = Math.max(1, Date.now() - s.t);
+          const vx = dx / dt;
+          const vy = dy / dt;
+          const outY = r.bottom - innerHeight;
+          const outX = Math.max(-r.left, r.right - innerWidth);
+          const fling = Math.hypot(vx, vy) > 1.2 && Math.hypot(dx, dy) > 60;
+          if (outY > r.height * 0.5 || outX > r.width * 0.5 || (fling && (outY > 0 || outX > 0))) {
+            const far = Math.max(innerWidth, innerHeight);
+            const len = Math.hypot(dx, dy) || 1;
+            close({ x: (dx / len) * far * 0.6, y: (dy / len) * far * 0.6 });
+            return;
+          }
+        }
         if (box) {
           const r = box.getBoundingClientRect();
           const side: "l" | "r" = r.left + r.width / 2 < innerWidth / 2 ? "l" : "r";
@@ -802,7 +938,10 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     else poke();
   };
 
-  const onCancel = () => {
+  const onCancel = (e?: RPointerEvent<HTMLDivElement>) => {
+    if (e) pts.current.delete(e.pointerId);
+    else pts.current.clear();
+    endPinch();
     endHold();
     setDrag(null);
     g.current.id = -1;
@@ -838,6 +977,24 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // Mouse wheel over the video = volume ±10 % (PC). Native listener: React's
+  // wheel handler is passive and couldn't stop the page from scrolling.
+  const volRef = useRef(setVolume);
+  volRef.current = setVolume;
+  const volNow = useRef(volume);
+  volNow.current = muted || needsUnmute ? 0 : volume;
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || !showVolumeUi || mode === "mini") return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.deltaY || (e.target as HTMLElement | null)?.closest("[data-menu]")) return;
+      e.preventDefault();
+      volRef.current(Math.round(volNow.current / 10) * 10 + (e.deltaY < 0 ? 10 : -10));
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, [mode]);
 
   /* ------------------------------ progress ------------------------------ */
   const barRef = useRef<HTMLDivElement>(null);
@@ -923,6 +1080,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   return (
     <div
       ref={boxRef}
+      data-video-player
       style={boxStyle}
       className={cn(
         "fixed overflow-hidden bg-black text-white select-none [-webkit-tap-highlight-color:transparent]",
@@ -935,7 +1093,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       <div
         ref={frameRef}
         className="absolute overflow-hidden"
-        style={frame.w ? { left: frame.x, top: frame.y, width: frame.w, height: frame.h } : { inset: 0 }}
+        style={{
+          ...(frame.w ? { left: frame.x, top: frame.y, width: frame.w, height: frame.h } : { inset: 0 }),
+          scale: zoom > 1 ? String(zoom) : undefined,
+          transition: zoomSnap ? "scale 220ms cubic-bezier(.2,.8,.2,1)" : "none",
+        }}
       >
         <div
           ref={hostRef}
@@ -1062,7 +1224,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               <MiniBtn label="Expand" onClick={expand}>
                 <Maximize2 className="h-4 w-4" />
               </MiniBtn>
-              <MiniBtn label="Close" onClick={close}>
+              <MiniBtn label="Close" onClick={() => close()}>
                 <X className="h-4.5 w-4.5" />
               </MiniBtn>
             </div>
@@ -1183,7 +1345,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                   <CtrlBtn label={muted || needsUnmute ? "Unmute (m)" : "Mute (m)"} onClick={toggleMute}>
                     {muted || needsUnmute || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                   </CtrlBtn>
-                  <input
+                  {showVolumeUi && <input
                     type="range"
                     min={0}
                     max={100}
@@ -1191,7 +1353,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                     onChange={(e) => setVolume(Number(e.target.value))}
                     aria-label="Volume"
                     className="hidden h-1 w-0 cursor-pointer accent-white opacity-0 transition-all group-hover/vol:w-20 group-hover/vol:opacity-100 focus:w-20 focus:opacity-100 sm:block"
-                  />
+                  />}
                 </div>
                 <span className="ml-1.5 text-[12px] font-semibold tabular-nums text-white/90 sm:text-[13px]">
                   {formatTime(shownTime)} <span className="text-white/60">/ {duration ? formatTime(duration) : "--:--"}</span>
@@ -1200,6 +1362,9 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 <span className="flex-1" />
 
                 {rate !== 1 && <span className="mr-1 rounded bg-white/15 px-1.5 py-0.5 text-[11px] font-bold">{rate}x</span>}
+                <CtrlBtn label={loop ? "Loop on" : "Loop"} onClick={() => setLoop((l) => !l)} className={cn(loop && "text-accent")}>
+                  {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+                </CtrlBtn>
                 <div className="relative">
                   <CtrlBtn label="Settings" onClick={() => setMenu((m) => (m ? null : "main"))}>
                     <Settings2 className={cn("h-5 w-5 transition-transform", menu && "rotate-45")} />
@@ -1209,6 +1374,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                       className="absolute right-0 bottom-11 z-20 w-64 overflow-y-auto overscroll-contain rounded-2xl bg-[rgb(28_28_30/0.94)] py-1.5 text-[13px] shadow-2xl ring-1 ring-white/10 backdrop-blur-md [scrollbar-width:thin]"
                       // stays inside the player (the box clips anything outside)
                       style={{ maxHeight: Math.max(120, (frame.boxH || 300) - 64) }}
+                      data-menu
                       onWheel={(e) => e.stopPropagation()}
                     >
                       {menu === "main" ? (
@@ -1299,6 +1465,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         )}
       </div>
 
+      {zoomPill && fs !== "off" && (
+        <span className="pointer-events-none absolute top-[calc(var(--sa-top)+1rem)] left-1/2 z-30 -translate-x-1/2 animate-fade-in rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
+          {zoomPill}
+        </span>
+      )}
       {/* an ad is running inside YouTube's player (no blocker): label it, keep Skip reachable */}
       {ad && (
         <div
@@ -1315,7 +1486,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
           <MiniBtn label="Expand" onClick={expand}>
             <Maximize2 className="h-4 w-4" />
           </MiniBtn>
-          <MiniBtn label="Close" onClick={close}>
+          <MiniBtn label="Close" onClick={() => close()}>
             <X className="h-4 w-4" />
           </MiniBtn>
         </div>

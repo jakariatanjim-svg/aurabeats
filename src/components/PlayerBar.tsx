@@ -1,3 +1,4 @@
+import { showVolumeUi } from "@/utils/device";
 import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download, MonitorPlay } from "lucide-react";
 import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
 import { cn } from "@/utils/cn";
@@ -212,7 +213,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               )}
             </IconButton>
           )}
-          <div className="hidden items-center gap-1.5 md:flex">
+          <div className={cn("hidden items-center gap-1.5", showVolumeUi && "md:flex")}>
             <IconButton size="sm" onClick={toggleMute} aria-label="Mute">
               <VolumeIcon className="h-4 w-4" />
             </IconButton>

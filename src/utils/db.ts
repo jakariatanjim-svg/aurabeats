@@ -14,8 +14,17 @@ const DB_VERSION = 1;
 interface OfflineEntry {
   id: string;
   track: Track;
-  blob: Blob;
+  /** the audio itself (web, other sources)… */
+  blob?: Blob;
+  /** …or a file the Android app keeps in its own storage (YouTube songs) */
+  path?: string;
+  bytes?: number;
   savedAt: number;
+}
+
+export interface OfflineSource {
+  blob?: Blob;
+  path?: string;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -63,6 +72,47 @@ export const db = {
     });
   },
 
+  async saveTrackFile(track: Track, path: string, bytes: number): Promise<void> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const entry: OfflineEntry = { id: track.id, track, path, bytes, savedAt: Date.now() };
+      const request = tx.objectStore(STORE_NAME).put(entry);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  },
+
+  /** What to play for a saved track: its blob or its file. */
+  async getTrackSource(id: string): Promise<OfflineSource | null> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(id);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const res = request.result as OfflineEntry | undefined;
+        resolve(res && (res.blob || res.path) ? { blob: res.blob, path: res.path } : null);
+      };
+    });
+  },
+
+  /** Files kept on the device by saved tracks, and the total size of everything saved. */
+  async usage(): Promise<{ count: number; bytes: number; paths: string[] }> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll();
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const all = request.result as OfflineEntry[];
+        resolve({
+          count: all.length,
+          bytes: all.reduce((n, e) => n + (e.blob?.size ?? e.bytes ?? 0), 0),
+          paths: all.flatMap((e) => (e.path ? [e.path] : [])),
+        });
+      };
+    });
+  },
+
   async getTrackBlob(id: string): Promise<Blob | null> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -72,7 +122,7 @@ export const db = {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const res = request.result as OfflineEntry | undefined;
-        resolve(res ? res.blob : null);
+        resolve(res?.blob ?? null);
       };
     });
   },

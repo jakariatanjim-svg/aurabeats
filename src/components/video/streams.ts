@@ -1,4 +1,5 @@
 /** Picks playable streams + quality ladder for the current device. */
+import { getVideoSettings } from "@/services/video/settings";
 import type { AudioStream, MuxedStream, StreamSet, VideoStream } from "@/services/video/types";
 
 let probe: HTMLVideoElement | null = null;
@@ -83,11 +84,17 @@ export function makePlan(s: StreamSet): Plan | null {
 }
 
 /** Height that fits the player on this screen/connection (capped at 1080p). */
+/** Data saver on mobile data: the highest start quality, else Infinity. */
+export function dataCap(): number {
+  const c = (navigator as unknown as { connection?: { type?: string } }).connection;
+  return getVideoSettings().dataSaver && c?.type === "cellular" ? 480 : Infinity;
+}
+
 export function autoHeight(el: HTMLElement | null): number {
   const w = (el?.clientWidth || window.innerWidth) * Math.min(window.devicePixelRatio || 1, 2);
   let h = Math.round((w * 9) / 16);
-  const c = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  if (c?.saveData) h = Math.min(h, 480);
+  const c = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string; type?: string } }).connection;
+  if (c?.saveData || (getVideoSettings().dataSaver && c?.type === "cellular")) h = Math.min(h, 480);
   else if (c?.effectiveType && /(^|-)2g/.test(c.effectiveType)) h = Math.min(h, 240);
   else if (c?.effectiveType === "3g") h = Math.min(h, 480);
   return Math.min(Math.max(h, 360), 1080);

@@ -31,8 +31,13 @@ interface VideoSaverPlugin {
     folder?: "Music" | "Videos";
     /** songs: centre square of the 16:9 thumbnail */
     squareCover?: boolean;
+    /** keep inside the app (files/offline) — "Save for offline" */
+    private?: boolean;
   }): Promise<void>;
   cancel(o: { id: string }): Promise<void>;
+  remove(o: { uri: string }): Promise<void>;
+  usage(): Promise<{ offline: number; temp: number }>;
+  clearTemp(): Promise<void>;
   open(o: { uri: string; mime: string }): Promise<void>;
   addListener(event: "progress", fn: (d: { id: string; phase: "download" | "merge"; done: number; total: number }) => void): Promise<PluginListenerHandle>;
   addListener(event: "done", fn: (d: { id: string; uri: string; name: string }) => void): Promise<PluginListenerHandle>;
@@ -95,7 +100,7 @@ export function downloadOptions(s: StreamSet): DlOption[] {
 
 export interface DlJob {
   id: string;
-  kind: "video" | "audio";
+  kind: "video" | "audio" | "offline";
   videoId: string;
   title: string;
   label: string;
@@ -127,6 +132,9 @@ export const downloadJobs = {
   },
 };
 
+/** Private saves waiting for their file: id → settle. */
+const waiters = new Map<string, { ok: (uri: string) => void; fail: (e: Error) => void }>();
+
 let wired = false;
 function wire() {
   if (wired) return;
@@ -134,10 +142,16 @@ function wire() {
   void VideoSaver.addListener("progress", (d) =>
     patch(d.id, { done: d.done, total: d.total, status: d.phase === "merge" ? "merging" : "running" }),
   );
-  void VideoSaver.addListener("done", (d) => patch(d.id, { status: "done", uri: d.uri, done: 1, total: 1 }));
+  void VideoSaver.addListener("done", (d) => {
+    patch(d.id, { status: "done", uri: d.uri, done: 1, total: 1 });
+    waiters.get(d.id)?.ok(d.uri);
+    waiters.delete(d.id);
+  });
   void VideoSaver.addListener("error", (d) => {
     if (d.cancelled) downloadJobs.dismiss(d.id);
     else patch(d.id, { status: "error", error: d.message });
+    waiters.get(d.id)?.fail(Object.assign(new Error(d.cancelled ? "cancelled" : d.message), { cancelled: d.cancelled }));
+    waiters.delete(d.id);
   });
 }
 
@@ -205,10 +219,8 @@ export async function startAudioDownload(videoId: string, title: string, artist 
   jobs = [{ id, kind: "audio", videoId, title: name, label: "M4A", mime: "audio/mp4", status: "running", done: 0, total: 0 }, ...jobs];
   emit();
   try {
-    const { devicePlayer, DEVICE_UA } = await import("@/services/video/innertube");
-    const s = (await devicePlayer(videoId)).streams;
-    const aac = [...s.audio.filter((a) => a.mime.startsWith("audio/mp4"))].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
-    if (!aac) throw new Error("no audio stream");
+    const { DEVICE_UA } = await import("@/services/video/innertube");
+    const aac = await bestAac(videoId);
     patch(id, { total: clen(aac.url) });
     await VideoSaver.download({
       id,
@@ -226,6 +238,60 @@ export async function startAudioDownload(videoId: string, title: string, artist 
     patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
   }
 }
+
+/** Best AAC stream of a video (what the songs download uses). */
+async function bestAac(videoId: string) {
+  const { devicePlayer } = await import("@/services/video/innertube");
+  const s = (await devicePlayer(videoId)).streams;
+  const aac = [...s.audio.filter((a) => a.mime.startsWith("audio/mp4"))].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
+  if (!aac) throw new Error("no audio stream");
+  return aac;
+}
+
+/**
+ * APK "Save for offline" for YouTube / YouTube Music songs, like Spotify: the
+ * song is stored inside the app (not in Download/, no other app sees it) and
+ * plays from there with no connection. Resolves with the file's uri.
+ */
+export async function saveSongOffline(videoId: string, title: string, artist = ""): Promise<{ uri: string; bytes: number }> {
+  wire();
+  const id = `${videoId}-offline-${Date.now().toString(36)}`;
+  jobs = [{ id, kind: "offline", videoId, title, label: "Offline", mime: "audio/mp4", status: "running", done: 0, total: 0 }, ...jobs];
+  emit();
+  try {
+    const { DEVICE_UA } = await import("@/services/video/innertube");
+    const aac = await bestAac(videoId);
+    const bytes = clen(aac.url);
+    patch(id, { total: bytes });
+    const uri = new Promise<string>((ok, fail) => waiters.set(id, { ok, fail }));
+    await VideoSaver.download({
+      id,
+      videoUrl: aac.url,
+      // one file per song: saving again replaces it
+      fileName: `${videoId.replace(/[^\w-]/g, "")}.m4a`,
+      mime: "audio/mp4",
+      userAgent: DEVICE_UA,
+      title,
+      artist,
+      private: true,
+    });
+    const done = await uri;
+    // finished offline saves leave the tray on their own
+    window.setTimeout(() => downloadJobs.dismiss(id), 2500);
+    return { uri: done, bytes };
+  } catch (e) {
+    waiters.delete(id);
+    const err = e instanceof Error ? e : new Error(String(e));
+    if (!(err as { cancelled?: boolean }).cancelled) patch(id, { status: "error", error: err.message });
+    throw err;
+  }
+}
+
+/** Deletes a file saved by saveSongOffline. */
+export const removeOfflineFile = (uri: string) => (inAppVideoDownload ? VideoSaver.remove({ uri }).catch(() => undefined) : Promise.resolve());
+/** Bytes in offline files / temporary download leftovers (APK). */
+export const appFileUsage = () => (inAppVideoDownload ? VideoSaver.usage().catch(() => null) : Promise.resolve(null));
+export const clearTempFiles = () => (inAppVideoDownload ? VideoSaver.clearTemp().catch(() => undefined) : Promise.resolve());
 
 export const cancelVideoDownload = (id: string) => VideoSaver.cancel({ id }).catch(() => downloadJobs.dismiss(id));
 export const openDownloadedVideo = (j: DlJob) => (j.uri ? VideoSaver.open({ uri: j.uri, mime: j.mime }) : Promise.reject(new Error("no file")));

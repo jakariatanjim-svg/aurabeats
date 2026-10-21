@@ -5,7 +5,9 @@
  * engine. Everything user-specific is mirrored into localStorage.
  */
 
-import { videoIdOfTrack } from "@/utils/watchVideo";
+import { isYouTubeTrack, videoIdOfTrack } from "@/utils/watchVideo";
+import { Capacitor } from "@capacitor/core";
+import { removeOfflineFile } from "@/services/videoDownload";
 import {
   createContext,
   useCallback,
@@ -22,6 +24,7 @@ import { isYouTubePlayerReady } from "@/services/youtubePlayer";
 import { resolveStreamUrls as resolveSC } from "@/services/soundcloud";
 import { storage, session } from "@/utils/storage";
 import { db } from "@/utils/db";
+import { showVolumeUi } from "@/utils/device";
 import { shuffleArray, uid } from "@/utils/format";
 import type { RepeatMode, ToastMessage, Track, UserPlaylist, PlayerSettings } from "@/types";
 
@@ -221,8 +224,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [settings.sleepTimer, engine, updateSettings, toast]);
 
+  const savingRef = useRef(new Set<string>());
   const saveOffline = useCallback(async (track: Track) => {
     if (offlineTracks.some((t) => t.id === track.id)) return;
+    // YouTube / YouTube Music (Android app): the song is fetched by the phone
+    // and kept in the app's own storage; progress shows in the download tray.
+    if (isYouTubeTrack(track)) {
+      const videoId = videoIdOfTrack(track) ?? track.streamUrl.replace("yt-resolve:", "");
+      if (savingRef.current.has(track.id)) return;
+      savingRef.current.add(track.id);
+      try {
+        const dl = await import("@/services/videoDownload");
+        const { uri, bytes } = await dl.saveSongOffline(videoId, track.title, track.artist.replace(/ - Topic$/i, "").trim());
+        await db.saveTrackFile(track, uri, bytes);
+        setOfflineTracks(await db.getAllTracks());
+        toast(`"${track.title}" is available offline`, "success");
+      } catch (err) {
+        if ((err as { cancelled?: boolean }).cancelled) return;
+        toast(`Could not save "${track.title}" for offline`, "error");
+      } finally {
+        savingRef.current.delete(track.id);
+      }
+      return;
+    }
     try {
       toast(`Saving "${track.title}" for offline playback...`, "info");
       
@@ -249,6 +273,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [offlineTracks, toast]);
 
   const removeOffline = useCallback(async (id: string) => {
+    const src = await db.getTrackSource(id).catch(() => null);
+    if (src?.path) await removeOfflineFile(src.path);
     await db.deleteTrack(id);
     setOfflineTracks(await db.getAllTracks());
     toast("Removed from offline storage", "info");
@@ -259,6 +285,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [offlineTracks]);
 
   const clearOffline = useCallback(async () => {
+    const { paths } = await db.usage().catch(() => ({ paths: [] as string[] }));
+    await Promise.all(paths.map(removeOfflineFile));
     await db.clearAll();
     setOfflineTracks([]);
     toast("All offline media cleared", "success");
@@ -343,7 +371,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // re-created on every playback tick, so depending on it directly would
   // re-run these (and re-write storage) multiple times per second.
   useEffect(() => {
-    engineRef.current.setVolume(volume);
+    engineRef.current.setVolume(showVolumeUi ? volume : 1);
     storage.set("volume", volume);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume]);
@@ -372,12 +400,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         // Never let this lookup hold up playback: on a first launch the
         // database is still being created, and it can fail outright (private
         // mode). Missing / slow / failed simply means "not downloaded".
-        const offlineBlob = await Promise.race([
-          db.getTrackBlob(current.id).catch(() => null),
+        // A retry (attempt > 0) means the saved copy didn't play: go online.
+        const offline = attempt > 0 ? null : await Promise.race([
+          db.getTrackSource(current.id).catch(() => null),
           new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
         ]);
-        if (offlineBlob && alive) {
-          const localUrl = URL.createObjectURL(offlineBlob);
+        if (offline && alive) {
+          // saved files (Android app) are served to the player by the app itself
+          const localUrl = offline.path ? Capacitor.convertFileSrc(offline.path) : URL.createObjectURL(offline.blob!);
           engine.load(localUrl, { autoplay: !restorePauseRef.current, live: current.isLive });
           restorePauseRef.current = false;
           return;

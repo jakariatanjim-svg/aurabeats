@@ -1,5 +1,7 @@
-import { Archive, Globe, Heart, Mic2, Music2, Radio, Shield, Sparkles } from "lucide-react";
+import { Archive, ArrowRight, Globe, Heart, Info, Mic2, Music2, Radio, Shield, ShieldCheck, Sparkles, Tv } from "lucide-react";
 import { SectionHeader, WaveformLogo } from "@/components/ui";
+import { isNative } from "@/services/video/net";
+import { AdBadge, AdBlockSteps } from "@/components/video/AdBlockTip";
 
 const SOURCES = [
   {
@@ -68,8 +70,8 @@ const PRINCIPLES = [
   },
   {
     icon: Sparkles,
-    title: "Dual core engine",
-    body: "Switch between Glassy and Modern themes instantly. AuraBeats is built for high-performance rendering on both mobile and PC.",
+    title: "Three looks",
+    body: "Glassmorphism, Material UI and Liquid Glass, each in light and dark, with your own accent colour.",
   },
   {
     icon: WaveformLogo,
@@ -145,6 +147,53 @@ export function AboutView() {
           ))}
         </div>
       </section>
+
+      <section id="about-engine" className="grid gap-4 sm:grid-cols-2">
+        <div className="blur-panel glass-inset flex gap-5 rounded-[1.75rem] p-6">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/10">
+            <Info className="h-5 w-5 text-accent" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-base font-bold text-ink">AuraBeats Sound Engine</p>
+            <p className="text-sm leading-relaxed text-ink2">
+              Aggregates millions of songs from global networks. Uses multi-resolver racing to keep playback stable, without tracking.
+            </p>
+          </div>
+        </div>
+        <div className="blur-panel glass-inset flex gap-5 rounded-[1.75rem] p-6">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/10">
+            <Tv className="h-5 w-5 text-accent" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="flex flex-wrap items-center gap-2 text-base font-bold text-ink">
+              Videos {isNative ? <ShieldCheck className="h-4 w-4 text-emerald-500" /> : <AdBadge />}
+            </p>
+            <p className="text-sm leading-relaxed text-ink2">
+              {isNative
+                ? "The app fetches streams straight from YouTube on your phone, like NewPipe, so there are no ads. If that fails it switches to ad-free servers."
+                : "On the website videos play in YouTube's official player, so YouTube may show ads. A free blocker removes them:"}
+            </p>
+            {!isNative && <AdBlockSteps className="pt-1" />}
+          </div>
+        </div>
+      </section>
+
+      <a
+        href="/privacy"
+        data-nav="true"
+        className="blur-panel glass-inset group flex items-center justify-between gap-3 rounded-[1.75rem] p-5 transition-transform hover:-translate-y-0.5"
+      >
+        <span className="flex items-center gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/15 text-accent">
+            <Shield className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-base font-bold text-ink transition-colors group-hover:text-accent">Privacy policy</span>
+            <span className="mt-0.5 block text-sm text-ink2">How your data stays on your device</span>
+          </span>
+        </span>
+        <ArrowRight className="h-4 w-4 text-ink3" />
+      </a>
 
       <section className="blur-panel glass-inset overflow-hidden rounded-[2.5rem] p-8 text-center sm:p-12">
         <h2 className="text-2xl font-black text-ink sm:text-3xl">Ready to listen?</h2>

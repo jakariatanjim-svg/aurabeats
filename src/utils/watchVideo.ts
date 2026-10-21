@@ -5,6 +5,7 @@
  */
 import type { Track } from "@/types";
 import { rememberVideo } from "@/services/video/hints";
+import { inAppVideoDownload } from "@/services/videoDownload";
 
 let pending: { id: string; at: number } | null = null;
 
@@ -37,11 +38,15 @@ export function takeHandoffStart(id: string): number | null {
 }
 
 /**
- * "Save for offline" keeps the audio file inside the app. YouTube / YouTube
- * Music streams can't be stored that way, so those songs get the external
- * MP3 download (and "Download video") instead; other sources can be saved.
+ * "Save for offline" keeps the song inside the app, like Spotify. Other
+ * sources are stored as data; YouTube / YouTube Music songs only in the
+ * Android app, which can fetch their audio (a browser can't — YouTube blocks
+ * it), so on the website those keep the external MP3 download.
  */
 export function canSaveOffline(t: Track | null | undefined): boolean {
-  if (!t || t.isLive) return false;
-  return t.source !== "youtube" && t.source !== "local" && !t.streamUrl?.startsWith("yt-resolve:");
+  if (!t || t.isLive || t.source === "local") return false;
+  if (isYouTubeTrack(t)) return inAppVideoDownload;
+  return true;
 }
+
+export const isYouTubeTrack = (t: Track) => t.source === "youtube" || Boolean(t.streamUrl?.startsWith("yt-resolve:"));

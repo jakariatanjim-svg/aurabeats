@@ -1,5 +1,6 @@
 package dev.pages.aurabeats;
 
+import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -14,13 +15,17 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.text.TextUtils;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -55,8 +60,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * JS: VideoSaver.download({ id, videoUrl, audioUrl?, fileName, mime, userAgent,
  *     thumbUrls?: string[], title?, artist?, folder?: "Music" | "Videos", squareCover? })
  * events: "progress" {id, phase, done, total}, "done" {id, uri, name}, "error" {id, message, cancelled}
+ *
+ * private: true → the file stays inside the app (files/offline) instead of
+ * Download/ — "Save for offline", like Spotify; "done" returns its file:// uri.
+ * JS: VideoSaver.remove({ uri }) deletes such a file, usage() sums them up.
  */
-@CapacitorPlugin(name = "VideoSaver")
+@CapacitorPlugin(
+    name = "VideoSaver",
+    // Android 7–10 only: writing into the public Download folder by path.
+    // Android 11+ has no such permission (MediaStore / own files need none).
+    permissions = { @Permission(alias = "storage", strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }) }
+)
 public class VideoSaverPlugin extends Plugin {
     private static final long CHUNK = 10L * 1024 * 1024;
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -68,6 +82,22 @@ public class VideoSaverPlugin extends Plugin {
 
     @PluginMethod
     public void download(PluginCall call) {
+        boolean priv = Boolean.TRUE.equals(call.getBoolean("private", false));
+        if (!priv && Build.VERSION.SDK_INT <= 29 && getPermissionState("storage") != PermissionState.GRANTED) {
+            requestPermissionForAlias("storage", call, "storageGranted");
+            return;
+        }
+        start(call);
+    }
+
+    /** Runs after the storage prompt — denied still works (falls back to the app folder). */
+    @PermissionCallback
+    private void storageGranted(PluginCall call) {
+        start(call);
+    }
+
+    private void start(PluginCall call) {
+        final boolean priv = Boolean.TRUE.equals(call.getBoolean("private", false));
         final String id = call.getString("id");
         final String videoUrl = call.getString("videoUrl");
         final String audioUrl = call.getString("audioUrl");
@@ -79,6 +109,7 @@ public class VideoSaverPlugin extends Plugin {
         meta.artist = call.getString("artist", "");
         meta.folder = call.getString("folder", "");
         meta.square = Boolean.TRUE.equals(call.getBoolean("squareCover", false));
+        meta.priv = priv;
         JSArray thumbs = call.getArray("thumbUrls", new JSArray());
         for (int i = 0; thumbs != null && i < thumbs.length(); i++) {
             String u = thumbs.optString(i, null);
@@ -96,7 +127,7 @@ public class VideoSaverPlugin extends Plugin {
 
     private static final class Meta {
         String title, artist, folder;
-        boolean square;
+        boolean square, priv;
         final List<String> thumbs = new ArrayList<>();
     }
 
@@ -105,6 +136,63 @@ public class VideoSaverPlugin extends Plugin {
         AtomicBoolean c = cancels.get(call.getString("id", ""));
         if (c != null) c.set(true);
         call.resolve();
+    }
+
+    private File offlineDir() {
+        File d = new File(getContext().getFilesDir(), "offline");
+        //noinspection ResultOfMethodCallIgnored
+        d.mkdirs();
+        return d;
+    }
+
+    /** Deletes a file saved with private: true (only inside files/offline). */
+    @PluginMethod
+    public void remove(PluginCall call) {
+        try {
+            String uri = call.getString("uri", "");
+            File f = new File(Uri.parse(uri).getPath());
+            File dir = offlineDir();
+            if (f.getCanonicalPath().startsWith(dir.getCanonicalPath() + File.separator)) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(String.valueOf(e.getMessage()));
+        }
+    }
+
+    /** Bytes used by offline files + temporary download leftovers. */
+    @PluginMethod
+    public void usage(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("offline", dirSize(offlineDir()));
+        r.put("temp", dirSize(new File(getContext().getCacheDir(), "video-saver")));
+        call.resolve(r);
+    }
+
+    /** Clears temporary download leftovers (never touches running jobs' files). */
+    @PluginMethod
+    public void clearTemp(PluginCall call) {
+        File[] fs = new File(getContext().getCacheDir(), "video-saver").listFiles();
+        if (fs != null) {
+            for (File f : fs) {
+                String n = f.getName();
+                boolean running = false;
+                for (String id : cancels.keySet()) if (n.startsWith(id + ".")) running = true;
+                //noinspection ResultOfMethodCallIgnored
+                if (!running) f.delete();
+            }
+        }
+        call.resolve();
+    }
+
+    private static long dirSize(File d) {
+        long n = 0;
+        File[] fs = d.listFiles();
+        if (fs == null) return 0;
+        for (File f : fs) n += f.isDirectory() ? dirSize(f) : f.length();
+        return n;
     }
 
     @PluginMethod
@@ -174,7 +262,7 @@ public class VideoSaverPlugin extends Plugin {
             if (cancel.get()) throw new IOException("cancelled");
             // Thumbnail + title + artist inside the file. Optional: any
             // problem here just leaves the file untagged.
-            if (plainMp4) {
+            if (plainMp4 && !meta.priv) {
                 try {
                     byte[] cover = cover(meta, ua);
                     Mp4Tagger.tag(result, tagged, meta.title, meta.artist, cover);
@@ -182,7 +270,7 @@ public class VideoSaverPlugin extends Plugin {
                 } catch (Exception ignored) {
                 }
             }
-            Uri uri = publish(result, fileName, mime, meta.folder);
+            Uri uri = meta.priv ? keepPrivate(result, fileName) : publish(result, fileName, mime, meta.folder);
             JSObject r = new JSObject();
             r.put("id", id);
             r.put("uri", uri != null ? uri.toString() : "");
@@ -462,13 +550,28 @@ public class VideoSaverPlugin extends Plugin {
         return base + ext;
     }
 
+    /** Offline copy inside the app: files/offline/<name>, replaced if it exists. */
+    private Uri keepPrivate(File f, String name) throws Exception {
+        File dest = new File(offlineDir(), fitName(name, 120));
+        File tmp = new File(offlineDir(), dest.getName() + ".part");
+        try (InputStream in = new FileInputStream(f); OutputStream os = new FileOutputStream(tmp)) {
+            copy(in, os);
+        }
+        //noinspection ResultOfMethodCallIgnored
+        dest.delete();
+        if (!tmp.renameTo(dest)) throw new IOException("could not store the offline file");
+        return Uri.fromFile(dest);
+    }
+
     private Uri publish(File f, String name, String mime, String folder) throws Exception {
         // Songs and videos in their own folders: Download/AuraBeats/Music, …/Videos.
         String sub = folder != null && folder.matches("[A-Za-z]+") ? "/" + folder : "";
         String safe = fitName(name, 150);
+        String shortName = fitName(name, 60);
+        // Every failed step is kept: if all fail, the app shows why each did.
+        List<String> why = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= 29) {
             String base = Environment.DIRECTORY_DOWNLOADS + "/AuraBeats";
-            String shortName = fitName(name, 60);
             // Same file, progressively simpler places — the download itself is
             // done, so saving must not be the step that loses it.
             String[][] tries = {
@@ -477,23 +580,36 @@ public class VideoSaverPlugin extends Plugin {
                 { base, shortName },
                 { Environment.DIRECTORY_DOWNLOADS, shortName },
             };
-            Exception last = null;
             for (String[] t : tries) {
                 try {
                     return insertDownload(f, t[1], mime, t[0]);
                 } catch (Exception e) {
-                    last = e;
+                    why.add("MediaStore " + t[0] + ": " + e.getMessage());
                 }
             }
-            // Last resort: the app's own folder (Android/data/…/files/Download).
-            try {
-                return saveToAppFolder(f, shortName, mime, sub);
-            } catch (Exception e) {
-                throw last != null ? last : e;
-            }
         }
-        // Android 7–9: the app's own Download folder needs no permission.
-        return saveToAppFolder(f, safe, mime, sub);
+        // By path into the public Download folder: Android 11+ allows apps to
+        // create their own files there; Android 7–10 with the storage permission.
+        if (Build.VERSION.SDK_INT >= 30 || getPermissionState("storage") == PermissionState.GRANTED) {
+            File pub = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File[] dirs = { new File(pub, "AuraBeats" + sub), new File(pub, "AuraBeats"), pub };
+            for (File dir : dirs) {
+                try {
+                    return saveToDir(f, dir, safe, mime);
+                } catch (Exception e) {
+                    why.add("Path " + dir.getAbsolutePath() + ": " + e.getMessage());
+                }
+            }
+        } else {
+            why.add("storage permission not granted");
+        }
+        // Last resort: the app's own folder (Android/data/…/files/Download).
+        try {
+            return saveToDir(f, new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "AuraBeats" + sub), shortName, mime);
+        } catch (Exception e) {
+            why.add("App folder: " + e.getMessage());
+        }
+        throw new IOException(TextUtils.join(" | ", why));
     }
 
     private Uri insertDownload(File f, String name, String mime, String relPath) throws Exception {
@@ -521,13 +637,18 @@ public class VideoSaverPlugin extends Plugin {
         return uri;
     }
 
-    private Uri saveToAppFolder(File f, String name, String mime, String sub) throws Exception {
-        File dir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "AuraBeats" + sub);
+    private Uri saveToDir(File f, File dir, String name, String mime) throws Exception {
+        if (dir.exists() && !dir.isDirectory()) throw new IOException("a file named " + dir.getName() + " is in the way");
         //noinspection ResultOfMethodCallIgnored
         dir.mkdirs();
-        File dest = new File(dir, name);
+        if (!dir.isDirectory()) throw new IOException("cannot create folder");
+        File dest = uniqueFile(dir, name);
         try (InputStream in = new FileInputStream(f); OutputStream os = new FileOutputStream(dest)) {
             copy(in, os);
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            dest.delete();
+            throw e;
         }
         final Uri[] res = {null};
         final CountDownLatch latch = new CountDownLatch(1);
@@ -536,9 +657,22 @@ public class VideoSaverPlugin extends Plugin {
             latch.countDown();
         });
         latch.await(6, TimeUnit.SECONDS);
-        if (res[0] != null) return res[0];
         // Saved but not indexed yet: no openable uri (file:// is blocked on
         // Android 7+). The job still reports "Saved".
-        return null;
+        return res[0];
+    }
+
+    /** "name.mp4", else "name (2).mp4", … */
+    private static File uniqueFile(File dir, String name) {
+        File f = new File(dir, name);
+        if (!f.exists()) return f;
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        for (int i = 2; i < 1000; i++) {
+            f = new File(dir, base + " (" + i + ")" + ext);
+            if (!f.exists()) return f;
+        }
+        return new File(dir, base + " " + System.currentTimeMillis() + ext);
     }
 }

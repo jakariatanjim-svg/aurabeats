@@ -115,10 +115,16 @@ jobs:
           perms = [
               '<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />',
               '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
+              # Android 7-10: downloads into Download/AuraBeats by path (asked at runtime).
+              '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />',
           ]
           add = "".join("    " + p + "\n" for p in perms if p.split('"')[1] not in text)
           if add:
               text = text.replace("</manifest>", add + "</manifest>", 1)
+              path.write_text(text)
+          # Android 10: lets the by-path fallback write to Download/ (ignored on 11+).
+          if "requestLegacyExternalStorage" not in text:
+              text = text.replace("<application", '<application android:requestLegacyExternalStorage="true"', 1)
               path.write_text(text)
           print("Declared:", add or "already present")
           PY
