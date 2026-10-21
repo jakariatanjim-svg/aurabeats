@@ -1,4 +1,3 @@
-import "./dbg.mjs";
 import { startSender, startReceiver, newCode } from "./sync.mjs";
 const big = { favorites: Array.from({ length: 1500 }, (_, i) => ({ id: "t" + i, title: "Song number " + i + " " + Math.random().toString(36), artist: "Artist " + (i % 97) })) };
 const log = (...a) => console.log(new Date().toISOString().slice(11, 23), ...a);
@@ -10,7 +9,7 @@ async function run(label, wrong) {
     const stopS = startSender("Test PC", async () => ({ data: big, summary: { favorites: 1500 } }), (s) => {
       if (s.phase !== "sending") log(label, "S", s.phase, s.message || "");
       if (s.phase === "waiting") {
-        stopR = startReceiver(wrong ? newCode() : code, "Test phone", (r) => {
+        stopR = startReceiver(wrong ? newCode() : s.code.slice(0,4) + "-" + s.code.slice(4).toLowerCase(), "Test phone", (r) => {
           if (r.phase === "receiving") return;
           log(label, "R", r.phase, r.message || "", r.device || "");
           if (r.phase === "received") {
@@ -26,5 +25,6 @@ async function run(label, wrong) {
   });
 }
 await run("OK", false);
+await run("WRONG", true);
 
 process.exit(0);
