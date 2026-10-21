@@ -60,6 +60,9 @@ const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+// Faster speeds, shown only when YouTube's player says it can do them (the
+// embed is normally capped at 2x; the Android app's own player does 3x/4x).
+const FAST = [3, 4];
 const HOLD_MS = 420;
 const TAP_MS = 280;
 
@@ -636,6 +639,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       setMuted(true);
     }
   };
+  // Which of the faster speeds YouTube's player accepts for this video.
+  const fastOk = menu === "speed" ? ((call("getAvailablePlaybackRates") as number[] | undefined) ?? []) : [];
   const setSpeed = (r: number) => {
     call("setPlaybackRate", r);
     setRate(r);
@@ -794,6 +799,30 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     glide();
     return () => cancelAnimationFrame(raf);
   }, [mode, fs, miniPos, musicBar, miniW, mobileNav]);
+
+  // Settings menu closes on any tap / click outside it, like YouTube. A tap
+  // on the video then only closes the menu (no play/pause, no controls flip).
+  const menuZone = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t || menuZone.current?.contains(t)) return;
+      setMenu(null);
+      if ((e.target as HTMLElement).closest?.("button, a, input, [role=slider]")) return; // other controls still work
+      if (boxRef.current?.contains(t)) e.stopPropagation();
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
+    const blur = () => setMenu(null); // e.g. a click into another frame
+    window.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", key);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("pointerdown", outside, true);
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("blur", blur);
+    };
+  }, [menu]);
 
   // Entering the miniplayer while playing: start with clean picture.
   useEffect(() => {
@@ -1506,7 +1535,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 <CtrlBtn label={loop ? "Loop on" : "Loop"} onClick={() => setLoop((l) => !l)} className={cn(loop && "text-accent")}>
                   {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
                 </CtrlBtn>
-                <div className="relative">
+                <div className="relative" ref={menuZone}>
                   <CtrlBtn label="Settings" onClick={() => setMenu((m) => (m ? null : "main"))}>
                     <Settings2 className={cn("h-5 w-5 transition-transform", menu && "rotate-45")} />
                   </CtrlBtn>
@@ -1570,7 +1599,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                       ) : (
                         <>
                           <SubHead title="Playback speed" onBack={() => setMenu("main")} />
-                          {SPEEDS.map((s) => (
+                          {[...SPEEDS, ...FAST.filter((f) => fastOk.includes(f))].map((s) => (
                             <button
                               key={s}
                               type="button"

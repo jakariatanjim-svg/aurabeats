@@ -47,7 +47,7 @@ import type { VideoDetails } from "@/services/video/types";
 import { getVideoSettings } from "@/services/video/settings";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 
-const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
 
 export interface VideoPlayerProps {
   details: VideoDetails;
@@ -106,6 +106,37 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const [muted, setMuted] = useState(false);
   const [audioOnly, setAudioOnly] = useState(false);
   const [menu, setMenu] = useState(false);
+  // The menu closes on any tap outside it, like YouTube; a tap on the video
+  // then only closes it (no play/pause, no controls flip).
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (e: PointerEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el || el.closest?.("[data-menu-zone]")) return;
+      setMenu(false);
+      if (el.closest?.("button, a, input, [role=slider]")) return; // other controls still work
+      if (boxRef.current?.contains(el)) {
+        e.stopPropagation();
+        // …and its matching "up", or the surface would still read a tap
+        const id = e.pointerId;
+        const up = (u: PointerEvent) => {
+          if (u.pointerId !== id) return;
+          u.stopPropagation();
+          window.removeEventListener("pointerup", up, true);
+          window.removeEventListener("pointercancel", up, true);
+        };
+        window.addEventListener("pointerup", up, true);
+        window.addEventListener("pointercancel", up, true);
+      }
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    window.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("pointerdown", outside, true);
+      window.removeEventListener("keydown", key);
+    };
+  }, [menu]);
   const [controls, setControls] = useState(true);
   const [fs, setFs] = useState<"off" | "native" | "css">("off");
   const [flash, setFlash] = useState<{ side: "l" | "r"; key: number } | null>(null);
@@ -1037,6 +1068,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
               <Headphones className="h-5 w-5" />
             </CtlBtn>
           )}
+          <span data-menu-zone className="contents">
           <CtlBtn label="Quality & speed" active={menu} onClick={() => setMenu((m) => !m)}>
             <Settings2 className="h-5 w-5" />
             {quality && quality.height >= 720 && (
@@ -1045,6 +1077,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
               </span>
             )}
           </CtlBtn>
+          </span>
           {typeof document !== "undefined" && document.pictureInPictureEnabled && (
             <CtlBtn label="Picture in picture" onClick={togglePip}>
               <PictureInPicture2 className="h-5 w-5" />
@@ -1057,7 +1090,10 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       </div>
 
       {menu && (
-        <div className="absolute right-2 bottom-14 z-10 max-h-[70%] w-60 animate-fade-in overflow-y-auto rounded-2xl bg-black/85 p-3 text-sm shadow-2xl backdrop-blur-md sm:right-4">
+        <div
+          data-menu-zone
+          className="absolute right-2 bottom-14 z-10 max-h-[70%] w-60 animate-fade-in overflow-y-auto rounded-2xl bg-black/85 p-3 text-sm shadow-2xl backdrop-blur-md sm:right-4"
+        >
           {plan.qualities.length > 0 && (
             <>
               <p className="mb-1.5 px-1 text-[10px] font-bold tracking-widest text-white/50 uppercase">Quality</p>
@@ -1078,7 +1114,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
           <p className="mt-3 mb-1.5 flex items-center gap-1 px-1 text-[10px] font-bold tracking-widest text-white/50 uppercase">
             <Gauge className="h-3 w-3" /> Speed
           </p>
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-5 gap-1">
             {SPEEDS.map((s) => (
               <button
                 key={s}
