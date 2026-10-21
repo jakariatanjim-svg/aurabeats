@@ -17,6 +17,7 @@
 import { useBackHandler } from "@/utils/backStack";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
 import { isNative } from "@/services/video/net";
+import { baseOrientation } from "@/utils/orientation";
 import { showVolumeUi } from "@/utils/device";
 import { layerControls, watchLayer } from "./watchLayer";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
@@ -505,6 +506,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       }
       return;
     }
+    // Rotation off (default): straight back to the app's upright screen.
+    if (!getVideoSettings().rotateFullscreen) {
+      await baseOrientation();
+      return;
+    }
     if (fsByRotation.current) return;
     // Back to portrait. If the phone is still held sideways, stay portrait
     // until it is really upright — else it would flip straight back to full
@@ -538,7 +544,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       document.removeEventListener("webkitfullscreenchange", onChange);
     };
   }, []);
-  // Turning the phone sideways = full screen, upright again = leave it.
+  // Optional (Settings → Video, off by default): turning the phone sideways
+  // = full screen, upright again = leave it. Swipe up always works.
   const fsRef = useRef(fs);
   fsRef.current = fs;
   const rotateRef = useRef({ enterFs, exitFs, mini, started: () => started.current });
@@ -548,6 +555,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     const mq = window.matchMedia("(orientation: landscape)");
     const on = () => {
       const r = rotateRef.current;
+      if (!getVideoSettings().rotateFullscreen) return;
       if (mq.matches && fsRef.current === "off" && !r.mini && r.started() && isLandscapeVideo()) void r.enterFs(true);
       else if (!mq.matches && fsRef.current !== "off" && fsByRotation.current) void r.exitFs();
     };
@@ -629,7 +637,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     () => () => {
       layerControls.toggle = null;
       layerControls.pause = null;
-      if (isNative) void ScreenOrientation.unlock().catch(() => {});
+      void baseOrientation();
     },
     [],
   );

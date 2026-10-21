@@ -3,6 +3,7 @@ import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
+import { Tutorial } from "@/components/Tutorial";
 import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
@@ -18,6 +19,8 @@ import { rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
 import { App as CapApp } from "@capacitor/app";
 import { runBackHandler } from "@/utils/backStack";
+import { baseOrientation } from "@/utils/orientation";
+import { subscribeVideoSettings } from "@/services/video/settings";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
 const SearchView = lazy(() => import("@/views/SearchView").then((m) => ({ default: m.SearchView })));
@@ -138,6 +141,16 @@ function Shell() {
       remove?.();
     };
   }, [scrollTop]);
+
+  // App: upright on phones unless "Rotate for full screen" is on.
+  useEffect(() => {
+    if (!isNative) return;
+    void baseOrientation();
+    const off = subscribeVideoSettings(() => void baseOrientation());
+    return () => {
+      off();
+    };
+  }, []);
 
   const toggleCollapse = useCallback(() => {
     setCollapsed((c) => {
@@ -287,6 +300,7 @@ function Shell() {
 
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
       <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={favorites.length} />
+      <Tutorial />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}
       {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
       {isNative && (

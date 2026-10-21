@@ -2,9 +2,11 @@ import {
   ArrowRight,
   Check,
   Droplets,
+  GraduationCap,
   Info,
   Moon,
   Palette,
+  Play,
   RefreshCw,
   SlidersHorizontal,
   Smartphone,
@@ -19,6 +21,7 @@ import { useAppUpdate } from "@/hooks/useAppUpdate";
 import { installedVersionLabel } from "@/utils/updater";
 import { showVolumeUi } from "@/utils/device";
 import { Button, SectionHeader, Slider } from "@/components/ui";
+import { openTour } from "@/components/Tutorial";
 import type { ThemeName } from "@/types";
 import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
 import { HistorySection } from "@/components/HistorySection";
@@ -245,6 +248,21 @@ export function SettingsView() {
         <SectionHeader title="Coming soon" icon={<Sparkles className="h-4 w-4 text-accent" />} />
         <ComingSoonCard />
       </section>
+
+      <button
+        type="button"
+        onClick={openTour}
+        className="blur-panel group flex w-full items-center gap-3 p-4 text-left transition-transform hover:-translate-y-0.5"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+          <GraduationCap className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-bold text-ink transition-colors group-hover:text-accent">Watch the tour</span>
+          <span className="block truncate text-[11px] text-ink3">Where everything is and how to use it</span>
+        </span>
+        <Play className="h-4 w-4 text-ink3" />
+      </button>
 
       <a
         href="/about"

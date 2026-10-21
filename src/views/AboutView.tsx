@@ -1,15 +1,25 @@
-import { Archive, ArrowRight, Globe, Heart, Info, Mic2, Music2, Radio, Shield, ShieldCheck, Sparkles, Tv } from "lucide-react";
+import { Archive, ArrowRight, Globe, Heart, Info, Mic2, Music2, Shield, ShieldCheck, Sparkles, Tv } from "lucide-react";
 import { SectionHeader, WaveformLogo } from "@/components/ui";
 import { isNative } from "@/services/video/net";
 import { AdBadge, AdBlockSteps } from "@/components/video/AdBlockTip";
 
 const SOURCES = [
   {
+    icon: Tv,
+    name: "YouTube",
+    color: "text-red-500",
+    bg: "bg-red-500/10",
+    description: isNative
+      ? "Every YouTube video, channel and live stream. The app plays them ad-free, straight from YouTube, up to 4K, and can download them."
+      : "Every YouTube video, channel and live stream, in YouTube's official player with our own controls, miniplayer and theater mode.",
+    type: "Video",
+  },
+  {
     icon: Music2,
     name: "YouTube Music",
     color: "text-rose-400",
     bg: "bg-rose-400/10",
-    description: "The world's largest music catalog. AuraBeats uses a hybrid resolver to play high-quality audio streams without ads or tracking.",
+    description: "The world's largest music catalog, with lyrics and related songs. Songs can be saved for offline listening in the app.",
     type: "Primary Source",
   },
   {
@@ -51,14 +61,6 @@ const SOURCES = [
     bg: "bg-sky-400/10",
     description: "Public-domain recordings, live concerts, and historical audio. All available for free, forever.",
     type: "Public Domain",
-  },
-  {
-    icon: Radio,
-    name: "Radio Browser",
-    color: "text-emerald-400",
-    bg: "bg-emerald-400/10",
-    description: "Community-maintained directory of thousands of public live radio stations worldwide. Nonstop streams.",
-    type: "Live Radio",
   },
 ];
 
@@ -102,7 +104,7 @@ export function AboutView() {
         <SectionHeader
           showSubtitle
           title="Streaming sources"
-          subtitle="AuraBeats connects to multiple independent audio networks simultaneously"
+          subtitle="Video and music from YouTube, plus independent audio networks"
           icon={<Sparkles className="h-4 w-4 text-accent" />}
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

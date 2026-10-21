@@ -45,6 +45,15 @@ export function VideoSettingsSection() {
         </div>
         )}
 
+        {appEnv === "apk" && (
+          <Toggle
+            title="Rotate for full screen"
+            hint="Turning the phone sideways opens full screen"
+            on={s.rotateFullscreen}
+            onChange={() => setVideoSettings({ rotateFullscreen: !s.rotateFullscreen })}
+          />
+        )}
+
         <Toggle
           title="Autoplay next video"
           hint="When a video ends"

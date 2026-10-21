@@ -115,6 +115,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [controls, setControls] = useState(true);
   const [menu, setMenu] = useState<null | "main" | "speed" | "quality" | "cc">(null);
   const [held, setHeld] = useState(false);
+  // Volume bubble (wheel / ↑↓ keys), like YouTube's: icon + percentage.
+  const [volFx, setVolFx] = useState<{ v: number; key: number } | null>(null);
+  useEffect(() => {
+    if (!volFx) return;
+    const t = setTimeout(() => setVolFx(null), 800);
+    return () => clearTimeout(t);
+  }, [volFx]);
   const [seekFx, setSeekFx] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
   const [flash, setFlash] = useState<{ icon: "play" | "pause"; key: number } | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
@@ -964,8 +971,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       else if (k === "t" && fs === "off") dock.toggleTheater();
       else if (k === "i") toMini();
       else if (k === "m") toggleMute();
-      else if (k === "arrowup") setVolume(volume + 5);
-      else if (k === "arrowdown") setVolume(volume - 5);
+      else if (k === "arrowup" || k === "arrowdown") {
+        const n = Math.max(0, Math.min(100, (muted || needsUnmute ? 0 : volume) + (k === "arrowup" ? 5 : -5)));
+        setVolume(n);
+        setVolFx({ v: n, key: Date.now() });
+      }
       else if (e.key === ">") setSpeed(SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(rate) + 1)] ?? 2);
       else if (e.key === "<") setSpeed(SPEEDS[Math.max(0, SPEEDS.indexOf(rate) - 1)] ?? 0.25);
       else if (k === "escape" && fs === "css") void exitFs();
@@ -982,6 +992,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   // wheel handler is passive and couldn't stop the page from scrolling.
   const volRef = useRef(setVolume);
   volRef.current = setVolume;
+  const fxRef = useRef(setVolFx);
   const volNow = useRef(volume);
   volNow.current = muted || needsUnmute ? 0 : volume;
   useEffect(() => {
@@ -990,7 +1001,9 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     const onWheel = (e: WheelEvent) => {
       if (!e.deltaY || (e.target as HTMLElement | null)?.closest("[data-menu]")) return;
       e.preventDefault();
-      volRef.current(Math.round(volNow.current / 10) * 10 + (e.deltaY < 0 ? 10 : -10));
+      const n = Math.max(0, Math.min(100, Math.round(volNow.current / 10) * 10 + (e.deltaY < 0 ? 10 : -10)));
+      volRef.current(n);
+      fxRef.current({ v: n, key: Date.now() });
     };
     box.addEventListener("wheel", onWheel, { passive: false });
     return () => box.removeEventListener("wheel", onWheel);
@@ -1186,6 +1199,15 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         )}
 
         {/* 2x hold pill */}
+        {volFx && (
+          <div
+            key={volFx.key}
+            className="pointer-events-none absolute top-[12%] left-1/2 z-10 flex -translate-x-1/2 animate-fade-in items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-[15px] font-bold tabular-nums"
+          >
+            {volFx.v === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            {volFx.v}%
+          </div>
+        )}
         {held && (
           <div className="pointer-events-none absolute top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
             2x <FastForward className="h-4 w-4 fill-current" />
