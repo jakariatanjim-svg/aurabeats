@@ -1,3 +1,4 @@
+import "./dbg.mjs";
 import { startSender, startReceiver, newCode } from "./sync.mjs";
 const big = { favorites: Array.from({ length: 1500 }, (_, i) => ({ id: "t" + i, title: "Song number " + i + " " + Math.random().toString(36), artist: "Artist " + (i % 97) })) };
 const log = (...a) => console.log(new Date().toISOString().slice(11, 23), ...a);
@@ -25,5 +26,5 @@ async function run(label, wrong) {
   });
 }
 await run("OK", false);
-await run("WRONG", true);
+
 process.exit(0);
