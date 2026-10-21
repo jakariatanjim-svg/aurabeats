@@ -3,12 +3,18 @@ on:
   push:
     branches: [arena/5cc9a89b-aurabeats]
     paths: [".github/probe/**"]
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
 jobs:
   probe:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: cd .github/probe && npm init -y >/dev/null && npm i youtubei.js@18 >/dev/null 2>&1 && node run.mjs 2>&1 | tee out.txt
-      - run: grep -E "^(BROWSE|TOKEN)" .github/probe/out.txt | cut -c1-400 | paste -sd'|' | sed 's/^/::notice::/' 
+      - run: grep -E "^(USER_CODE|TOKEN_ERR|NO_TOKEN|GOT_TOKEN|API|TVBROWSE|REVOKED)" .github/probe/out.txt | cut -c1-400 | paste -sd'|' | sed 's/^/::notice::/' 
