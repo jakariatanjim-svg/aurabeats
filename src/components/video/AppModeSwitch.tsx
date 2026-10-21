@@ -60,6 +60,7 @@ export function AppModeSwitch({
     <div
       role="tablist"
       aria-label="Music or video"
+      data-tour="mode"
       className={cn("ab-seg blur-panel flex gap-0.5 p-1", vertical ? "flex-col" : "items-center", className)}
     >
       {opts.map(({ mode, label, icon: Icon, active }) => (

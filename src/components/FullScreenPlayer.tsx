@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { showVolumeUi } from "@/utils/device";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Heart,
@@ -29,6 +30,7 @@ import { Visualizer } from "@/components/Visualizer";
 import { TrackRow } from "@/components/TrackList";
 import { LyricsViewer } from "@/components/LyricsViewer";
 import { storage } from "@/utils/storage";
+import { useBackHandler } from "@/utils/backStack";
 
 export function FullScreenPlayer() {
   const { currentTime, duration, bufferedAhead } = usePlaybackClock();
@@ -67,7 +69,37 @@ export function FullScreenPlayer() {
     pause,
   } = usePlayer();
 
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Drag-to-close: the sheet follows the finger and slides down into the mini
+  // player; a short pull springs back. Imperative transform (no re-renders).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x0: number; y0: number; dy: number; locked: boolean; lastY: number; lastT: number; v: number } | null>(null);
+  const closing = useRef(false);
+
+  const moveTo = (y: number, animate: boolean) => {
+    const el = rootRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)" : "none";
+    el.style.transform = y > 0 ? `translate3d(0, ${y}px, 0)` : "";
+  };
+
+  /** Slide down, then collapse to the mini player (chevron, back, swipe). */
+  const dismiss = useCallback(() => {
+    const el = rootRef.current;
+    if (closing.current) return;
+    if (!el || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setExpanded(false);
+      return;
+    }
+    closing.current = true;
+    el.style.transition = "transform 260ms cubic-bezier(0.4, 0, 0.2, 1)";
+    el.style.transform = "translate3d(0, 100%, 0)";
+    window.setTimeout(() => {
+      closing.current = false;
+      setExpanded(false);
+    }, 250);
+  }, [setExpanded]);
+
+  useBackHandler(expanded, dismiss);
 
   const [showLyrics, setShowLyrics] = useState(false);
   const [showTimerMenu, setShowTimerMenu] = useState(false);
@@ -81,35 +113,58 @@ export function FullScreenPlayer() {
   useEffect(() => {
     if (!expanded) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpanded(false);
+      if (e.key === "Escape") dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded, setExpanded]);
+  }, [expanded, dismiss]);
 
   const fav = current ? isFavorite(current.id) : false;
   const offline = current ? isOffline(current.id) : false;
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (closing.current) return;
     const target = e.target as HTMLElement;
+    // Lists / lyrics scrolled down scroll first; sliders keep their drag.
     const scrollEl = target.closest(".scroll-area");
     if (scrollEl && scrollEl.scrollTop > 0) return;
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (target.closest('[role="slider"], input[type="range"]')) return;
+    const t = e.touches[0];
+    drag.current = { x0: t.clientX, y0: t.clientY, dy: 0, locked: false, lastY: t.clientY, lastT: performance.now(), v: 0 };
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
-    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
-    if (deltaY > 90 && Math.abs(deltaY) > Math.abs(deltaX) * 2) {
-      setExpanded(false);
-      touchStartRef.current = null;
+    const d = drag.current;
+    if (!d) return;
+    const t = e.touches[0];
+    const dy = t.clientY - d.y0;
+    const dx = t.clientX - d.x0;
+    if (!d.locked) {
+      if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+      // Only a mostly-downward pull grabs the sheet.
+      if (dy > 0 && dy > Math.abs(dx) * 1.4) d.locked = true;
+      else {
+        drag.current = null;
+        return;
+      }
     }
+    const now = performance.now();
+    const dt = Math.max(1, now - d.lastT);
+    d.v = 0.7 * ((t.clientY - d.lastY) / dt) + 0.3 * d.v; // px/ms, smoothed
+    d.lastY = t.clientY;
+    d.lastT = now;
+    d.dy = Math.max(0, dy);
+    moveTo(d.dy, false);
   };
 
   const handleTouchEnd = () => {
-    touchStartRef.current = null;
+    const d = drag.current;
+    drag.current = null;
+    if (!d || !d.locked) return;
+    const h = rootRef.current?.clientHeight || window.innerHeight;
+    if (d.dy > h * 0.22 || (d.v > 0.55 && d.dy > 40)) dismiss();
+    else moveTo(0, true);
   };
 
   const setTimer = (mins: number) => {
@@ -136,11 +191,13 @@ export function FullScreenPlayer() {
 
   return (
     <div
-      className="fixed inset-0 z-[85] animate-fade-in overflow-hidden touch-pan-y bg-base text-ink"
+      ref={rootRef}
+      className="animate-sheet-up fixed inset-0 z-[85] overflow-hidden touch-pan-y bg-base text-ink"
       style={{ backgroundImage: "var(--app-bg-image)" }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {/* backdrop — the theme's own background, tinted by the artwork */}
       <div className="ab-decor pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -162,7 +219,7 @@ export function FullScreenPlayer() {
       <div className="relative z-10 flex h-full flex-col pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] pl-[var(--sa-left)]">
         {/* top bar */}
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
-          <IconButton onClick={() => setExpanded(false)} aria-label="Close full screen" className={chip}>
+          <IconButton onClick={dismiss} aria-label="Close full screen" className={chip}>
             <ChevronDown className="h-5 w-5" />
           </IconButton>
 
@@ -352,8 +409,12 @@ export function FullScreenPlayer() {
                 {videoIdOfTrack(current) && (
                   <IconButton aria-label="Download video" onClick={() => requestVideoDownload({ id: videoIdOfTrack(current)!, title: current.title, author: current.artist })}><Film className="h-5 w-5" /></IconButton>
                 )}
-                <IconButton onClick={toggleMute} aria-label="Mute"><VolumeIcon className="h-5 w-5" /></IconButton>
-                <div className="w-24 sm:w-36"><Slider ariaLabel="Volume" value={muted ? 0 : volume * 100} max={100} onChange={(v) => setVolume(v / 100)} height="h-1" /></div>
+                {showVolumeUi && (
+                  <>
+                    <IconButton onClick={toggleMute} aria-label="Mute"><VolumeIcon className="h-5 w-5" /></IconButton>
+                    <div className="w-24 sm:w-36"><Slider ariaLabel="Volume" value={muted ? 0 : volume * 100} max={100} onChange={(v) => setVolume(v / 100)} height="h-1" /></div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -414,6 +475,7 @@ export function FullScreenPlayer() {
 
 export function QueuePanel() {
   const { queue, index, queueOpen, setQueueOpen, removeFromQueue, clearQueue, playAll, current } = usePlayer();
+  useBackHandler(queueOpen, () => setQueueOpen(false));
   return (
     <>
       {queueOpen && <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setQueueOpen(false)} />}

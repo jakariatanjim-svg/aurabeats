@@ -78,9 +78,7 @@ function PlaylistCard({ playlist, onOpen }: { playlist: UserPlaylist; onOpen: ()
         <IconButton
           size="sm"
           aria-label="Delete playlist"
-          onClick={() => {
-            if (window.confirm(`Delete "${playlist.name}"?`)) deletePlaylist(playlist.id);
-          }}
+          onClick={() => deletePlaylist(playlist.id)}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </IconButton>
@@ -300,10 +298,8 @@ export function PlaylistDetailView({ playlistId, onBack }: { playlistId: string;
             <IconButton
               aria-label="Delete playlist"
               onClick={() => {
-                if (window.confirm(`Delete "${playlist.name}"?`)) {
-                  deletePlaylist(playlist.id);
-                  onBack();
-                }
+                deletePlaylist(playlist.id);
+                onBack();
               }}
             >
               <Trash2 className="h-4 w-4" />
@@ -536,11 +532,7 @@ export function DownloadsView() {
               context={offlineTracks}
               index={i}
               removeLabel="Remove from downloads"
-              onRemove={() => {
-                if (window.confirm(`Remove "${t.title}" from offline storage?`)) {
-                  removeOffline(t.id);
-                }
-              }}
+              onRemove={() => void removeOffline(t.id)}
             />
           ))}
         </div>

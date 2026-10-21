@@ -1,107 +1,123 @@
 <div align="center">
 
-<img src="repo-assets/icon.png" alt="AuraBeats app icon" width="120" height="120" />
+<img src="repo-assets/icon.png" alt="AuraBeats" width="112" height="112" />
 
 # AuraBeats
 
-A free music **and video** app: songs, live radio and ad-free YouTube videos (every quality, up to 4K) in one simple player.<br/>
-No account, no subscription, no ads and no API key needed — just open it and play.
+**Music and video, beautifully simple.**<br/>
+Songs and YouTube in one calm, free player — no account, no subscription.
 
-**Website:** [aurabeats.pages.dev](https://aurabeats.pages.dev/) ·
-**Download for Android:** [Latest release (APK)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest) ·
-**Source code:** [GitHub](https://github.com/jakariatanjim-svg/aurabeats)
+<br/>
 
-[![Website](https://img.shields.io/badge/Website-aurabeats.pages.dev-7c5cff?style=for-the-badge)](https://aurabeats.pages.dev/)
-[![Android APK](https://img.shields.io/badge/Android-APK-3ddc84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
-[![PWA](https://img.shields.io/badge/PWA-Installable-5a0fc8?style=for-the-badge&logo=pwa&logoColor=white)](#install-as-an-app-pwa)
-![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Android%20%7C%20Desktop-38bdf8?style=for-the-badge)
-![Sources](https://img.shields.io/badge/Music%20Sources-7-ff6b6b?style=for-the-badge)
-![Cost](https://img.shields.io/badge/Cost-100%25%20Free-22c55e?style=for-the-badge)
-![Account](https://img.shields.io/badge/Account-No%20Sign--up-f59e0b?style=for-the-badge)
+[![Open the web app](https://img.shields.io/badge/Open_the_web_app-aurabeats.pages.dev-1e293b?style=for-the-badge&logo=googlechrome&logoColor=white)](https://aurabeats.pages.dev/)
+&nbsp;
+[![Download for Android](https://img.shields.io/badge/Download-Android_APK-1e293b?style=for-the-badge&logo=android&logoColor=3ddc84)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
 
-![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-7-646cff?style=flat-square&logo=vite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06b6d4?style=flat-square&logo=tailwindcss&logoColor=white)
+<sub>Web&nbsp;&nbsp;·&nbsp;&nbsp;Android&nbsp;&nbsp;·&nbsp;&nbsp;Installable on PC, Mac and iPhone</sub>
 
 </div>
 
----
+<br/>
 
-## What is AuraBeats?
+## Overview
 
-AuraBeats is a music and video player for the web, Android and desktop. It collects full-length songs from several public music sources in one place, and plays YouTube videos without ads in every quality — so you can search once and play without switching between apps or websites.
+AuraBeats brings full-length songs and YouTube videos together in a single, uncluttered player. Search once, tap, and listen — on the web, as an installed app, or on Android.
 
-## What you can do with it
+Everything personal — favourites, playlists, history and followed channels — stays on your own device.
 
-- Search and play full-length songs
-- Listen to live radio from around the world
-- Watch YouTube videos with no ads, in any quality (up to 4K), follow channels and keep a watch history — all saved on your device, no account
-- Save your favourite songs and build your own collection
-- Discover new music based on your favourites
-- Download supported tracks for offline listening inside the app
-- Use it as a website, as an installed app (PWA) on PC or phone, or as an Android APK
+<br/>
 
-## Features
+## Highlights
 
-- **Many music sources in one search** — YouTube Music, JioSaavn, SoundCloud, Audius, Jamendo, Internet Archive and Radio Browser
-- **Ad-free video mode** — switch between Music and Video at any time. On Android the app streams straight from YouTube (like NewPipe); on the website and PWA it uses public ad-free servers (Invidious / Piped) with automatic failover. Quality picker, playback speed, audio-only, picture-in-picture and background listening
-- **Simple player** — play, pause, seek and volume controls, a full-screen player and a mini player
-- **Favourites and discovery** — a "For You" section based on the songs you favourite
-- **Themes** — three looks (Glassmorphism, Material UI and Liquid Glass), dark/light mode and your choice of accent colour
-- **Keyboard shortcuts** on PC — for example `Space` to play/pause and `Shift` + arrow keys to change track
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Music</h3>
+      Full-length songs from YouTube Music, with a “For You” mix built from the songs you love. More catalogues — JioSaavn, SoundCloud, Audius, Jamendo and the Internet Archive — live in their own <i>Other Sources</i> tab.
+    </td>
+    <td width="50%" valign="top">
+      <h3>Video</h3>
+      Switch to Video at any time. The Android app plays YouTube ad-free, in every available quality up to 4K. Follow channels and pick up where you left off.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h3>Offline listening</h3>
+      On Android, save songs inside the app and play them without an internet connection.
+    </td>
+    <td valign="top">
+      <h3>Synced lyrics</h3>
+      Lyrics that follow the song, scroll freely and snap back into sync with one tap.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h3>Downloads</h3>
+      On Android, save songs (M4A) and videos (MP4) with cover art and titles, neatly sorted into <code>Download/AuraBeats</code>.
+    </td>
+    <td valign="top">
+      <h3>Your look</h3>
+      Glassmorphism, Material and Liquid Glass designs, in light or dark, with your own accent colour.
+    </td>
+  </tr>
+</table>
 
----
+<br/>
 
-## How to use it
+## Get started
 
-1. Open [aurabeats.pages.dev](https://aurabeats.pages.dev/) in any browser, on PC or mobile.
-2. Search for a song, artist or radio station.
-3. Tap a result to play it.
-4. Use the heart icon to save favourites, and open Settings to change the theme and colour.
+| Platform | How |
+| :-- | :-- |
+| **Web** | Open [aurabeats.pages.dev](https://aurabeats.pages.dev/) in any modern browser. |
+| **Android** | Download the APK from the [latest release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest), open it and tap **Install**. |
+| **PC / Mac** | In Chrome or Edge, open the website and choose **Install app** from the address bar. |
+| **iPhone / iPad** | In Safari, open the website, tap **Share**, then **Add to Home Screen**. |
 
-That is all — no sign-up is needed.
+<details>
+<summary><b>Android install notes</b></summary>
+<br/>
 
-## Install on Android (APK)
+- If Android asks, allow installs from your browser or file manager for this one install.
+- To update, open **Settings → Check App Update** in the app, or install the newest APK over the old one. Your favourites and settings are kept.
 
-1. Open the [latest release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest) page.
-2. Download the `AuraBeats-<version>.apk` file.
-3. Open the downloaded file. If Android asks, allow installs from your browser or file manager for that one install.
-4. Tap **Install**, then open AuraBeats.
+</details>
 
-To update later, open **Settings** in the app and use **Check App Update**, or download the newest APK from the same release page and install it over the old one. Your favourites and settings stay in place.
+<details>
+<summary><b>Keyboard shortcuts (PC)</b></summary>
+<br/>
 
-## Install as an app (PWA)
+| Key | Action |
+| :-- | :-- |
+| `Space` | Play / pause |
+| `Shift` + `→` / `←` | Next / previous track |
+| `F` | Full-screen player |
+| `Q` | Queue |
+| `Esc` | Close panels |
 
-You can also install AuraBeats as an app straight from the website. It then opens like a normal app, with its own icon, while always showing the latest version of the site.
+</details>
 
-### PC (Chrome or Edge)
+<br/>
 
-1. Open [aurabeats.pages.dev](https://aurabeats.pages.dev/).
-2. Click the install icon in the address bar, or open the browser menu and choose **Install app**.
-3. AuraBeats now appears in your apps and can be pinned like any desktop app.
+## Privacy
 
-### Android (Chrome)
+- **No account.** Nothing to sign up for.
+- **On your device.** Favourites, playlists, history and follows are stored locally and can be cleared in Settings at any time.
+- **No servers of our own.** AuraBeats streams directly from public sources and stores no media.
 
-1. Open [aurabeats.pages.dev](https://aurabeats.pages.dev/).
-2. Tap the three-dot menu and choose **Install app** or **Add to Home screen**.
+<br/>
 
-### iPhone and iPad (Safari)
+## Coming soon
 
-1. Open [aurabeats.pages.dev](https://aurabeats.pages.dev/) in Safari.
-2. Tap the **Share** button.
-3. Scroll down and tap **Add to Home Screen**, then **Add**.
+- **Sign in to YouTube with Google** — use your Gmail account to bring your subscriptions, playlists and likes into AuraBeats.
 
-On iPhone, the PWA is the way to use AuraBeats as a home-screen app; on Android you can choose either the PWA or the APK above.
+<br/>
 
----
+## Built with
 
-## Links
+React · TypeScript · Vite · Tailwind CSS · Capacitor
 
-- Website: https://aurabeats.pages.dev/
-- Android APK: https://github.com/jakariatanjim-svg/aurabeats/releases/latest
-- Repository: https://github.com/jakariatanjim-svg/aurabeats
+<br/>
 
-## About
-
-AuraBeats is a solo, free and open project built with Vite, React, TypeScript and Tailwind CSS. Content belongs to its respective creators — AuraBeats stores no music on its own servers.
+<div align="center">
+<sub>AuraBeats is an independent, free project. All music and videos belong to their respective creators.</sub>
+</div>

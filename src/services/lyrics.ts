@@ -6,7 +6,7 @@
  * both are kept: the Roman one is a real human transcription for the "Aa"
  * mode.
  */
-import { needsRomanizing, nonLatinShare } from "@/utils/romanize";
+import { needsRomanizing, nonLatinShare } from "@/utils/script";
 import { storage } from "@/utils/storage";
 
 export interface LyricLine {

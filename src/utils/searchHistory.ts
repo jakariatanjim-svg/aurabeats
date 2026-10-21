@@ -4,6 +4,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { storage } from "@/utils/storage";
+import { undoable } from "@/components/UndoToast";
 
 export type SearchMode = "music" | "video";
 export interface SearchEntry {
@@ -57,7 +58,9 @@ export const searchHistory = {
     commit(get().filter((e) => !(e.mode === mode && same(e.q, q))));
   },
   clear(mode?: SearchMode) {
-    commit(mode ? get().filter((e) => e.mode !== mode) : []);
+    const snap = get();
+    commit(mode ? snap.filter((e) => e.mode !== mode) : []);
+    if (snap.length) undoable({ message: "Search history cleared", undo: () => commit(snap) });
   },
   subscribe(l: () => void) {
     listeners.add(l);

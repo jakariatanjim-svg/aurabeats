@@ -9,7 +9,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 /** One column on phones (like the YouTube app), more as the screen grows. */
 const GRID = "grid grid-cols-1 gap-x-4 gap-y-7 min-[560px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
 
-export function HomeView(_props: { onNavigate?: (r: "radio" | "search") => void }) {
+export function HomeView(_props: { onNavigate?: (r: "search") => void }) {
   const { playAll, favorites, history } = usePlayer();
 
   const feed = useDiscoverFeed(favorites, history);

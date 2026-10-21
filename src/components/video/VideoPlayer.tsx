@@ -10,8 +10,16 @@
  * Extras: quality ladder with Auto, speed, audio-only (stops downloading
  * video), background listening, Picture-in-Picture, fullscreen with
  * orientation lock, double-tap seek, keyboard shortcuts, lock-screen
- * controls (Media Session).
+ * controls (Media Session), loop, pinch zoom in full screen (Fit → Fill →
+ * any %), turning the phone sideways = full screen, and the YouTube-app
+ * gestures: drag down = miniplayer, swipe up = full screen.
  */
+import { useBackHandler } from "@/utils/backStack";
+import { ScreenOrientation } from "@capacitor/screen-orientation";
+import { isNative } from "@/services/video/net";
+import { baseOrientation } from "@/utils/orientation";
+import { showVolumeUi } from "@/utils/device";
+import { layerControls, watchLayer } from "./watchLayer";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import {
   Check,
@@ -24,6 +32,8 @@ import {
   Pause,
   PictureInPicture2,
   Play,
+  Repeat,
+  Repeat1,
   RotateCcw,
   RotateCw,
   Settings2,
@@ -35,9 +45,9 @@ import { formatTime } from "@/utils/format";
 import { storage } from "@/utils/storage";
 import type { VideoDetails } from "@/services/video/types";
 import { getVideoSettings } from "@/services/video/settings";
-import { autoHeight, makePlan, pickQuality, type Plan } from "./streams";
+import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 
-const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
 
 export interface VideoPlayerProps {
   details: VideoDetails;
@@ -49,6 +59,10 @@ export interface VideoPlayerProps {
   onEnded?: () => void;
   /** This source can't be played here → parent switches server. */
   onFatal: (reason: string, at: number) => void;
+  /** shown small in the miniplayer bar: no controls, the bar takes the touches */
+  mini?: boolean;
+  /** dragging the video down (the watch layer turns it into the miniplayer) */
+  onDrag?: (phase: "move" | "end", dy: number, velocity: number) => void;
 }
 
 type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
@@ -60,7 +74,7 @@ const mediaErr = (el: HTMLMediaElement) => {
   return e ? ` (code ${e.code}${e.message ? `: ${e.message.slice(0, 80)}` : ""})` : "";
 };
 
-export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal }: VideoPlayerProps) {
+export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag }: VideoPlayerProps) {
   const plan: Plan | null = useMemo(() => makePlan(details.streams), [details.streams]);
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -73,7 +87,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const [auto, setAuto] = useState(settings.quality === "auto");
   const [qIndex, setQIndex] = useState(() =>
     plan && plan.qualities.length
-      ? pickQuality(plan.qualities, settings.quality === "auto" ? autoHeight(null) : settings.quality)
+      ? pickQuality(plan.qualities, settings.quality === "auto" ? autoHeight(null) : Math.min(settings.quality, dataCap()))
       : 0,
   );
   const [playing, setPlaying] = useState(false);
@@ -82,10 +96,47 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const [duration, setDuration] = useState(details.duration || 0);
   const [buffered, setBuffered] = useState(0);
   const [rate, setRate] = useState(1);
-  const [volume, setVolume] = useState(() => storage.get("video:volume", 1));
+  // phones: the phone's volume buttons, no in-player volume (always 100 %)
+  const [volume, setVolume] = useState(() => (showVolumeUi ? storage.get("video:volume", 1) : 1));
+  const [loop, setLoop] = useState(false);
+  // full-screen zoom: 1 = whole picture (Fit); `fill` = no black bars
+  const [zoom, setZoom] = useState(1);
+  const [zoomSnap, setZoomSnap] = useState(true);
+  const [zoomPill, setZoomPill] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [audioOnly, setAudioOnly] = useState(false);
   const [menu, setMenu] = useState(false);
+  // The menu closes on any tap outside it, like YouTube; a tap on the video
+  // then only closes it (no play/pause, no controls flip).
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (e: PointerEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (!el || el.closest?.("[data-menu-zone]")) return;
+      setMenu(false);
+      if (el.closest?.("button, a, input, [role=slider]")) return; // other controls still work
+      if (boxRef.current?.contains(el)) {
+        e.stopPropagation();
+        // …and its matching "up", or the surface would still read a tap
+        const id = e.pointerId;
+        const up = (u: PointerEvent) => {
+          if (u.pointerId !== id) return;
+          u.stopPropagation();
+          window.removeEventListener("pointerup", up, true);
+          window.removeEventListener("pointercancel", up, true);
+        };
+        window.addEventListener("pointerup", up, true);
+        window.addEventListener("pointercancel", up, true);
+      }
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    window.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("pointerdown", outside, true);
+      window.removeEventListener("keydown", key);
+    };
+  }, [menu]);
   const [controls, setControls] = useState(true);
   const [fs, setFs] = useState<"off" | "native" | "css">("off");
   const [flash, setFlash] = useState<{ side: "l" | "r"; key: number } | null>(null);
@@ -165,6 +216,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     if (musicPlaying && !master()?.paused) pauseBoth();
   }, [musicPlaying, master, pauseBoth]);
 
+  useEffect(() => {
+    const m = master();
+    if (m) m.loop = loop;
+  }, [loop, master, qIndex]);
+
   // Apply volume / mute / rate.
   useEffect(() => {
     const m = master();
@@ -173,7 +229,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       m.muted = muted;
     }
     if (dual && videoRef.current) videoRef.current.muted = true;
-    storage.set("video:volume", volume);
+    if (showVolumeUi) storage.set("video:volume", volume);
   }, [volume, muted, master, dual]);
 
   useEffect(() => {
@@ -435,7 +491,15 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
 
   /* ---------------------------- fullscreen ------------------------------ */
 
-  const enterFs = async () => {
+  // How full screen was entered: by turning the phone (then turning it back
+  // leaves) or by a button / swipe (then the screen is held in landscape).
+  const fsByRotation = useRef(false);
+  const isLandscapeVideo = () => {
+    const v = videoRef.current;
+    return !v || !v.videoHeight || v.videoWidth >= v.videoHeight;
+  };
+  const enterFs = async (byRotation = false) => {
+    fsByRotation.current = byRotation;
     const box = boxRef.current as FsEl | null;
     try {
       if (box?.requestFullscreen) await box.requestFullscreen({ navigationUI: "hide" });
@@ -445,11 +509,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     } catch {
       setFs("css");
     }
-    const v = videoRef.current;
-    const landscape = !v || !v.videoHeight || v.videoWidth >= v.videoHeight;
-    if (landscape) {
+    if (isLandscapeVideo() && !byRotation) {
+      // The app: landscape even with auto-rotate off (no rotate button to tap).
       try {
-        await (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.("landscape");
+        if (isNative) await ScreenOrientation.lock({ orientation: "landscape" });
+        else await (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.("landscape");
       } catch {
         /* not allowed (desktop / iOS) */
       }
@@ -463,12 +527,41 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     } catch {
       /* ignore */
     }
-    try {
-      screen.orientation?.unlock?.();
-    } catch {
-      /* ignore */
-    }
     setFs("off");
+    setZoom(1);
+    if (!isNative) {
+      try {
+        screen.orientation?.unlock?.();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    // Rotation off (default): straight back to the app's upright screen.
+    if (!getVideoSettings().rotateFullscreen) {
+      await baseOrientation();
+      return;
+    }
+    if (fsByRotation.current) return;
+    // Back to portrait. If the phone is still held sideways, stay portrait
+    // until it is really upright — else it would flip straight back to full
+    // screen (YouTube does the same).
+    try {
+      await ScreenOrientation.lock({ orientation: "portrait" });
+    } catch {
+      return;
+    }
+    let got = false;
+    const done = () => {
+      window.removeEventListener("deviceorientation", onTilt);
+      void ScreenOrientation.unlock().catch(() => {});
+    };
+    const onTilt = (e: DeviceOrientationEvent) => {
+      got = true;
+      if (e.beta !== null && e.gamma !== null && Math.abs(e.beta) > 50 && Math.abs(e.gamma) < 35) done();
+    };
+    window.addEventListener("deviceorientation", onTilt);
+    window.setTimeout(() => !got && done(), 1500); // no tilt sensor → just let go
   };
   useEffect(() => {
     const onChange = () => {
@@ -482,7 +575,30 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       document.removeEventListener("webkitfullscreenchange", onChange);
     };
   }, []);
+  // Optional (Settings → Video, off by default): turning the phone sideways
+  // = full screen, upright again = leave it. Swipe up always works.
+  const fsRef = useRef(fs);
+  fsRef.current = fs;
+  const rotateRef = useRef({ enterFs, exitFs, mini, started: () => started.current });
+  rotateRef.current = { enterFs, exitFs, mini, started: () => started.current };
+  useEffect(() => {
+    if (!isNative) return;
+    const mq = window.matchMedia("(orientation: landscape)");
+    const on = () => {
+      const r = rotateRef.current;
+      if (!getVideoSettings().rotateFullscreen) return;
+      if (mq.matches && fsRef.current === "off" && !r.mini && r.started() && isLandscapeVideo()) void r.enterFs(true);
+      else if (!mq.matches && fsRef.current !== "off" && fsByRotation.current) void r.exitFs();
+    };
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const toggleFs = () => void (fs === "off" ? enterFs() : exitFs());
+  useEffect(() => {
+    if (fs === "off") setZoom(1);
+  }, [fs]);
+  // Android back leaves full screen first (native or CSS fallback).
+  useBackHandler(fs !== "off", () => void exitFs());
 
   const togglePip = async () => {
     const v = videoRef.current;
@@ -540,14 +656,101 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     else poke();
   }, [playing, poke]);
 
-  // Press & hold = 2× while held; vertical swipe = enter / leave fullscreen.
-  const hold = useRef({ timer: 0 as unknown as ReturnType<typeof setTimeout>, on: false, prev: 1, x: 0, y: 0, moved: false });
+  // The miniplayer bar drives play / pause and shows our state.
+  useEffect(() => {
+    layerControls.toggle = togglePlay;
+    layerControls.pause = pauseBoth;
+  });
+  useEffect(() => {
+    watchLayer.setPlaying(playing);
+  }, [playing]);
+  useEffect(
+    () => () => {
+      layerControls.toggle = null;
+      layerControls.pause = null;
+      void baseOrientation();
+    },
+    [],
+  );
+  // Going small leaves full screen and closes menus.
+  useEffect(() => {
+    if (!mini) return;
+    setMenu(false);
+    if (fsRef.current !== "off") void exitFs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mini]);
+
+  /* ------------------------------ zoom ---------------------------------- */
+  // Scale that fills the screen with no black bars (crops the edges).
+  const fillScale = () => {
+    const box = boxRef.current;
+    const v = videoRef.current;
+    if (!box || !v || !v.videoWidth || !v.videoHeight) return 1;
+    const W = box.clientWidth;
+    const H = box.clientHeight;
+    const r = v.videoWidth / v.videoHeight;
+    const fitW = W / H > r ? H * r : W;
+    const fitH = W / H > r ? H : W / r;
+    return Math.max(W / fitW, H / fitH);
+  };
+  const zoomLabel = (z: number, fill: number) =>
+    Math.abs(z - 1) < 0.01 ? "Fit" : Math.abs(z - fill) < 0.01 ? "Fill screen" : `${Math.round(z * 100)}%`;
+  useEffect(() => {
+    if (!zoomPill) return;
+    const t = setTimeout(() => setZoomPill(null), 1100);
+    return () => clearTimeout(t);
+  }, [zoomPill, zoom]);
+
+  /* ---------------------------- gestures -------------------------------- */
+  // Press & hold = 2× while held. Swipe up = full screen; drag down = the
+  // miniplayer (follows the finger), or leaves full screen. Two fingers in
+  // full screen = zoom.
+  const hold = useRef({
+    timer: 0 as unknown as ReturnType<typeof setTimeout>,
+    on: false,
+    prev: 1,
+    x: 0,
+    y: 0,
+    moved: false,
+    dragging: false,
+    lastY: 0,
+    lastT: 0,
+    vy: 0,
+    pinch: null as null | { d0: number; z0: number },
+    pts: new Map<number, { x: number; y: number }>(),
+  });
   const [held, setHeld] = useState(false);
+  const dist = () => {
+    const [a, b] = [...hold.current.pts.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
   const onSurfacePointerDown = (e: RPointerEvent<HTMLDivElement>) => {
     const h = hold.current;
+    h.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    if (h.pts.size === 2) {
+      // second finger: zoom (full screen only), never a tap / swipe
+      clearTimeout(h.timer);
+      h.moved = true;
+      if (h.dragging) {
+        h.dragging = false;
+        onDrag?.("end", 0, 0);
+      }
+      if (fs !== "off") {
+        h.pinch = { d0: dist() || 1, z0: zoom };
+        setZoomSnap(false);
+      }
+      return;
+    }
+    if (h.pts.size > 2) return;
     h.x = e.clientX;
     h.y = e.clientY;
+    h.lastY = e.clientY;
+    h.lastT = e.timeStamp;
+    h.vy = 0;
     h.moved = false;
+    h.dragging = false;
+    h.pinch = null;
     clearTimeout(h.timer);
     h.timer = setTimeout(() => {
       if (h.moved || !playing) return;
@@ -559,18 +762,67 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   };
   const onSurfacePointerMove = (e: RPointerEvent<HTMLDivElement>) => {
     const h = hold.current;
-    if (!h.moved && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) {
+    if (!h.pts.has(e.pointerId)) return;
+    h.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (h.pinch) {
+      const fill = fillScale();
+      const raw = (h.pinch.z0 * dist()) / h.pinch.d0;
+      // a little give below Fit, up to 4×
+      const z = Math.min(4, Math.max(0.85, raw));
+      setZoom(z);
+      setZoomPill(zoomLabel(z < 1 ? 1 : z, fill));
+      return;
+    }
+    if (h.pts.size > 1) return;
+    const dx = e.clientX - h.x;
+    const dy = e.clientY - h.y;
+    if (e.timeStamp > h.lastT) {
+      h.vy = h.vy * 0.4 + ((e.clientY - h.lastY) / (e.timeStamp - h.lastT)) * 0.6;
+      h.lastY = e.clientY;
+      h.lastT = e.timeStamp;
+    }
+    if (!h.moved && Math.hypot(dx, dy) > 10) {
       h.moved = true;
       clearTimeout(h.timer);
+      // a downward drag on the page-sized player → it follows the finger
+      if (onDrag && fs === "off" && e.pointerType !== "mouse" && !h.on && dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        h.dragging = true;
+        setMenu(false);
+      }
     }
+    if (h.dragging) onDrag?.("move", Math.max(0, dy), h.vy);
+  };
+  const endPinch = () => {
+    const h = hold.current;
+    if (!h.pinch) return;
+    h.pinch = null;
+    const fill = fillScale();
+    // Fit ↔ Fill are steps; past Fill it stays at the percentage you chose.
+    setZoom((z) => {
+      const next = z < 1 + (fill - 1) * 0.5 ? 1 : z < fill * 1.06 ? fill : z;
+      setZoomPill(zoomLabel(next, fill));
+      return next;
+    });
+    setZoomSnap(true);
   };
   const onSurfacePointerUp = (e: RPointerEvent<HTMLDivElement>) => {
     const h = hold.current;
+    const multi = h.pts.size > 1 || h.pinch !== null;
+    h.pts.delete(e.pointerId);
+    if (multi) {
+      if (h.pts.size < 2) endPinch();
+      return;
+    }
     clearTimeout(h.timer);
     if (h.on) {
       h.on = false;
       setRate(h.prev);
       setHeld(false);
+      return;
+    }
+    if (h.dragging) {
+      h.dragging = false;
+      onDrag?.("end", Math.max(0, e.clientY - h.y), h.vy);
       return;
     }
     if (h.moved) {
@@ -608,6 +860,21 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       poke();
     }
   };
+  const onSurfaceCancel = (e: RPointerEvent<HTMLDivElement>) => {
+    const h = hold.current;
+    h.pts.delete(e.pointerId);
+    endPinch();
+    clearTimeout(h.timer);
+    if (h.on) {
+      h.on = false;
+      setRate(h.prev);
+      setHeld(false);
+    }
+    if (h.dragging) {
+      h.dragging = false;
+      onDrag?.("end", 0, 0);
+    }
+  };
 
   /* ------------------------------ render -------------------------------- */
 
@@ -622,7 +889,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const shown = scrub ?? time;
   const pct = duration ? (shown / duration) * 100 : 0;
   const bufPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
-  const showUi = controls || !playing;
+  const showUi = !mini && (controls || !playing);
 
   return (
     <div
@@ -645,6 +912,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         preload="auto"
         muted={dual}
         className={cn("absolute inset-0 h-full w-full object-contain", audioOnly && "opacity-0")}
+        style={
+          zoom !== 1 || !zoomSnap
+            ? { transform: `scale(${Math.max(1, zoom)})`, transition: zoomSnap ? "transform 220ms cubic-bezier(.2,.8,.2,1)" : "none" }
+            : { transition: "transform 220ms cubic-bezier(.2,.8,.2,1)" }
+        }
       />
       {dual && <audio ref={audioRef} src={plan.audio!.url} preload="auto" />}
 
@@ -659,20 +931,18 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
 
       {/* tap surface */}
       <div
-        className="absolute inset-0 touch-none"
+        className={cn("absolute inset-0 touch-none", mini && "pointer-events-none")}
         onPointerDown={onSurfacePointerDown}
         onPointerMove={onSurfacePointerMove}
         onPointerUp={onSurfacePointerUp}
-        onPointerCancel={() => {
-          clearTimeout(hold.current.timer);
-          if (hold.current.on) {
-            hold.current.on = false;
-            setRate(hold.current.prev);
-            setHeld(false);
-          }
-        }}
+        onPointerCancel={onSurfaceCancel}
         onContextMenu={(e) => e.preventDefault()}
       />
+      {zoomPill && fs !== "off" && (
+        <span className="pointer-events-none absolute top-[calc(var(--sa-top)+1rem)] left-1/2 -translate-x-1/2 animate-fade-in rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
+          {zoomPill}
+        </span>
+      )}
       {held && (
         <span className="pointer-events-none absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
           2x <FastForward className="h-4 w-4 fill-current" />
@@ -694,7 +964,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       {/* center */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         {buffering && wantPlay.current ? (
-          <Loader2 className="h-12 w-12 animate-spin text-white/90 drop-shadow" />
+          <Loader2 className={cn("animate-spin text-white/90 drop-shadow", mini ? "h-16 w-16" : "h-12 w-12")} />
         ) : (
           showUi && (
             <button
@@ -760,10 +1030,12 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
           <CtlBtn label={playing ? "Pause (k)" : "Play (k)"} onClick={togglePlay}>
             {playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
           </CtlBtn>
+          {showVolumeUi && (
           <CtlBtn label={muted ? "Unmute (m)" : "Mute (m)"} onClick={() => setMuted((m) => !m)}>
             {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </CtlBtn>
-          <input
+          )}
+          {showVolumeUi && <input
             type="range"
             min={0}
             max={1}
@@ -775,7 +1047,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
               setMuted(false);
             }}
             className="hidden w-20 accent-white md:block"
-          />
+          />}
           <span className="ml-1 text-xs font-semibold tabular-nums text-white/90">
             {details.live ? (
               <span className="flex items-center gap-1.5">
@@ -786,11 +1058,17 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             )}
           </span>
           <span className="flex-1" />
+          {!details.live && (
+            <CtlBtn label={loop ? "Loop on" : "Loop"} active={loop} onClick={() => setLoop((l) => !l)}>
+              {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+            </CtlBtn>
+          )}
           {dual && (
             <CtlBtn label={audioOnly ? "Show video" : "Audio only"} active={audioOnly} onClick={() => setAudioOnly((x) => !x)}>
               <Headphones className="h-5 w-5" />
             </CtlBtn>
           )}
+          <span data-menu-zone className="contents">
           <CtlBtn label="Quality & speed" active={menu} onClick={() => setMenu((m) => !m)}>
             <Settings2 className="h-5 w-5" />
             {quality && quality.height >= 720 && (
@@ -799,6 +1077,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
               </span>
             )}
           </CtlBtn>
+          </span>
           {typeof document !== "undefined" && document.pictureInPictureEnabled && (
             <CtlBtn label="Picture in picture" onClick={togglePip}>
               <PictureInPicture2 className="h-5 w-5" />
@@ -811,7 +1090,10 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       </div>
 
       {menu && (
-        <div className="absolute right-2 bottom-14 z-10 max-h-[70%] w-60 animate-fade-in overflow-y-auto rounded-2xl bg-black/85 p-3 text-sm shadow-2xl backdrop-blur-md sm:right-4">
+        <div
+          data-menu-zone
+          className="absolute right-2 bottom-14 z-10 max-h-[70%] w-60 animate-fade-in overflow-y-auto rounded-2xl bg-black/85 p-3 text-sm shadow-2xl backdrop-blur-md sm:right-4"
+        >
           {plan.qualities.length > 0 && (
             <>
               <p className="mb-1.5 px-1 text-[10px] font-bold tracking-widest text-white/50 uppercase">Quality</p>
@@ -832,7 +1114,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
           <p className="mt-3 mb-1.5 flex items-center gap-1 px-1 text-[10px] font-bold tracking-widest text-white/50 uppercase">
             <Gauge className="h-3 w-3" /> Speed
           </p>
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-5 gap-1">
             {SPEEDS.map((s) => (
               <button
                 key={s}

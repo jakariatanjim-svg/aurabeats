@@ -1,9 +1,8 @@
 import { useState, useSyncExternalStore } from "react";
-import { ShieldCheck, Tv } from "lucide-react";
+import { Tv } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { SectionHeader } from "@/components/ui";
-import { appEnv, playbackMethodLabel } from "@/services/video/net";
-import { AdBadge, AdBlockSteps } from "./AdBlockTip";
+import { appEnv } from "@/services/video/net";
 import { getVideoSettings, setVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 
 const QUALITIES: { value: "auto" | number; label: string }[] = [
@@ -22,32 +21,12 @@ export function VideoSettingsSection() {
 
   return (
     <section>
-      <SectionHeader title="Video" subtitle={appEnv === "apk" ? "Ad-free YouTube" : "YouTube"} icon={<Tv className="h-4 w-4 text-accent" />} />
+      <SectionHeader title="Video" icon={<Tv className="h-4 w-4 text-accent" />} />
       <div className="blur-panel space-y-4 p-4">
-        {appEnv === "apk" ? (
-          <p className="flex items-start gap-2 text-[11px] leading-relaxed text-ink3">
-            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-            <span>
-              Playback on this device: <b className="text-ink">{playbackMethodLabel()}</b>. The app fetches streams straight
-              from YouTube, like NewPipe, so there are no ads. If that fails it switches to ad-free servers.
-            </span>
-          </p>
-        ) : (
-          <div className="border-b border-line pb-4">
-            <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-ink">
-              Ads on the website <AdBadge />
-            </p>
-            <p className="mt-0.5 mb-3 text-[11px] leading-relaxed text-ink3">
-              Videos play in YouTube's official player, so YouTube may show ads. Block them for free:
-            </p>
-            <AdBlockSteps />
-          </div>
-        )}
-
         {appEnv === "apk" && (
         <div className="border-b border-line pb-4">
           <p className="text-sm font-bold text-ink">Default quality</p>
-          <p className="mt-0.5 mb-2.5 text-[11px] text-ink3">Auto picks the best fit for your screen and connection (up to 1080p).</p>
+          <p className="mt-0.5 mb-2.5 text-[11px] text-ink3">Auto fits your screen and connection</p>
           <div className="flex flex-wrap gap-1.5">
             {QUALITIES.map((q) => (
               <button
@@ -66,9 +45,18 @@ export function VideoSettingsSection() {
         </div>
         )}
 
+        {appEnv === "apk" && (
+          <Toggle
+            title="Rotate for full screen"
+            hint="Turning the phone sideways opens full screen"
+            on={s.rotateFullscreen}
+            onChange={() => setVideoSettings({ rotateFullscreen: !s.rotateFullscreen })}
+          />
+        )}
+
         <Toggle
           title="Autoplay next video"
-          hint="Play the first suggestion when a video ends."
+          hint="When a video ends"
           on={s.autoplayNext}
           onChange={() => setVideoSettings({ autoplayNext: !s.autoplayNext })}
         />
@@ -80,10 +68,7 @@ export function VideoSettingsSection() {
           }}
         >
           <p className="text-sm font-bold text-ink">Custom server (optional)</p>
-          <p className="mt-0.5 mb-2.5 text-[11px] text-ink3">
-            Your own Invidious URL or Piped API URL. It's tried first (for video info, and for playback in the app). Leave
-            empty for automatic servers.
-          </p>
+          <p className="mt-0.5 mb-2.5 text-[11px] text-ink3">Your own Invidious or Piped API URL, tried first</p>
           <div className="flex gap-2">
             <input
               value={server}

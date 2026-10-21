@@ -1,3 +1,4 @@
+import { useBackHandler } from "@/utils/backStack";
 import {
   useEffect,
   useRef,
@@ -13,6 +14,7 @@ import { cn } from "@/utils/cn";
 import { gradientFrom, initials } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { clamp } from "@/utils/format";
+import { UndoToast } from "@/components/UndoToast";
 
 /* ---- Brand waveform icon (synced with public/icon-512.png: small-tall-tall-small) ---- */
 export function WaveformLogo({ className }: { className?: string }) {
@@ -371,6 +373,7 @@ export function Modal({
   children: ReactNode;
   maxWidth?: string;
 }) {
+  useBackHandler(open, onClose);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -431,6 +434,7 @@ export function Toaster() {
           <span className="line-clamp-2">{t.text}</span>
         </button>
       ))}
+      <UndoToast />
     </div>
   );
 }

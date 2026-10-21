@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Bookmark, Clock, History, Sparkles, Rss, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Clock, History, ListVideo, Sparkles, Rss, ThumbsUp, Trash2, Users, X } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
 import { followingFeed, recommendedVideos } from "@/services/video/api";
@@ -9,6 +9,7 @@ import { Button, Chip, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { routeToPath, type RouteKey } from "@/routes";
 import { openSearch } from "@/utils/searchNav";
+import { playlistVideos, syncAccount, useYtAccount, type YtPlaylist } from "@/services/ytAccount";
 
 function useProgress() {
   const lib = useVideoLibrary();
@@ -128,7 +129,80 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
 
 /* ------------------------------- Following ------------------------------- */
 
-export function VideoSubsView(_props: { onNavigate?: (r: RouteKey) => void }) {
+export function VideoSubsView(props: { onNavigate?: (r: RouteKey) => void }) {
+  const acc = useYtAccount();
+  const [src, setSrc] = useState<"yt" | "local">("yt");
+  if (!acc.signedIn) return <LocalFollowing />;
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip active={src === "yt"} onClick={() => setSrc("yt")}>
+          YouTube · {acc.subs.length}
+        </Chip>
+        <Chip active={src === "local"} onClick={() => setSrc("local")}>
+          On this device
+        </Chip>
+      </div>
+      {src === "yt" ? <AccountFollowing /> : <LocalFollowing {...props} />}
+    </div>
+  );
+}
+
+/** Subscriptions of the signed-in YouTube account (app). */
+function AccountFollowing() {
+  const acc = useYtAccount();
+  const progress = useProgress();
+  const [channels, setChannels] = useState(false);
+  const [limit, setLimit] = useState(24);
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="mr-auto text-sm font-bold text-ink">
+          {acc.subs.length} subscription{acc.subs.length === 1 ? "" : "s"}
+        </p>
+        <Chip active={channels} onClick={() => setChannels((m) => !m)}>
+          {channels ? "Done" : "Channels"}
+        </Chip>
+        <Chip onClick={() => void syncAccount()}>{acc.syncing ? "Syncing…" : "Refresh"}</Chip>
+      </div>
+
+      {channels && (
+        <div className="blur-panel divide-y divide-line rounded-2xl">
+          {acc.subs.map((c) => (
+            <a key={c.id} href={routeToPath(`channel:${c.id}`)} data-nav="true" className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-ink/[0.04]">
+              <Avatar name={c.name} src={c.avatar} channelId={c.id} className="h-9 w-9" />
+              <span className="truncate text-sm font-semibold text-ink">{c.name}</span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {acc.subsFeed.length ? (
+        <>
+          <VideoGrid>
+            {acc.subsFeed.slice(0, limit).map((v) => (
+              <VideoCard key={v.id} v={v} progress={progress.get(v.id)} />
+            ))}
+          </VideoGrid>
+          {acc.subsFeed.length > limit && (
+            <div className="flex justify-center">
+              <Button variant="outline" onClick={() => setLimit((l) => l + 24)}>
+                Show more
+              </Button>
+            </div>
+          )}
+        </>
+      ) : acc.syncing ? (
+        <VideoGridSkeleton />
+      ) : (
+        <EmptyState title="No new videos from your subscriptions" action={<Button onClick={() => void syncAccount()}>Refresh</Button>} />
+      )}
+    </div>
+  );
+}
+
+/** Channels followed on this device (guest mode). */
+function LocalFollowing(_props: { onNavigate?: (r: RouteKey) => void }) {
   const lib = useVideoLibrary();
   const progress = useProgress();
   const { ids, feed } = useFollowingFeed();
@@ -162,7 +236,7 @@ export function VideoSubsView(_props: { onNavigate?: (r: RouteKey) => void }) {
           {lib.follows.map((c) => (
             <div key={c.id} className="flex items-center gap-3 px-3.5 py-2.5">
               <a href={routeToPath(`channel:${c.id}`)} data-nav="true" className="flex min-w-0 flex-1 items-center gap-3">
-                <Avatar name={c.name} src={c.avatar} className="h-9 w-9" />
+                <Avatar name={c.name} src={c.avatar} channelId={c.id} className="h-9 w-9" />
                 <span className="truncate text-sm font-semibold text-ink">{c.name}</span>
               </a>
               <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => videoLibrary.toggleFollow(c)}>
@@ -202,7 +276,10 @@ export function VideoSubsView(_props: { onNavigate?: (r: RouteKey) => void }) {
 export function VideoLibraryView() {
   const lib = useVideoLibrary();
   const progress = useProgress();
-  const [tab, setTab] = useState<"history" | "later">(lib.later.length && !lib.history.length ? "later" : "history");
+  const acc = useYtAccount();
+  const [tab, setTab] = useState<"history" | "later" | "liked" | "playlists">(lib.later.length && !lib.history.length ? "later" : "history");
+  const [openPl, setOpenPl] = useState<YtPlaylist | null>(null);
+  const accountTab = tab === "liked" || tab === "playlists";
 
   const list: VideoItem[] = tab === "history" ? lib.history : lib.later;
 
@@ -219,20 +296,69 @@ export function VideoLibraryView() {
             <Bookmark className="h-3.5 w-3.5" /> Watch later · {lib.later.length}
           </span>
         </Chip>
+        {acc.signedIn && (
+          <>
+            <Chip active={tab === "liked"} onClick={() => setTab("liked")}>
+              <span className="flex items-center gap-1.5">
+                <ThumbsUp className="h-3.5 w-3.5" /> Liked · {acc.liked.length}
+              </span>
+            </Chip>
+            <Chip
+              active={tab === "playlists"}
+              onClick={() => {
+                setTab("playlists");
+                setOpenPl(null);
+              }}
+            >
+              <span className="flex items-center gap-1.5">
+                <ListVideo className="h-3.5 w-3.5" /> Playlists · {acc.playlists.length}
+              </span>
+            </Chip>
+          </>
+        )}
         {tab === "history" && lib.history.length > 0 && (
           <Button
             variant="ghost"
             className="ml-auto text-xs"
-            onClick={() => {
-              if (window.confirm("Clear your whole watch history?")) videoLibrary.clearHistory();
-            }}
+            onClick={() => videoLibrary.clearHistory()}
           >
             <Trash2 className="h-3.5 w-3.5" /> Clear
           </Button>
         )}
       </div>
 
-      {list.length === 0 ? (
+      {accountTab ? (
+        tab === "liked" ? (
+          acc.liked.length ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {acc.liked.map((v) => (
+                <VideoRow key={v.id} v={v} progress={progress.get(v.id)} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title={acc.syncing ? "Loading…" : "No liked videos"} />
+          )
+        ) : openPl ? (
+          <PlaylistDetail pl={openPl} onBack={() => setOpenPl(null)} progress={progress} />
+        ) : acc.playlists.length ? (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+            {acc.playlists.map((p) => (
+              <button key={p.id} type="button" onClick={() => setOpenPl(p)} className="focus-ring group text-left">
+                <div className="relative aspect-video overflow-hidden rounded-2xl bg-ink/10">
+                  {p.thumbnail && <img src={p.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />}
+                  <span className="absolute inset-y-0 right-0 flex w-2/5 flex-col items-center justify-center gap-1 bg-black/65 text-[11px] font-bold text-white backdrop-blur-sm">
+                    <ListVideo className="h-4 w-4" />
+                    {p.countText}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-[13px] font-semibold text-ink">{p.title}</p>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title={acc.syncing ? "Loading…" : "No playlists"} />
+        )
+      ) : list.length === 0 ? (
         <EmptyState
           title={tab === "history" ? "Nothing watched yet" : "No saved videos"}
           hint={tab === "history" ? "Videos you watch appear here, with where you left off." : "Tap “Watch later” under any video to save it here."}
@@ -257,6 +383,36 @@ export function VideoLibraryView() {
             />
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Videos of one of the account's playlists. */
+function PlaylistDetail({ pl, onBack, progress }: { pl: YtPlaylist; onBack: () => void; progress: Map<string, number> }) {
+  const feed = useFeed<VideoItem[]>(`account:pl:${pl.id}`, () => playlistVideos(pl.id), { ttl: 15 * 60 * 1000 });
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={onBack} className="-ml-2">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <p className="truncate text-base font-bold text-ink">{pl.title}</p>
+      </div>
+      {feed.data ? (
+        feed.data.length ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {feed.data.map((v) => (
+              <VideoRow key={v.id} v={v} progress={progress.get(v.id)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="This playlist is empty" />
+        )
+      ) : feed.error ? (
+        <ErrorState message={feed.error} onRetry={feed.refresh} />
+      ) : (
+        <VideoGridSkeleton count={4} />
       )}
     </div>
   );

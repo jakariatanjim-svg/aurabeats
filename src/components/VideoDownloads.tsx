@@ -113,7 +113,7 @@ export function DownloadTray() {
   const told = useRef(new Set<string>());
   useEffect(() => {
     for (const j of jobs) {
-      if (j.status !== "done" || told.current.has(j.id)) continue;
+      if (j.status !== "done" || j.kind === "offline" || told.current.has(j.id)) continue;
       told.current.add(j.id);
       toast(`Saved to Download/AuraBeats/${j.kind === "audio" ? "Music" : "Videos"}`, "success");
     }
@@ -144,7 +144,7 @@ export function DownloadTray() {
                   <p className="mt-0.5 line-clamp-3 text-[10.5px] leading-snug break-words text-rose-400/90">{j.error}</p>
                 )}
               </div>
-              {j.status === "done" && j.uri && (
+              {j.status === "done" && j.uri && j.kind !== "offline" && (
                 <button
                   type="button"
                   onClick={() => openDownloadedVideo(j).catch(() => toast("No app found to open this file", "error"))}
@@ -153,7 +153,7 @@ export function DownloadTray() {
                   <Play className="h-3.5 w-3.5 fill-current" /> Open
                 </button>
               )}
-              {j.status === "error" && (
+              {j.status === "error" && j.kind !== "offline" && (
                 <button
                   type="button"
                   onClick={() => {

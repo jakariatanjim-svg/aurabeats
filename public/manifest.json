@@ -1,7 +1,7 @@
 {
   "name": "AuraBeats — Streaming Engine",
   "short_name": "AuraBeats",
-  "description": "Music and ad-free YouTube videos in one app. Millions of songs, live radio and every video quality — no ads, no sign-up.",
+  "description": "Music and ad-free YouTube videos in one app. Millions of songs and every video quality — no ads, no sign-up.",
   "start_url": "/home",
   "scope": "/",
   "display": "standalone",
@@ -51,12 +51,6 @@
       "short_name": "Video",
       "url": "/video",
       "description": "Ad-free YouTube videos"
-    },
-    {
-      "name": "Live Radio",
-      "short_name": "Radio",
-      "url": "/radio",
-      "description": "Browse live radio stations"
     },
     {
       "name": "Your Library",

@@ -22,14 +22,28 @@ createRoot(document.getElementById("root")!).render(
 );
 
 // Register the service worker. It exists only so the site stays installable as
-// a PWA — it caches nothing (see public/sw.js), so the site behaves like any
-// standard website served live from Cloudflare Pages and a reload always gets
-// the newest build. No update polling, no cache invalidation, no auto-reload.
+// a PWA. Online it always loads the live site; it only keeps the last app
+// page and its code files so a reload without internet still opens the app
+// (see public/sw.js).
 //
 // Web only: inside the Android build the bundle is served locally by
 // Capacitor, where a worker adds nothing and would only sit between the
 // WebView and its own asset server.
 const isNativeApp = Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+
+// The website is split into a few files. A tab left open across a new deploy
+// may ask for a file that no longer exists: reload once to get the new build.
+window.addEventListener("vite:preloadError", (e) => {
+  try {
+    const last = Number(sessionStorage.getItem("ab:chunk-reload") || 0);
+    if (Date.now() - last < 30_000) return; // already tried: let the error show
+    sessionStorage.setItem("ab:chunk-reload", String(Date.now()));
+    e.preventDefault();
+    window.location.reload();
+  } catch {
+    /* storage blocked */
+  }
+});
 
 if (!isNativeApp && "serviceWorker" in navigator && location.protocol === "https:") {
   window.addEventListener("load", () => {

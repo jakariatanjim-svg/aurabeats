@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { layerRefs, watchLayer, useWatchLayer } from "@/components/video/watchLayer";
 import { requestVideoDownload } from "@/services/videoDownload";
 import { Bookmark, BookmarkCheck, ChevronDown, Download, ExternalLink, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -177,8 +179,18 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
 
   const onEnded = useCallback(() => {
     if (info?.title) videoLibrary.recordProgress(info, info.duration);
-    if (getVideoSettings().autoplayNext && upNext) onNavigate(`watch:${upNext.id}`);
+    if (getVideoSettings().autoplayNext && upNext) {
+      watchLayer.autoplayNext(); // a miniplayer stays a miniplayer
+      onNavigate(`watch:${upNext.id}`);
+    }
   }, [info, upNext, onNavigate]);
+
+  // App: the miniplayer bar shows what is playing.
+  useEffect(() => {
+    if (!embed && info?.title) watchLayer.setInfo(info.title, info.author ?? "");
+  }, [embed, info?.title, info?.author]);
+  const layer = useWatchLayer();
+  const mini = !embed && layer.mode === "mini";
 
   // Website: hand info + "next" to the shared player; it calls back on end.
   useEffect(() => {
@@ -255,7 +267,9 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
         <div className={cn("sticky top-0 z-20 -mx-4 -mt-4 bg-black sm:static sm:mx-0 sm:mt-0 sm:bg-transparent", wide && "hidden")}>
           {embed ? (
             !wide && <PlayerSlot id={id} startAt={startAt} className="aspect-video w-full sm:rounded-2xl" />
-          ) : details ? (
+          ) : (
+            <LayerSlot host={layer.host}>
+            {details ? (
             <VideoPlayer
               key={details.streams.source}
               details={details}
@@ -265,16 +279,22 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
               onTime={onTime}
               onEnded={onEnded}
               onFatal={onFatal}
+              mini={mini}
+              onDrag={(ph, dy, v) => layerRefs.drag?.(ph, dy, v)}
             />
           ) : (
             <div className="relative aspect-video w-full overflow-hidden bg-black sm:rounded-2xl">
               <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-50" />
-              <span className="absolute inset-0 flex items-center justify-center">
-                <span className="flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-xs font-bold text-white">
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Finding the best ad-free stream…
+              {!mini && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-xs font-bold text-white">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Finding the best ad-free stream…
+                  </span>
                 </span>
-              </span>
+              )}
             </div>
+          )}
+            </LayerSlot>
           )}
         </div>
 
@@ -304,7 +324,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                   data-nav="true"
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  <Avatar name={info.author} src={info.authorAvatar} className="h-10 w-10" />
+                  <Avatar name={info.author} src={info.authorAvatar} channelId={info.authorId} className="h-10 w-10" />
                   <span className="min-w-0">
                     <span className="block truncate text-[15px] font-bold text-ink">{info.author}</span>
                     {info.subscribers && <span className="block truncate text-xs text-ink3">{info.subscribers}</span>}
@@ -408,6 +428,26 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
         )}
       </aside>
     </div>
+    </>
+  );
+}
+
+/**
+ * App: reserves the player's spot on the page; the player itself lives in the
+ * watch layer's host (so the miniplayer can move it without a reload).
+ */
+function LayerSlot({ host, children }: { host: HTMLElement | null; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    layerRefs.slot = ref.current;
+    return () => {
+      if (layerRefs.slot === ref.current) layerRefs.slot = null;
+    };
+  }, []);
+  return (
+    <>
+      <div ref={ref} className="aspect-video w-full bg-black sm:rounded-2xl" />
+      {host && createPortal(children, host)}
     </>
   );
 }

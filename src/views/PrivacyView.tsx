@@ -25,7 +25,7 @@ const SECTIONS = [
     icon: Globe,
     title: "Third-Party Services",
     items: [
-      "AuraBeats fetches music from JioSaavn, Audius, Jamendo, Internet Archive, YouTube (via Piped mirrors), and the Radio Browser API.",
+      "AuraBeats fetches music from JioSaavn, Audius, Jamendo, Internet Archive, and YouTube.",
       "When you play or search, your browser connects directly to these services. AuraBeats does not proxy, log, or store any of these requests.",
       "Each service has its own privacy policy governing how they handle traffic. AuraBeats has no access to their server logs.",
       "Google Fonts (Outfit) is loaded from Google's CDN. Google may log font requests under their own privacy policy.",

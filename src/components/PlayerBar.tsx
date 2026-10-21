@@ -1,3 +1,4 @@
+import { showVolumeUi } from "@/utils/device";
 import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download, MonitorPlay } from "lucide-react";
 import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
 import { cn } from "@/utils/cn";
@@ -45,8 +46,8 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
   if (!current) return null;
 
   return (
-    <div className="ab-playerbar-wrap fixed inset-x-0 bottom-[calc(4.85rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
-      <div className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[calc(var(--sa-bottom)+0.55rem)] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
+    <div className="ab-playerbar-wrap fixed inset-x-0 bottom-[calc(5.5rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
+      <div data-tour="player" className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[0.55rem] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
         {/* mobile progress line - moved to absolute top for better layout */}
         <div className="absolute top-[3px] left-6 right-6 md:hidden">
           <Slider
@@ -212,7 +213,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               )}
             </IconButton>
           )}
-          <div className="hidden items-center gap-1.5 md:flex">
+          <div className={cn("hidden items-center gap-1.5", showVolumeUi && "md:flex")}>
             <IconButton size="sm" onClick={toggleMute} aria-label="Mute">
               <VolumeIcon className="h-4 w-4" />
             </IconButton>

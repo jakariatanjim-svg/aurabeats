@@ -30,9 +30,8 @@ export function HistorySection() {
   ];
   const count = tabs.find((t) => t.key === tab)!.count;
 
+  // Cleared right away; the Undo toast brings it back.
   const clear = () => {
-    const what = tab === "search" ? "search history" : tab === "watch" ? "watch history" : "listening history";
-    if (!window.confirm(`Clear your ${what}? This can't be undone.`)) return;
     if (tab === "search") searchHistory.clear();
     else if (tab === "watch") videoLibrary.clearHistory();
     else clearHistory();

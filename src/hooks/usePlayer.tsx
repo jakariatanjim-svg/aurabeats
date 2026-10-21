@@ -5,7 +5,9 @@
  * engine. Everything user-specific is mirrored into localStorage.
  */
 
-import { videoIdOfTrack } from "@/utils/watchVideo";
+import { isYouTubeTrack, videoIdOfTrack } from "@/utils/watchVideo";
+import { Capacitor } from "@capacitor/core";
+import { removeOfflineFile } from "@/services/videoDownload";
 import {
   createContext,
   useCallback,
@@ -17,13 +19,14 @@ import {
   type ReactNode,
 } from "react";
 import { useAudioEngine, type AudioEngine } from "@/hooks/useAudioEngine";
-import { reportListen } from "@/services/radio";
 import { isYouTubePlayerReady } from "@/services/youtubePlayer";
 import { resolveStreamUrls as resolveSC } from "@/services/soundcloud";
 import { storage, session } from "@/utils/storage";
 import { db } from "@/utils/db";
+import { showVolumeUi } from "@/utils/device";
 import { shuffleArray, uid } from "@/utils/format";
 import type { RepeatMode, ToastMessage, Track, UserPlaylist, PlayerSettings } from "@/types";
+import { undoable } from "@/components/UndoToast";
 
 /**
  * Resolve a stream URL — if it's a lazy `yt-resolve:ID` placeholder,
@@ -161,8 +164,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   const [shuffle, setShuffle] = useState<boolean>(() => storage.get("shuffle", false));
   const [repeat, setRepeat] = useState<RepeatMode>(() => storage.get<RepeatMode>("repeat", "off"));
-  const [favorites, setFavorites] = useState<Track[]>(() => storage.get<Track[]>("favorites", []));
-  const [history, setHistory] = useState<Track[]>(() => storage.get<Track[]>("history", []));
+  const [favorites, setFavorites] = useState<Track[]>(() => storage.get<Track[]>("favorites", []).filter((t) => (t.source as string) !== "radio"));
+  const [history, setHistory] = useState<Track[]>(() => storage.get<Track[]>("history", []).filter((t) => (t.source as string) !== "radio"));
   const [playlists, setPlaylists] = useState<UserPlaylist[]>(() => storage.get<UserPlaylist[]>("playlists", []));
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [volume, setVolumeState] = useState<number>(() => storage.get("volume", 0.85));
@@ -221,8 +224,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [settings.sleepTimer, engine, updateSettings, toast]);
 
+  const savingRef = useRef(new Set<string>());
   const saveOffline = useCallback(async (track: Track) => {
     if (offlineTracks.some((t) => t.id === track.id)) return;
+    // YouTube / YouTube Music (Android app): the song is fetched by the phone
+    // and kept in the app's own storage; progress shows in the download tray.
+    if (isYouTubeTrack(track)) {
+      const videoId = videoIdOfTrack(track) ?? track.streamUrl.replace("yt-resolve:", "");
+      if (savingRef.current.has(track.id)) return;
+      savingRef.current.add(track.id);
+      try {
+        const dl = await import("@/services/videoDownload");
+        const { uri, bytes } = await dl.saveSongOffline(videoId, track.title, track.artist.replace(/ - Topic$/i, "").trim());
+        await db.saveTrackFile(track, uri, bytes);
+        setOfflineTracks(await db.getAllTracks());
+        toast(`"${track.title}" is available offline`, "success");
+      } catch (err) {
+        if ((err as { cancelled?: boolean }).cancelled) return;
+        toast(`Could not save "${track.title}" for offline`, "error");
+      } finally {
+        savingRef.current.delete(track.id);
+      }
+      return;
+    }
     try {
       toast(`Saving "${track.title}" for offline playback...`, "info");
       
@@ -248,17 +272,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [offlineTracks, toast]);
 
+  // Undo-able: the record goes now, the file only when the Undo time is up.
   const removeOffline = useCallback(async (id: string) => {
+    const entry = await db.getEntry(id).catch(() => null);
     await db.deleteTrack(id);
     setOfflineTracks(await db.getAllTracks());
-    toast("Removed from offline storage", "info");
-  }, [toast]);
+    if (!entry) return;
+    undoable({
+      message: `Removed "${entry.track.title}" from offline`,
+      undo: async () => {
+        await db.putEntry(entry);
+        setOfflineTracks(await db.getAllTracks());
+      },
+      commit: () => (entry.path ? removeOfflineFile(entry.path) : undefined),
+    });
+  }, []);
 
   const isOffline = useCallback((id: string) => {
     return offlineTracks.some((t) => t.id === id);
   }, [offlineTracks]);
 
   const clearOffline = useCallback(async () => {
+    const { paths } = await db.usage().catch(() => ({ paths: [] as string[] }));
+    await Promise.all(paths.map(removeOfflineFile));
     await db.clearAll();
     setOfflineTracks([]);
     toast("All offline media cleared", "success");
@@ -343,7 +379,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // re-created on every playback tick, so depending on it directly would
   // re-run these (and re-write storage) multiple times per second.
   useEffect(() => {
-    engineRef.current.setVolume(volume);
+    engineRef.current.setVolume(showVolumeUi ? volume : 1);
     storage.set("volume", volume);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume]);
@@ -372,12 +408,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         // Never let this lookup hold up playback: on a first launch the
         // database is still being created, and it can fail outright (private
         // mode). Missing / slow / failed simply means "not downloaded".
-        const offlineBlob = await Promise.race([
-          db.getTrackBlob(current.id).catch(() => null),
+        // A retry (attempt > 0) means the saved copy didn't play: go online.
+        const offline = attempt > 0 ? null : await Promise.race([
+          db.getTrackSource(current.id).catch(() => null),
           new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
         ]);
-        if (offlineBlob && alive) {
-          const localUrl = URL.createObjectURL(offlineBlob);
+        if (offline && alive) {
+          // saved files (Android app) are served to the player by the app itself
+          const localUrl = offline.path ? Capacitor.convertFileSrc(offline.path) : URL.createObjectURL(offline.blob!);
           engine.load(localUrl, { autoplay: !restorePauseRef.current, live: current.isLive });
           restorePauseRef.current = false;
           return;
@@ -394,7 +432,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         engine.load(url, { autoplay: !restorePauseRef.current, live: current.isLive });
         restorePauseRef.current = false;
-        if (current.source === "radio") reportListen(current.id);
       } catch {
         if (!alive) return;
         toast(`Could not start "${current.title}" — skipping to next`, "error");
@@ -728,10 +765,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const deletePlaylist = useCallback(
     (id: string) => {
+      const at = playlists.findIndex((p) => p.id === id);
+      const gone = playlists[at];
       setPlaylists((prev) => prev.filter((p) => p.id !== id));
-      toast("Playlist deleted", "info");
+      if (!gone) return;
+      undoable({
+        message: `Deleted "${gone.name}"`,
+        undo: () => setPlaylists((prev) => (prev.some((p) => p.id === id) ? prev : [...prev.slice(0, at), gone, ...prev.slice(at)])),
+      });
     },
-    [toast],
+    [playlists],
   );
 
   const renamePlaylist = useCallback((id: string, name: string) => {
@@ -838,7 +881,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       toast,
       dismissToast,
       removeHistory: (id: string) => setHistory((prev) => prev.filter((t) => t.id !== id)),
-      clearHistory: () => setHistory([]),
+      clearHistory: () => {
+        const snap = history;
+        setHistory([]);
+        if (snap.length) undoable({ message: "Listening history cleared", undo: () => setHistory(snap) });
+      },
     }),
     [
       isPlayingNow,

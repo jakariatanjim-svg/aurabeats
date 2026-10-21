@@ -3,7 +3,6 @@ import { LocateFixed, Music2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { usePlaybackClock, usePlayer } from "@/hooks/usePlayer";
 import { fetchLyrics, type LyricLine, type Lyrics } from "@/services/lyrics";
-import { romanizeLines } from "@/utils/romanize";
 import type { Track } from "@/types";
 
 /** Highlight a touch early so the line lights up as it is sung, not after. */
@@ -100,6 +99,18 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     onRomanizable?.(Boolean(data?.canRomanize));
   }, [data, onRomanizable]);
 
+  // The transliterator is big (character tables): loaded only when needed.
+  const [romanizeLines, setRomanizeLines] = useState<((l: string[]) => string[]) | null>(null);
+  const wantRomanizer = Boolean(romanized && data?.canRomanize && !(data.latin && (data.latin.synced || !data.main.synced)));
+  useEffect(() => {
+    if (!wantRomanizer || romanizeLines) return;
+    let alive = true;
+    void import("@/utils/romanize").then((m) => alive && setRomanizeLines(() => m.romanizeLines));
+    return () => {
+      alive = false;
+    };
+  }, [wantRomanizer, romanizeLines]);
+
   /* what to show: synced lines if any, otherwise plain text */
   const view = useMemo(() => {
     if (!data) return null;
@@ -108,13 +119,13 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     // A human-written Roman version is best; fall back to our transliteration
     // when it would cost the timing.
     if (roman && latin && (latin.synced || !main.synced)) return latin;
-    if (!roman) return main;
+    if (!roman || !romanizeLines) return main;
     if (main.synced) {
       const r = romanizeLines(main.synced.map((l) => l.text));
       return { synced: main.synced.map((l, i) => ({ t: l.t, text: r[i] })), plain: [] };
     }
     return { synced: null, plain: romanizeLines(main.plain) };
-  }, [data, romanized]);
+  }, [data, romanized, romanizeLines]);
 
   const synced = view?.synced ?? null;
   const { index } = useActiveLine(synced);

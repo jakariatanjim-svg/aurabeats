@@ -40,6 +40,6 @@
   <rect x="412" y="356" width="660" height="16" rx="8" fill="rgba(255,255,255,0.08)"/>
   <rect x="412" y="403" width="160" height="52" rx="26" fill="#7C5CFF"/>
   <text x="412" y="176" fill="white" font-family="Outfit, system-ui, sans-serif" font-size="64" font-weight="900" letter-spacing="-0.04em">AuraBeats</text>
-  <text x="412" y="286" fill="#D7CFFF" font-family="Outfit, system-ui, sans-serif" font-size="28" font-weight="600">Open music streaming and live radio in one player</text>
+  <text x="412" y="286" fill="#D7CFFF" font-family="Outfit, system-ui, sans-serif" font-size="28" font-weight="600">Open music streaming and YouTube in one player</text>
   <text x="602" y="438" text-anchor="middle" fill="white" font-family="Outfit, system-ui, sans-serif" font-size="22" font-weight="800">Start Listening</text>
 </svg>

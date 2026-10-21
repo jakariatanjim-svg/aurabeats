@@ -6,10 +6,14 @@ export interface VideoSettings {
   autoplayNext: boolean;
   /** Your own Invidious or Piped API URL; empty = automatic public servers */
   customServer: string;
+  /** app: on mobile data, videos start at 480p at most */
+  dataSaver: boolean;
+  /** app: turning the phone sideways opens full screen (off by default) */
+  rotateFullscreen: boolean;
 }
 
 const KEY = "videoSettings";
-const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "" };
+const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "", dataSaver: false, rotateFullscreen: false };
 
 type Listener = () => void;
 const listeners = new Set<Listener>();

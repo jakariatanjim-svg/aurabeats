@@ -3,6 +3,10 @@ import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
+import { Tutorial } from "@/components/Tutorial";
+import { ConfirmHost } from "@/components/Confirm";
+import { OfflineScreen } from "@/components/OfflineScreen";
+import { useOnline } from "@/hooks/useOnline";
 import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
@@ -10,14 +14,20 @@ import { TooltipLayer } from "@/components/Tooltips";
 import { DownloadTray, VideoDownloadSheet } from "@/components/VideoDownloads";
 import { storage } from "@/utils/storage";
 import { YouTubeDock } from "@/components/video/YouTubeDock";
+import { WatchLayer } from "@/components/video/WatchLayer";
+import { useWatchLayer, watchLayer } from "@/components/video/watchLayer";
 import { isNative } from "@/services/video/net";
 import { isVideoRoute, pathToRoute, routeToPath, type RouteKey } from "@/routes";
 import { rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
+import { App as CapApp } from "@capacitor/app";
+import { runBackHandler } from "@/utils/backStack";
+import { baseOrientation } from "@/utils/orientation";
+import { autoSync } from "@/services/ytAccount";
+import { subscribeVideoSettings } from "@/services/video/settings";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
 const SearchView = lazy(() => import("@/views/SearchView").then((m) => ({ default: m.SearchView })));
-const RadioView = lazy(() => import("@/views/RadioView").then((m) => ({ default: m.RadioView })));
 const SettingsView = lazy(() => import("@/views/SettingsView").then((m) => ({ default: m.SettingsView })));
 const AboutView = lazy(() => import("@/views/AboutView").then((m) => ({ default: m.AboutView })));
 const PrivacyView = lazy(() => import("@/views/PrivacyView").then((m) => ({ default: m.PrivacyView })));
@@ -37,7 +47,7 @@ const FullScreenPlayer = lazy(() => import("@/components/FullScreenPlayer").then
 const QueuePanel = lazy(() => import("@/components/FullScreenPlayer").then((m) => ({ default: m.QueuePanel })));
 
 function Shell() {
-  // URL is the source of truth — real clean paths: /home /search /radio …
+  // URL is the source of truth — real clean paths: /home /search …
   const [route, setRoute] = useState<RouteKey>(() => pathToRoute(window.location.pathname));
   const [collapsed, setCollapsed] = useState<boolean>(() => storage.get("sidebarCollapsed", false));
 
@@ -53,7 +63,9 @@ function Shell() {
   const navigate = useCallback((next: RouteKey) => {
     const path = routeToPath(next);
     if (window.location.pathname === path) {
-      scrollTop();
+      // app: the same video again (e.g. from its miniplayer) → open it
+      if (isNative && next.startsWith("watch:")) watchLayer.open(next.slice("watch:".length));
+      else scrollTop();
       return;
     }
     // Replace the bare "/" entry with "/home" so back-navigation stays inside the app.
@@ -93,6 +105,61 @@ function Shell() {
     return () => document.removeEventListener("click", onClick);
   }, [scrollTop]);
 
+  // Android back button / gesture: close the top overlay, else the previous
+  // page, else this mode's start page; only from there leave the app (to the
+  // background, so music keeps playing). Without this Capacitor quits at once.
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  useEffect(() => {
+    if (!isNative) return;
+    let dead = false;
+    let remove: (() => void) | undefined;
+    void CapApp.addListener("backButton", ({ canGoBack }) => {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {});
+        return;
+      }
+      if (runBackHandler()) return;
+      if (canGoBack) {
+        window.history.back();
+        return;
+      }
+      const root: RouteKey = isVideoRoute(routeRef.current) ? "video" : "home";
+      if (routeRef.current !== root) {
+        // Replace, not push: the next back from the start page must exit.
+        const path = routeToPath(root);
+        window.history.replaceState(null, "", path);
+        lastLoc.current = path;
+        setRoute(root);
+        scrollTop();
+        return;
+      }
+      void CapApp.minimizeApp();
+    }).then((h) => {
+      if (dead) void h.remove();
+      else remove = () => void h.remove();
+    });
+    return () => {
+      dead = true;
+      remove?.();
+    };
+  }, [scrollTop]);
+
+  // YouTube account (app): refresh subscriptions/likes/playlists when stale.
+  useEffect(() => {
+    if (isNative) autoSync();
+  }, []);
+
+  // App: upright on phones unless "Rotate for full screen" is on.
+  useEffect(() => {
+    if (!isNative) return;
+    void baseOrientation();
+    const off = subscribeVideoSettings(() => void baseOrientation());
+    return () => {
+      off();
+    };
+  }, []);
+
   const toggleCollapse = useCallback(() => {
     setCollapsed((c) => {
       storage.set("sidebarCollapsed", !c);
@@ -104,8 +171,38 @@ function Shell() {
   useEffect(() => {
     rememberRoute(route);
   }, [route]);
-  const videoMode = isVideoRoute(route);
-  const watching = route.startsWith("watch:");
+  // App: the watch page is a layer (with a miniplayer) over the page you came
+  // from, which stays on screen underneath.
+  const layer = useWatchLayer();
+  const baseRoute = useRef<RouteKey>(route.startsWith("watch:") ? "video" : route);
+  const cameFromPage = useRef(false);
+  const prevRoute = useRef<RouteKey | null>(null);
+  if (!route.startsWith("watch:")) baseRoute.current = route;
+  const online = useOnline();
+  const shownRoute: RouteKey = isNative && route.startsWith("watch:") ? baseRoute.current : route;
+  useEffect(() => {
+    if (!isNative) return;
+    if (route.startsWith("watch:")) {
+      cameFromPage.current = prevRoute.current !== null && !prevRoute.current.startsWith("watch:");
+      watchLayer.open(route.slice("watch:".length));
+    } else {
+      cameFromPage.current = false;
+      watchLayer.minimize(); // left the video for another page → keep it small
+    }
+    prevRoute.current = route;
+  }, [route]);
+  const minimizeVideo = useCallback(() => {
+    watchLayer.minimize();
+    // Opened from a page: that page is the one under the miniplayer, so take
+    // its place in history too (one back press less, like YouTube).
+    if (cameFromPage.current && routeRef.current.startsWith("watch:")) {
+      cameFromPage.current = false;
+      window.history.back();
+    }
+  }, []);
+
+  const videoMode = isVideoRoute(isNative ? (layer.mode === "full" ? route : shownRoute) : route);
+  const watching = isNative ? layer.mode === "full" : route.startsWith("watch:");
 
   const { setExpanded, setQueueOpen, queueOpen, next, previous, toggle, current, favorites, volume, setVolume, settings, expanded } = usePlayer();
 
@@ -156,10 +253,10 @@ function Shell() {
 
   return (
     <div data-app-mode={videoMode ? "video" : "music"} className="app-shell flex w-full overflow-hidden gap-4 relative z-0">
-      <Sidebar route={route} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
+      <Sidebar route={shownRoute} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
 
       <div className="shell-panel flex min-w-0 flex-1 flex-col relative z-10 h-full overflow-hidden">
-        <TopBar route={route} onNavigate={navigate} />
+        <TopBar route={shownRoute} onNavigate={navigate} />
         <main
           id="ab-scroll"
           className={cn(
@@ -168,6 +265,8 @@ function Shell() {
             current && !watching
               ? "pb-[calc(var(--sa-bottom)+12rem)] md:pb-[calc(var(--sa-bottom)+9rem)]"
               : "pb-[calc(var(--sa-bottom)+6.5rem)] md:pb-10",
+            // room for the video miniplayer bar too
+            isNative && layer.mode === "mini" && (current ? "pb-[calc(var(--sa-bottom)+16.5rem)]" : "pb-[calc(var(--sa-bottom)+11rem)]"),
           )}
         >
           <Suspense
@@ -182,36 +281,52 @@ function Shell() {
               </div>
             }
           >
-            <div key={route} className="animate-fade-up mx-auto w-full max-w-[1600px] pb-8">
-              {route === "home" && <HomeView onNavigate={navigate} />}
-              {route === "search" && <SearchView />}
-              {route === "radio" && <RadioView />}
-              {route === "library" && <LibraryView onNavigate={navigate} />}
-              {route === "favorites" && <FavoritesView />}
-              {route === "history" && <HistoryView />}
-              {route === "settings" && <SettingsView />}
-              {route === "about" && <AboutView />}
-              {route === "privacy" && <PrivacyView />}
-              {route === "downloads" && <DownloadsView />}
-              {route === "device" && <DeviceMusicView />}
-              {route.startsWith("playlist:") && (
-                <PlaylistDetailView playlistId={route.slice("playlist:".length)} onBack={() => navigate("library")} />
+            <div key={shownRoute} className="animate-fade-up mx-auto w-full max-w-[1600px] pb-8">
+              {!online && needsInternet(shownRoute) ? (
+                <OfflineScreen onNavigate={navigate} />
+              ) : (
+                <>
+                {shownRoute === "home" && <HomeView onNavigate={navigate} />}
+                {shownRoute === "search" && <SearchView />}
+                {shownRoute === "library" && <LibraryView onNavigate={navigate} />}
+                {shownRoute === "favorites" && <FavoritesView />}
+                {shownRoute === "history" && <HistoryView />}
+                {shownRoute === "settings" && <SettingsView />}
+                {shownRoute === "about" && <AboutView />}
+                {shownRoute === "privacy" && <PrivacyView />}
+                {shownRoute === "downloads" && <DownloadsView />}
+                {shownRoute === "device" && <DeviceMusicView />}
+                {shownRoute.startsWith("playlist:") && (
+                  <PlaylistDetailView playlistId={shownRoute.slice("playlist:".length)} onBack={() => navigate("library")} />
+                )}
+                {shownRoute === "video" && <VideoHomeView onNavigate={navigate} />}
+                {shownRoute === "video-search" && <VideoSearchView />}
+                {shownRoute === "video-subs" && <VideoSubsView onNavigate={navigate} />}
+                {shownRoute === "video-library" && <VideoLibraryView />}
+                {!isNative && shownRoute.startsWith("watch:") && <WatchView key={route} id={shownRoute.slice("watch:".length)} onNavigate={navigate} />}
+                {shownRoute.startsWith("channel:") && <ChannelView id={shownRoute.slice("channel:".length)} />}
+                </>
               )}
-              {route === "video" && <VideoHomeView onNavigate={navigate} />}
-              {route === "video-search" && <VideoSearchView />}
-              {route === "video-subs" && <VideoSubsView onNavigate={navigate} />}
-              {route === "video-library" && <VideoLibraryView />}
-              {route.startsWith("watch:") && <WatchView key={route} id={route.slice("watch:".length)} onNavigate={navigate} />}
-              {route.startsWith("channel:") && <ChannelView id={route.slice("channel:".length)} />}
             </div>
           </Suspense>
         </main>
       </div>
 
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
-      <MobileNav route={route} onNavigate={navigate} favoritesCount={favorites.length} />
+      <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={favorites.length} />
+      <Tutorial route={shownRoute} onNavigate={navigate} />
+      <ConfirmHost />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}
       {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
+      {isNative && (
+        <WatchLayer musicBar={Boolean(current)} onMinimize={minimizeVideo}>
+          {layer.id && (
+            <Suspense fallback={null}>
+              <WatchView key={layer.id} id={layer.id} onNavigate={navigate} />
+            </Suspense>
+          )}
+        </WatchLayer>
+      )}
       <Suspense fallback={null}>
         {settings.queueEnabled && <QueuePanel />}
         <FullScreenPlayer />
@@ -223,6 +338,11 @@ function Shell() {
     </div>
   );
 }
+
+
+/** Pages that can't show anything without the internet (the offline page replaces them). */
+const needsInternet = (r: RouteKey) =>
+  r === "home" || r === "search" || r === "video" || r === "video-search" || r === "video-subs" || r.startsWith("watch:") || r.startsWith("channel:");
 
 export default function App() {
   return (

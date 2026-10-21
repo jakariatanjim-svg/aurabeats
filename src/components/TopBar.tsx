@@ -127,7 +127,6 @@ export function TopBar({
   onNavigate: (r: RouteKey) => void;
 }) {
   const { failoverNote } = usePlayer();
-  const live = route === "radio";
   const video = isVideoRoute(route);
   const mode = modeOf(route);
   const q = useUrlQuery();
@@ -160,7 +159,7 @@ export function TopBar({
       <div className={cn("hidden min-w-0 flex-1", pc ? "lg:block" : "md:block", resultsBar && "md:hidden")}>
         <p
           className="w-fit max-w-full truncate text-lg font-black tracking-tight text-ink drop-shadow-sm sm:text-xl"
-          data-tip={live ? "Live radio streams" : video ? `${isNative ? "Ad-free YouTube" : "YouTube"} · ${playbackMethodLabel()}` : undefined}
+          data-tip={video ? `${isNative ? "Ad-free YouTube" : "YouTube"} · ${playbackMethodLabel()}` : undefined}
         >
           {routeLabel(route)}
         </p>
@@ -173,11 +172,12 @@ export function TopBar({
 
       <TopSearch mode={mode} route={route} onNavigate={onNavigate} className="flex-[1.4]" />
 
-      <div className={cn("flex shrink-0 items-center gap-2 sm:gap-2.5", resultsBar ? "hidden" : "md:ml-auto")}>
+      <div data-tour="look" className={cn("flex shrink-0 items-center gap-2 sm:gap-2.5", resultsBar ? "hidden" : "md:ml-auto")}>
         <AppModeSwitch route={route} onNavigate={onNavigate} compact className="md:hidden" />
         <IconButton
           onClick={() => onNavigate("settings")}
           aria-label="Open settings"
+          data-tour="settings"
           className={cn("border border-line md:hidden", route === "settings" && "text-accent")}
         >
           <Settings className="h-4 w-4" />
