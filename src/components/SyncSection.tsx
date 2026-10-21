@@ -455,7 +455,8 @@ function ReceivedPanel({ st }: { st: Extract<ReceiverStatus, { phase: "received"
   );
 }
 
-const canScan = typeof window !== "undefined" && "BarcodeDetector" in window && Boolean(navigator.mediaDevices?.getUserMedia);
+/** Any device with a camera API (phone, app, laptop webcam). */
+const canScan = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 
 function ReceiveModal({ open, initialCode, onClose }: { open: boolean; initialCode: string; onClose: () => void }) {
   const { toast } = usePlayer();
@@ -567,9 +568,39 @@ function ReceiveModal({ open, initialCode, onClose }: { open: boolean; initialCo
   );
 }
 
-/* QR scanner: the browser's own detector (Chrome / Android), back camera. */
+/*
+ * In-app QR scanner (back camera). Uses the browser's built-in detector when
+ * there is one (Chrome on Android), otherwise a small decoder (jsQR, loaded
+ * only when scanning) reading frames from a canvas: works in the app, in any
+ * browser and with a laptop webcam.
+ */
 interface Detector {
   detect(src: HTMLVideoElement): Promise<{ rawValue: string }[]>;
+}
+type Reader = (v: HTMLVideoElement) => Promise<string[]>;
+
+async function makeReader(): Promise<Reader> {
+  const BD = (window as unknown as { BarcodeDetector?: (new (o: { formats: string[] }) => Detector) & { getSupportedFormats?: () => Promise<string[]> } })
+    .BarcodeDetector;
+  const formats: string[] = (await BD?.getSupportedFormats?.().catch(() => [] as string[])) ?? [];
+  if (BD && formats.includes("qr_code")) {
+    const det = new BD({ formats: ["qr_code"] });
+    return async (v) => (await det.detect(v).catch(() => [])).map((f) => f.rawValue);
+  }
+  const jsQR = (await import("jsqr")).default;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  return async (v) => {
+    if (!v.videoWidth) return [];
+    // scale down: faster and just as readable
+    const k = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
+    canvas.width = Math.round(v.videoWidth * k);
+    canvas.height = Math.round(v.videoHeight * k);
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const hit = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+    return hit?.data ? [hit.data] : [];
+  };
 }
 function Scanner({ onCode, onCancel }: { onCode: (c: string) => void; onCancel: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -587,13 +618,12 @@ function Scanner({ onCode, onCancel }: { onCode: (c: string) => void; onCancel: 
         const v = videoRef.current!;
         v.srcObject = stream;
         await v.play();
-        const Ctor = (window as unknown as { BarcodeDetector: new (o: { formats: string[] }) => Detector }).BarcodeDetector;
-        const det = new Ctor({ formats: ["qr_code"] });
+        const read = await makeReader();
         const tick = async () => {
           if (!alive) return;
-          const hits = await det.detect(v).catch(() => []);
-          for (const f of hits) {
-            let raw = f.rawValue;
+          const hits = await read(v).catch(() => [] as string[]);
+          for (const value of hits) {
+            let raw = value;
             try {
               raw = new URL(raw).searchParams.get("sync") ?? raw;
             } catch {
@@ -602,11 +632,19 @@ function Scanner({ onCode, onCancel }: { onCode: (c: string) => void; onCancel: 
             const c = cleanCode(raw);
             if (c.length === CODE_LEN) return found.current(c);
           }
-          timer = setTimeout(() => void tick(), 250);
+          timer = setTimeout(() => void tick(), 200);
         };
         void tick();
-      } catch {
-        if (alive) setErr("Couldn't open the camera. Allow camera access, or type the code.");
+      } catch (e) {
+        if (!alive) return;
+        const name = (e as { name?: string })?.name;
+        setErr(
+          name === "NotAllowedError"
+            ? "Camera access was refused. Allow it for AuraBeats, or type the code."
+            : name === "NotFoundError"
+              ? "No camera found on this device. Type the code instead."
+              : "Couldn't open the camera. Type the code instead.",
+        );
       }
     })();
     return () => {

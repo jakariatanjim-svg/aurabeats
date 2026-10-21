@@ -99,6 +99,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [rate, setRate] = useState(1);
   const [quality, setQuality] = useState("auto");
   const [needsUnmute, setNeedsUnmute] = useState(false);
+  const [passThrough, setPassThrough] = useState(false); // see "Pass-through" below
   const [error, setError] = useState<string | null>(null);
   // Ad playing in YouTube's player (only possible when no blocker is active):
   // its "Skip" button sits outside our crop, so the crop opens up until it's over.
@@ -296,7 +297,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   useEffect(() => {
     // After the browser refused sound twice, stop retrying on every tap
     // (each retry pauses the video): sound comes back from the button only.
-    if (!needsUnmute || soundBlocks.current >= 2) return;
+    if (!needsUnmute || passThrough || soundBlocks.current >= 2) return;
     const go = () => {
       call("unMute");
       unmuteAt.current = Date.now();
@@ -312,7 +313,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       window.removeEventListener("pointerdown", go, opts);
       window.removeEventListener("keydown", go, opts);
     };
-  }, [needsUnmute, call]);
+  }, [needsUnmute, passThrough, call]);
 
   /* ------------------------------- ads ---------------------------------- */
   // Sound blocked by the browser (no tap yet, or a frame that may not play
@@ -323,6 +324,44 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const unmuteAt = useRef(0);
   const soundTest = useRef<{ at: number } | null>(null);
   const soundBlocks = useRef(0);
+  // "Pass-through": a tap on OUR page doesn't give the YouTube frame the right
+  // to play sound when the page itself is inside a frame without it (e.g. a
+  // preview window). Then our layer steps aside for one tap so it lands on
+  // YouTube's player itself; that tap is the permission, and sound comes on.
+  const passRef = useRef(false);
+  passRef.current = passThrough;
+  const passTried = useRef(false);
+  const passDone = useCallback(() => {
+    if (!passRef.current) return;
+    passRef.current = false;
+    passTried.current = true;
+    setPassThrough(false);
+    call("unMute");
+    call("playVideo"); // YouTube's own click paused it; play on, now with sound
+    unmuteAt.current = Date.now();
+    setMuted(false);
+    setNeedsUnmute(false);
+    // give the keyboard back to our page (shortcuts)
+    try {
+      playerRef.current?.getIframe().blur();
+      window.focus();
+    } catch {
+      /* gone */
+    }
+  }, [call]);
+  const passDoneRef = useRef(passDone);
+  passDoneRef.current = passDone;
+  useEffect(() => {
+    if (!passThrough) return;
+    // a tap inside the YouTube frame moves focus into it
+    const onBlur = () =>
+      setTimeout(() => {
+        const ifr = playerRef.current?.getIframe();
+        if (ifr && document.activeElement === ifr) passDone();
+      }, 0);
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [passThrough, passDone]);
   const adRef = useRef(false);
   const startedRef = useRef(false);
   // An ad only changes what is shown (YouTube's own layer, so its Skip
@@ -373,6 +412,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       const want = dock.get().id;
       const otherId = Boolean(vd?.video_id && want && vd.video_id !== want);
 
+      // 0) Pass-through tap landed on YouTube's player (its click pauses it).
+      if (passRef.current && s === YTState.PAUSED && wantPlay.current) {
+        passDoneRef.current();
+        stuck.current.t = t;
+        return;
+      }
+
       // 1) A sound test is running: muted and moving → the browser blocked sound.
       const test = soundTest.current;
       if (test) {
@@ -382,6 +428,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
           stuck.current.since = 0;
           recover.current = { since: 0, step: 0, reloaded: recover.current.reloaded };
           setNeedsUnmute(true);
+          // Our page was already tapped and sound was still refused → the next
+          // tap must reach YouTube's frame itself (once; no loops).
+          const tapped = (navigator as { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive ?? soundBlocks.current >= 2;
+          if ((tapped || soundBlocks.current >= 2) && !passTried.current) {
+            passRef.current = true;
+            setPassThrough(true);
+          }
         } else if (now - test.at > 2500) {
           soundTest.current = null; // muted didn't help: not a sound problem
           stuck.current.tested = true;
@@ -1184,7 +1237,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
       {/* gesture surface + our controls */}
       <div
-        className={cn("absolute inset-0 touch-none", ad && "pointer-events-none", showUi ? "cursor-default" : "cursor-none")}
+        className={cn("absolute inset-0 touch-none", (ad || passThrough) && "pointer-events-none", showUi ? "cursor-default" : "cursor-none")}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
@@ -1236,8 +1289,19 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
           </div>
         )}
 
+        {/* pass-through: the tap goes to the video itself */}
+        {passThrough && !error && !ad && (
+          <span
+            className={cn(
+              "pointer-events-none absolute top-3 left-3 z-10 inline-flex animate-pulse items-center gap-2 rounded-full bg-white px-3.5 py-2 text-xs font-bold text-black shadow-lg",
+              mode === "mini" && "top-2 left-2 px-2.5 py-1.5 text-[11px]",
+            )}
+          >
+            <VolumeX className="h-4 w-4" /> Tap the video for sound
+          </span>
+        )}
         {/* tap to unmute */}
-        {needsUnmute && !error && !ad && (
+        {needsUnmute && !passThrough && !error && !ad && (
           <button
             type="button"
             onPointerDown={(e) => e.stopPropagation()}
@@ -1249,11 +1313,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
             )}
           >
             <VolumeX className="h-4 w-4" />
-            {soundBlocks.current >= 2
-              ? window.self !== window.top
-                ? "Sound is blocked in this frame · open the site in its own tab"
-                : "Tap for sound"
-              : "Tap anywhere for sound"}
+            {soundBlocks.current >= 2 ? "Tap for sound" : "Tap anywhere for sound"}
           </button>
         )}
 

@@ -44,9 +44,49 @@ try {
 }
 const appVersion = (process.env.APP_VERSION || "").trim() || pkgVersion;
 
+/**
+ * Android app (VITE_APK=1): one self-contained index.html, loaded from the
+ * phone itself, so splitting would gain nothing.
+ *
+ * Website: split, so the first visit only downloads what the first page
+ * needs, and later visits reuse the cached shared parts. The pieces are
+ * grouped on purpose (about ten files, not dozens):
+ *   index + core – app shell, player bar, routing, shared code
+ *   vendor – React and the other libraries every page uses
+ *   music / video / settings / player – each loaded when first opened
+ *   romanize – lyrics transliteration tables, only when "Romanized" is on
+ *   scanner  – QR decoder, only while scanning a sync code
+ */
+const isApk = process.env.VITE_APK === "1";
+
+function chunkGroup(id: string): string | undefined {
+  if (id.includes("node_modules")) {
+    if (id.includes("/any-ascii/")) return "romanize";
+    if (id.includes("/qrcode-generator/")) return "settings";
+    if (id.includes("/jsqr/")) return "scanner"; // only while scanning a QR
+    return "vendor";
+  }
+  const f = id.replace(/\\/g, "/");
+  if (f.includes("/src/utils/romanize")) return "romanize";
+  if (/\/src\/views\/(SettingsView|AboutView|PrivacyView)|\/src\/components\/(SyncSection|AccountSection|DataSection|HistorySection|video\/VideoSettingsSection)/.test(f)) return "settings";
+  if (/\/src\/views\/video\//.test(f)) return "video";
+  if (/\/src\/views\/(HomeView|SearchView|LibraryViews|DeviceMusicView)/.test(f)) return "music";
+  if (/\/src\/components\/(FullScreenPlayer|LyricsViewer)/.test(f)) return "player";
+  // Everything else the app shares lives in one "core" piece, so a page's
+  // group never drags another page's group into the first load.
+  if (f.includes("/src/")) return "core";
+  return undefined;
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile()],
+  plugins: [react(), tailwindcss(), ...(isApk ? [viteSingleFile()] : [])],
+  build: isApk
+    ? undefined
+    : {
+        rollupOptions: { output: { manualChunks: chunkGroup } },
+        chunkSizeWarningLimit: 700,
+      },
   define: {
     __APP_BUILD_SHA__: JSON.stringify(buildSha),
     __APP_VERSION__: JSON.stringify(appVersion),

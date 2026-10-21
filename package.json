@@ -20,6 +20,7 @@
     "@capacitor/screen-orientation": "^8.0.2",
     "any-ascii": "^0.3.3",
     "clsx": "2.1.1",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.47.0",
     "qrcode-generator": "^2.0.4",
     "react": "19.2.6",
