@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { Tutorial } from "@/components/Tutorial";
+import { ConfirmHost } from "@/components/Confirm";
 import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
@@ -305,6 +306,7 @@ function Shell() {
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
       <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={favorites.length} />
       <Tutorial route={shownRoute} onNavigate={navigate} />
+      <ConfirmHost />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}
       {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
       {isNative && (

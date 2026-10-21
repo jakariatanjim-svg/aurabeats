@@ -1,5 +1,5 @@
 /**
- * Settings → YouTube account. App: sign in with Google (TV-style code) or
+ * Settings → YouTube sign-in (tagged "Advanced users only": it uses a code on google.com/device). App: sign in with Google (TV-style code) or
  * stay a guest. Website: guest mode only (see services/ytAccount.ts).
  */
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +17,7 @@ import {
   waitForApproval,
   type DeviceCode,
 } from "@/services/ytAccount";
+import { confirmAction } from "@/components/Confirm";
 
 /** Google's multicolour "G" (brand mark for the sign-in button). */
 export function GoogleG({ className }: { className?: string }) {
@@ -170,7 +171,16 @@ export function AccountSection() {
 
   return (
     <section>
-      <SectionHeader title="YouTube account" icon={<CircleUserRound className="h-4 w-4 text-accent" />} />
+      <SectionHeader
+        title="YouTube sign-in"
+        subtitle="Uses a sign-in code on google.com/device"
+        icon={<CircleUserRound className="h-4 w-4 text-accent" />}
+        action={
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-black tracking-wide text-amber-500 uppercase">
+            Advanced users only
+          </span>
+        }
+      />
       <div className="blur-panel space-y-4 p-4">
         {acc.signedIn ? (
           <>
@@ -201,7 +211,7 @@ export function AccountSection() {
                 variant="ghost"
                 className="text-rose-500 hover:text-rose-400"
                 onClick={async () => {
-                  if (!window.confirm("Sign out? Your local follows, likes and history stay.")) return;
+                  if (!(await confirmAction({ title: "Sign out of YouTube?", message: "Your local follows, likes and history stay on this device.", confirmLabel: "Sign out" }))) return;
                   await signOut();
                   toast("Signed out · guest mode");
                 }}

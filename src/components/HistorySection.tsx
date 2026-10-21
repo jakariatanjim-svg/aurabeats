@@ -12,6 +12,7 @@ import { searchHistory, useSearchHistory } from "@/utils/searchHistory";
 import { goSearch } from "@/utils/searchNav";
 import { routeToPath } from "@/routes";
 import { Artwork, Button, SectionHeader } from "@/components/ui";
+import { confirmAction } from "@/components/Confirm";
 
 type Tab = "search" | "watch" | "listen";
 const PAGE = 15;
@@ -30,9 +31,9 @@ export function HistorySection() {
   ];
   const count = tabs.find((t) => t.key === tab)!.count;
 
-  const clear = () => {
+  const clear = async () => {
     const what = tab === "search" ? "search history" : tab === "watch" ? "watch history" : "listening history";
-    if (!window.confirm(`Clear your ${what}? This can't be undone.`)) return;
+    if (!(await confirmAction({ title: `Clear your ${what}?`, confirmLabel: "Clear" }))) return;
     if (tab === "search") searchHistory.clear();
     else if (tab === "watch") videoLibrary.clearHistory();
     else clearHistory();

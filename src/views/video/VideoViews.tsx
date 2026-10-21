@@ -10,6 +10,7 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { routeToPath, type RouteKey } from "@/routes";
 import { openSearch } from "@/utils/searchNav";
 import { playlistVideos, syncAccount, useYtAccount, type YtPlaylist } from "@/services/ytAccount";
+import { confirmAction } from "@/components/Confirm";
 
 function useProgress() {
   const lib = useVideoLibrary();
@@ -320,8 +321,8 @@ export function VideoLibraryView() {
           <Button
             variant="ghost"
             className="ml-auto text-xs"
-            onClick={() => {
-              if (window.confirm("Clear your whole watch history?")) videoLibrary.clearHistory();
+            onClick={async () => {
+              if (await confirmAction({ title: "Clear your watch history?", confirmLabel: "Clear" })) videoLibrary.clearHistory();
             }}
           >
             <Trash2 className="h-3.5 w-3.5" /> Clear

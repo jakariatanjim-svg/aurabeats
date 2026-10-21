@@ -26,7 +26,8 @@ import { AccountSection } from "@/components/AccountSection";
 import type { ThemeName } from "@/types";
 import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
 import { HistorySection } from "@/components/HistorySection";
-import { DataSection, Switch } from "@/components/DataSection";
+import { DangerZone, DataSection, Switch } from "@/components/DataSection";
+import { SyncSection } from "@/components/SyncSection";
 
 /** Environment detection */
 const isCapacitor = typeof window !== "undefined" && Boolean((window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
@@ -165,6 +166,8 @@ export function SettingsView() {
 
       <DataSection />
 
+      <SyncSection />
+
       {(isApp || isPwaInstalled) && (
         <section>
           <SectionHeader title="App" icon={<Smartphone className="h-4 w-4 text-accent" />} />
@@ -230,6 +233,8 @@ export function SettingsView() {
         </span>
         <ArrowRight className="h-4 w-4 text-ink3" />
       </a>
+
+      <DangerZone />
     </div>
   );
 }
