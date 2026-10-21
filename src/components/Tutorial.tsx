@@ -563,7 +563,9 @@ function buildSteps(mobile: boolean): Step[] {
     },
     {
       title: "Your library",
-      body: "Liked songs, playlists, followed channels and your history live in Library. They're saved on this device only.",
+      body: isNative
+        ? "Liked songs, playlists, followed channels and your history live in Library, saved on this phone. Sign in with Google in Settings to add your YouTube subscriptions, likes and playlists."
+        : "Liked songs, playlists, followed channels and your history live in Library. They're saved in this browser only.",
       scene: <LibraryScene />,
     },
     {

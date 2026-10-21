@@ -22,6 +22,7 @@ import { installedVersionLabel } from "@/utils/updater";
 import { showVolumeUi } from "@/utils/device";
 import { Button, SectionHeader, Slider } from "@/components/ui";
 import { openTour } from "@/components/Tutorial";
+import { AccountSection } from "@/components/AccountSection";
 import type { ThemeName } from "@/types";
 import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
 import { HistorySection } from "@/components/HistorySection";
@@ -49,55 +50,9 @@ const THEME_CORES: { key: ThemeName; name: string; desc: string; icon: typeof Sp
   { key: "liquid", name: "Liquid Glass", desc: "iOS 26 style", icon: Droplets },
 ];
 
-/** Google's multicolour "G" (brand mark for the sign-in button). */
-function GoogleG({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden="true" className={className}>
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
-    </svg>
-  );
-}
-
-/** Upcoming feature (the "Coming soon" section). */
-function ComingSoonCard() {
-  return (
-    <div className="blur-panel relative overflow-hidden p-4 sm:p-5">
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-1"
-        style={{ background: "linear-gradient(180deg, var(--c-accent2), var(--c-accent))" }}
-      />
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] text-white uppercase">
-        <Sparkles className="h-3 w-3" /> Coming soon
-      </span>
-      <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h3 className="text-base font-black tracking-tight text-ink sm:text-lg">Sign in to YouTube with Google</h3>
-          <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-ink3">
-            Use your Gmail account to bring your YouTube subscriptions, playlists, likes and history into AuraBeats.
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="inline-flex shrink-0 cursor-not-allowed items-center justify-center gap-2.5 rounded-full border border-line bg-white px-4 py-2.5 text-[13px] font-semibold text-[#1f1f1f] opacity-70 shadow-sm"
-          data-tip="Coming soon"
-        >
-          <GoogleG className="h-[18px] w-[18px]" /> Sign in with Google
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Settings: only things you can change. Explanations, the privacy policy and
- * how the app works live on the About page; features on the way sit under
- * "Coming soon".
+ * how the app works live on the About page.
  */
 export function SettingsView() {
   const { volume, setVolume, toast, settings, updateSettings } = usePlayer();
@@ -244,10 +199,7 @@ export function SettingsView() {
         </section>
       )}
 
-      <section>
-        <SectionHeader title="Coming soon" icon={<Sparkles className="h-4 w-4 text-accent" />} />
-        <ComingSoonCard />
-      </section>
+      <AccountSection />
 
       <button
         type="button"

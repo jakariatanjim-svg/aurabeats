@@ -40,7 +40,8 @@ const lsKeys = () => {
 function backupJson(): string {
   const data: Record<string, string> = {};
   for (const k of lsKeys()) {
-    if (!k.startsWith(NS) || CACHE_KEYS(k)) continue;
+    // Never export the YouTube sign-in (tokens stay on this device only).
+    if (!k.startsWith(NS) || CACHE_KEYS(k) || k.startsWith(`${NS}account:`)) continue;
     const v = localStorage.getItem(k);
     if (v !== null) data[k.slice(NS.length)] = v;
   }

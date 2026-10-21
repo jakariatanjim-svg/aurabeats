@@ -280,7 +280,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
               onEnded={onEnded}
               onFatal={onFatal}
               mini={mini}
-              onDrag={layerRefs.drag ?? undefined}
+              onDrag={(ph, dy, v) => layerRefs.drag?.(ph, dy, v)}
             />
           ) : (
             <div className="relative aspect-video w-full overflow-hidden bg-black sm:rounded-2xl">
