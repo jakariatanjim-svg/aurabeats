@@ -52,7 +52,7 @@ export function ChannelView({ id }: { id: string }) {
       )}
       <div className="flex flex-wrap items-center gap-4">
         {page ? (
-          <Avatar name={page.name} src={page.avatar} className="h-20 w-20 text-xl sm:h-24 sm:w-24" />
+          <Avatar name={page.name} src={page.avatar} channelId={id} className="h-20 w-20 text-xl sm:h-24 sm:w-24" />
         ) : (
           <Skeleton className="h-20 w-20 rounded-full! sm:h-24 sm:w-24" />
         )}

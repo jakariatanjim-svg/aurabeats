@@ -1,3 +1,4 @@
+import { avatarFor, directImg, rememberAvatar } from "@/utils/img";
 import { memo, useState } from "react";
 import { Clock, Radio as LiveIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -7,8 +8,12 @@ import type { ChannelItem, VideoItem } from "@/services/video/types";
 import { ytImgProps } from "@/utils/ytImg";
 import { rememberVideo } from "@/services/video/hints";
 
-export function Avatar({ name, src, className }: { name: string; src?: string; className?: string }) {
+export function Avatar({ name, src: rawSrc, channelId, className }: { name: string; src?: string; channelId?: string; className?: string }) {
   const [broken, setBroken] = useState(false);
+  // Direct Google URL (also repairs proxy URLs saved earlier); lists without
+  // an avatar (RSS feed, old history) use the one remembered for the channel.
+  if (rawSrc) rememberAvatar(channelId, rawSrc);
+  const src = directImg(rawSrc) || avatarFor(channelId);
   if (src && !broken) {
     return (
       <img
@@ -91,10 +96,10 @@ export const VideoCard = memo(function VideoCard({
         {!hideChannel &&
           (v.authorId ? (
             <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" aria-label={v.author} className="shrink-0">
-              <Avatar name={v.author} src={v.authorAvatar} className="h-9 w-9" />
+              <Avatar name={v.author} src={v.authorAvatar} channelId={v.authorId} className="h-9 w-9" />
             </a>
           ) : (
-            <Avatar name={v.author} src={v.authorAvatar} className="h-9 w-9" />
+            <Avatar name={v.author} src={v.authorAvatar} channelId={v.authorId} className="h-9 w-9" />
           ))}
         <div className="min-w-0 flex-1">
           <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="line-clamp-2 text-[14px] leading-snug font-bold text-ink">
@@ -152,7 +157,7 @@ export function ChannelRow({ c }: { c: ChannelItem }) {
       className="focus-ring flex items-center gap-4 rounded-2xl p-2 transition hover:bg-ink/[0.05]"
     >
       <span className="flex w-40 shrink-0 justify-center sm:w-44">
-        <Avatar name={c.name} src={c.avatar} className="h-20 w-20 text-lg" />
+        <Avatar name={c.name} src={c.avatar} channelId={c.id} className="h-20 w-20 text-lg" />
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[15px] font-bold text-ink">{c.name}</span>

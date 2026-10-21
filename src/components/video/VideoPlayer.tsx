@@ -12,6 +12,7 @@
  * orientation lock, double-tap seek, keyboard shortcuts, lock-screen
  * controls (Media Session).
  */
+import { useBackHandler } from "@/utils/backStack";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import {
   Check,
@@ -483,6 +484,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     };
   }, []);
   const toggleFs = () => void (fs === "off" ? enterFs() : exitFs());
+  // Android back leaves full screen first (native or CSS fallback).
+  useBackHandler(fs !== "off", () => void exitFs());
 
   const togglePip = async () => {
     const v = videoRef.current;

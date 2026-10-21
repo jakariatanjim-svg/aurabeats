@@ -162,7 +162,7 @@ export function VideoSubsView(_props: { onNavigate?: (r: RouteKey) => void }) {
           {lib.follows.map((c) => (
             <div key={c.id} className="flex items-center gap-3 px-3.5 py-2.5">
               <a href={routeToPath(`channel:${c.id}`)} data-nav="true" className="flex min-w-0 flex-1 items-center gap-3">
-                <Avatar name={c.name} src={c.avatar} className="h-9 w-9" />
+                <Avatar name={c.name} src={c.avatar} channelId={c.id} className="h-9 w-9" />
                 <span className="truncate text-sm font-semibold text-ink">{c.name}</span>
               </a>
               <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => videoLibrary.toggleFollow(c)}>

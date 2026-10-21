@@ -144,12 +144,28 @@ function wire() {
 /** Largest thumbnail first; YouTube has no maxres one for some uploads. */
 const thumbUrls = (id: string) => ["maxresdefault", "sddefault", "hqdefault"].map((n) => `https://i.ytimg.com/vi/${id}/${n}.jpg`);
 
-const safeName = (s: string) =>
-  s
+/**
+ * File-system-safe title. Android allows 255 BYTES per name and MediaStore
+ * adds a ".pending-…" prefix while writing; Bengali letters are 3 bytes each,
+ * so the limit is in bytes, not characters (the native side trims again).
+ */
+const safeName = (s: string, maxBytes = 120) => {
+  const clean = s
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 120) || "video";
+    .replace(/^\.+/, "")
+    .trim();
+  const enc = new TextEncoder();
+  let out = "";
+  let used = 0;
+  for (const ch of clean) {
+    const n = enc.encode(ch).length;
+    if (used + n > maxBytes) break;
+    out += ch;
+    used += n;
+  }
+  return out.trim() || "video";
+};
 
 export async function startVideoDownload(videoId: string, title: string, opt: DlOption, author?: string): Promise<void> {
   wire();

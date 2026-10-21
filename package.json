@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor-community/file-opener": "^8.0.1",
     "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^7.6.9",
     "@capacitor/core": "^8.5.3",
     "@capacitor/file-transfer": "^2.0.6",

@@ -201,7 +201,7 @@ export const Sidebar = memo(function Sidebar({
                       route === `channel:${c.id}` && "bg-ink/[0.08]",
                     )}
                   >
-                    <Avatar name={c.name} src={c.avatar} className="h-7 w-7" />
+                    <Avatar name={c.name} src={c.avatar} channelId={c.id} className="h-7 w-7" />
                     <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink2">{c.name}</span>
                   </button>
                 ))}

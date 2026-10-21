@@ -1,3 +1,4 @@
+import { useBackHandler } from "@/utils/backStack";
 import {
   useEffect,
   useRef,
@@ -371,6 +372,7 @@ export function Modal({
   children: ReactNode;
   maxWidth?: string;
 }) {
+  useBackHandler(open, onClose);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {

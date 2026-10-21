@@ -430,31 +430,98 @@ public class VideoSaverPlugin extends Plugin {
         while ((n = in.read(b)) != -1) os.write(b, 0, n);
     }
 
+    /**
+     * Android file names are limited to 255 BYTES, and MediaStore adds a
+     * ".pending-<time>-" prefix while the file is written. Bengali / Hindi
+     * titles take 3 bytes per letter, so a long title made the insert fail
+     * with "Failed to create directory …/.pending-…". Trim by bytes, keep
+     * the extension, never cut a character in half.
+     */
+    static String fitName(String name, int maxBytes) {
+        String ext = "";
+        int dot = name.lastIndexOf('.');
+        if (dot > 0 && name.length() - dot <= 6) {
+            ext = name.substring(dot);
+            name = name.substring(0, dot);
+        }
+        int budget = maxBytes - ext.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        StringBuilder sb = new StringBuilder();
+        int used = 0;
+        for (int i = 0; i < name.length(); ) {
+            int cp = name.codePointAt(i);
+            int n = new String(Character.toChars(cp)).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (used + n > budget) break;
+            sb.appendCodePoint(cp);
+            used += n;
+            i += Character.charCount(cp);
+        }
+        String base = sb.toString().trim();
+        // A dot-leading name would be hidden; an empty one is useless.
+        while (base.startsWith(".")) base = base.substring(1);
+        if (base.isEmpty()) base = "AuraBeats " + System.currentTimeMillis();
+        return base + ext;
+    }
+
     private Uri publish(File f, String name, String mime, String folder) throws Exception {
         // Songs and videos in their own folders: Download/AuraBeats/Music, …/Videos.
         String sub = folder != null && folder.matches("[A-Za-z]+") ? "/" + folder : "";
+        String safe = fitName(name, 150);
         if (Build.VERSION.SDK_INT >= 29) {
-            ContentResolver cr = getContext().getContentResolver();
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-            cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AuraBeats" + sub);
-            cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
-            Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
-            if (uri == null) throw new IOException("could not create the file in Downloads");
-            try (InputStream in = new FileInputStream(f); OutputStream os = cr.openOutputStream(uri)) {
-                if (os == null) throw new IOException("could not write to Downloads");
-                copy(in, os);
-            } catch (Exception e) {
-                cr.delete(uri, null, null);
-                throw e;
+            String base = Environment.DIRECTORY_DOWNLOADS + "/AuraBeats";
+            String shortName = fitName(name, 60);
+            // Same file, progressively simpler places — the download itself is
+            // done, so saving must not be the step that loses it.
+            String[][] tries = {
+                { base + sub, safe },
+                { base + sub, shortName },
+                { base, shortName },
+                { Environment.DIRECTORY_DOWNLOADS, shortName },
+            };
+            Exception last = null;
+            for (String[] t : tries) {
+                try {
+                    return insertDownload(f, t[1], mime, t[0]);
+                } catch (Exception e) {
+                    last = e;
+                }
             }
-            cv.clear();
-            cv.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            cr.update(uri, cv, null, null);
-            return uri;
+            // Last resort: the app's own folder (Android/data/…/files/Download).
+            try {
+                return saveToAppFolder(f, shortName, mime, sub);
+            } catch (Exception e) {
+                throw last != null ? last : e;
+            }
         }
         // Android 7–9: the app's own Download folder needs no permission.
+        return saveToAppFolder(f, safe, mime, sub);
+    }
+
+    private Uri insertDownload(File f, String name, String mime, String relPath) throws Exception {
+        ContentResolver cr = getContext().getContentResolver();
+        ContentValues cv = new ContentValues();
+        cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        cv.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+        cv.put(MediaStore.MediaColumns.RELATIVE_PATH, relPath);
+        cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+        Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+        if (uri == null) throw new IOException("could not create the file in Downloads");
+        try (InputStream in = new FileInputStream(f); OutputStream os = cr.openOutputStream(uri)) {
+            if (os == null) throw new IOException("could not write to Downloads");
+            copy(in, os);
+        } catch (Exception e) {
+            try {
+                cr.delete(uri, null, null);
+            } catch (Exception ignored) {
+            }
+            throw e;
+        }
+        cv.clear();
+        cv.put(MediaStore.MediaColumns.IS_PENDING, 0);
+        cr.update(uri, cv, null, null);
+        return uri;
+    }
+
+    private Uri saveToAppFolder(File f, String name, String mime, String sub) throws Exception {
         File dir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "AuraBeats" + sub);
         //noinspection ResultOfMethodCallIgnored
         dir.mkdirs();
@@ -469,6 +536,9 @@ public class VideoSaverPlugin extends Plugin {
             latch.countDown();
         });
         latch.await(6, TimeUnit.SECONDS);
-        return res[0];
+        if (res[0] != null) return res[0];
+        // Saved but not indexed yet: no openable uri (file:// is blocked on
+        // Android 7+). The job still reports "Saved".
+        return null;
     }
 }

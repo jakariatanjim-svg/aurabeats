@@ -61,7 +61,7 @@ export async function getVideo(id: string, exclude: string[] = []): Promise<Vide
       }
     }
     try {
-      const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700 });
+      const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700, scope: "streams" });
       return value;
     } catch (e) {
       // The phone's own answer explains far more than "servers busy".

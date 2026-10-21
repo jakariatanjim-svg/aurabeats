@@ -14,6 +14,8 @@ import { isNative } from "@/services/video/net";
 import { isVideoRoute, pathToRoute, routeToPath, type RouteKey } from "@/routes";
 import { rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
+import { App as CapApp } from "@capacitor/app";
+import { runBackHandler } from "@/utils/backStack";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
 const SearchView = lazy(() => import("@/views/SearchView").then((m) => ({ default: m.SearchView })));
@@ -91,6 +93,46 @@ function Shell() {
     };
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
+  }, [scrollTop]);
+
+  // Android back button / gesture: close the top overlay, else the previous
+  // page, else this mode's start page; only from there leave the app (to the
+  // background, so music keeps playing). Without this Capacitor quits at once.
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  useEffect(() => {
+    if (!isNative) return;
+    let dead = false;
+    let remove: (() => void) | undefined;
+    void CapApp.addListener("backButton", ({ canGoBack }) => {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {});
+        return;
+      }
+      if (runBackHandler()) return;
+      if (canGoBack) {
+        window.history.back();
+        return;
+      }
+      const root: RouteKey = isVideoRoute(routeRef.current) ? "video" : "home";
+      if (routeRef.current !== root) {
+        // Replace, not push: the next back from the start page must exit.
+        const path = routeToPath(root);
+        window.history.replaceState(null, "", path);
+        lastLoc.current = path;
+        setRoute(root);
+        scrollTop();
+        return;
+      }
+      void CapApp.minimizeApp();
+    }).then((h) => {
+      if (dead) void h.remove();
+      else remove = () => void h.remove();
+    });
+    return () => {
+      dead = true;
+      remove?.();
+    };
   }, [scrollTop]);
 
   const toggleCollapse = useCallback(() => {

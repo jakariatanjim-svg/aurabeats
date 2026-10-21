@@ -9,6 +9,7 @@
  * projects' public instance registries (cached for 6 h), merged with a
  * built-in list, and ordered by what worked last time on this device.
  */
+import { directImg } from "@/utils/img";
 import { storage } from "@/utils/storage";
 import { http } from "./net";
 import { getVideoSettings } from "./settings";
@@ -34,7 +35,14 @@ const BUILTIN: Provider[] = [
 const BLOCKED = /inv\.nadeko\.net|nadeko\.ygg|yewtu\.be|nerdvpn|tiekoetter|chocolatemoo53|thepixora|pipedapi\.kavin\.rocks|adminforge|leptons|invidious\.f5\.si|reallyaweso|darkness\.services|orangenet|drgns|api\.piped\.yt|r4fo|nosebs|ngn\.tf|privacy\.com\.de/;
 
 const DISCOVERY_KEY = "video:instances";
-const SCORE_KEY = "video:instanceScore";
+// v2: scores are kept per task ("list" = search / channels / related,
+// "streams" = playback). One shared score let failing stream requests (Piped
+// /streams is often bot-blocked) sink the servers that answer search fine,
+// so dead instances were tried first and every list got slower over time.
+const SCORE_KEY = "video:instanceScore2";
+export type ScoreScope = "list" | "streams";
+/** Built-in servers are known-good: a small head start over discovered ones. */
+const BUILTIN_BONUS = 2;
 const DISCOVERY_TTL = 6 * 60 * 60 * 1000;
 
 const clean = (u: string) => u.trim().replace(/\/+$/, "");
@@ -84,8 +92,8 @@ function customProvider(): Provider | null {
   return { kind: /piped|\/\/api\./i.test(url) ? "piped" : "invidious", base: url };
 }
 
-/** Ordered candidate list: custom server, then by past success. */
-export async function providers(): Promise<Provider[]> {
+/** Ordered candidate list: custom server, then by past success for this kind of task. */
+export async function providers(scope: ScoreScope = "list"): Promise<Provider[]> {
   void discover(); // refresh in the background; never block playback on it
   const seen = new Set<string>();
   const all: Provider[] = [];
@@ -98,9 +106,10 @@ export async function providers(): Promise<Provider[]> {
   };
   const custom = customProvider();
   if (custom) push(custom);
+  const builtin = new Set(BUILTIN.map(keyOf));
   [...BUILTIN, ...discovered]
     .filter((p) => !BLOCKED.test(p.base))
-    .map((p, i) => ({ p, s: (score[keyOf(p)] ?? 0) - i * 0.01 }))
+    .map((p, i) => ({ p, s: (score[`${scope}|${keyOf(p)}`] ?? 0) + (builtin.has(keyOf(p)) ? BUILTIN_BONUS : 0) - i * 0.01 }))
     .sort((a, b) => b.s - a.s)
     .forEach(({ p }) => push(p));
   return all;
@@ -110,7 +119,7 @@ function bump(k: string, delta: number) {
   score[k] = Math.max(-8, Math.min(12, (score[k] ?? 0) + delta));
   storage.set(SCORE_KEY, score);
 }
-const mark = (p: Provider, ok: boolean) => bump(keyOf(p), ok ? 1 : -1);
+const mark = (p: Provider, ok: boolean, scope: ScoreScope) => bump(`${scope}|${keyOf(p)}`, ok ? 1 : -1);
 
 /**
  * The player reports whether a source's streams actually played. This counts
@@ -118,7 +127,7 @@ const mark = (p: Provider, ok: boolean) => bump(keyOf(p), ok ? 1 : -1);
  * their stream proxy is broken.
  */
 export function reportPlayback(source: string, ok: boolean) {
-  if (source.includes(":") && source !== "device") bump(source, ok ? 3 : -4);
+  if (source.includes(":") && source !== "device") bump(`streams|${source}`, ok ? 3 : -4);
 }
 
 /**
@@ -127,9 +136,10 @@ export function reportPlayback(source: string, ok: boolean) {
  */
 export async function race<T>(
   task: (p: Provider) => Promise<T>,
-  opts: { exclude?: string[]; kinds?: ProviderKind[]; stagger?: number; max?: number } = {},
+  opts: { exclude?: string[]; kinds?: ProviderKind[]; stagger?: number; max?: number; scope?: ScoreScope } = {},
 ): Promise<{ value: T; provider: Provider }> {
-  const list = (await providers())
+  const scope = opts.scope ?? "list";
+  const list = (await providers(scope))
     .filter((p) => !opts.kinds || opts.kinds.includes(p.kind))
     .filter((p) => !opts.exclude?.includes(keyOf(p)))
     .slice(0, opts.max ?? 8);
@@ -149,14 +159,14 @@ export async function race<T>(
       const p = list[started++];
       task(p)
         .then((value) => {
-          mark(p, true);
+          mark(p, true, scope);
           if (settled) return;
           settled = true;
           clearTimeout(timer);
           resolve({ value, provider: p });
         })
         .catch(() => {
-          mark(p, false);
+          mark(p, false, scope);
           failed++;
           if (!settled && failed === list.length) {
             settled = true;
@@ -211,8 +221,7 @@ function stripHtml(html: string): string {
 function bestThumb(list: { url: string; width?: number }[] | undefined, want = 176): string | undefined {
   if (!list?.length) return undefined;
   const sorted = [...list].sort((a, b) => Math.abs((a.width ?? 0) - want) - Math.abs((b.width ?? 0) - want));
-  const u = sorted[0]?.url;
-  return u?.startsWith("//") ? `https:${u}` : u;
+  return directImg(sorted[0]?.url);
 }
 
 const idFromPipedUrl = (u?: string) => (u || "").match(/[?&]v=([\w-]{11})/)?.[1] || (u || "").match(/\/(?:watch\/|shorts\/)?([\w-]{11})$/)?.[1] || "";
@@ -278,7 +287,7 @@ function pipedItem(s: PipedStream): VideoItem | null {
     title: s.title,
     author: s.uploaderName || "",
     authorId: chanFromPipedUrl(s.uploaderUrl),
-    authorAvatar: s.uploaderAvatar || undefined,
+    authorAvatar: directImg(s.uploaderAvatar),
     duration: s.duration && s.duration > 0 ? s.duration : 0,
     views: s.views && s.views > 0 ? s.views : undefined,
     published: s.uploaded && s.uploaded > 0 ? s.uploaded : undefined,
@@ -380,7 +389,7 @@ async function pipedDetails(p: Provider, id: string, needStreams = true): Promis
     title: d.title,
     author: d.uploader || "",
     authorId: chanFromPipedUrl(d.uploaderUrl),
-    authorAvatar: d.uploaderAvatar,
+    authorAvatar: directImg(d.uploaderAvatar),
     duration: d.duration && d.duration > 0 ? d.duration : 0,
     views: d.views,
     published: d.uploadDate ? Date.parse(d.uploadDate) || undefined : undefined,
@@ -440,7 +449,7 @@ export async function providerSearch(p: Provider, q: string, cursor?: string, fi
     for (const it of r.items ?? []) {
       if (it.type === "channel") {
         const id = chanFromPipedUrl(it.url);
-        if (id) out.push({ kind: "channel", id, name: it.name || "", avatar: it.thumbnail, subscribers: it.subscribers && it.subscribers > 0 ? `${Intl.NumberFormat("en", { notation: "compact" }).format(it.subscribers)} subscribers` : undefined });
+        if (id) out.push({ kind: "channel", id, name: it.name || "", avatar: directImg(it.thumbnail), subscribers: it.subscribers && it.subscribers > 0 ? `${Intl.NumberFormat("en", { notation: "compact" }).format(it.subscribers)} subscribers` : undefined });
       } else {
         const v = pipedItem(it);
         if (v) out.push({ kind: "video", ...v });
@@ -492,8 +501,8 @@ export async function providerChannel(p: Provider, id: string, cursor?: string):
     const page: ChannelPage = {
       id,
       name: r.name,
-      avatar: r.avatarUrl,
-      banner: r.bannerUrl,
+      avatar: directImg(r.avatarUrl),
+      banner: directImg(r.bannerUrl),
       description: r.description,
       subscribers: r.subscriberCount && r.subscriberCount > 0 ? `${compact(r.subscriberCount)} subscribers` : undefined,
       videos: items((r.relatedStreams ?? []).map((s) => pipedItem({ ...s, uploaderName: s.uploaderName || r.name, uploaderUrl: s.uploaderUrl || `/channel/${id}`, uploaderAvatar: s.uploaderAvatar || r.avatarUrl }))),

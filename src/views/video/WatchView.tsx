@@ -304,7 +304,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                   data-nav="true"
                   className="flex min-w-0 flex-1 items-center gap-3"
                 >
-                  <Avatar name={info.author} src={info.authorAvatar} className="h-10 w-10" />
+                  <Avatar name={info.author} src={info.authorAvatar} channelId={info.authorId} className="h-10 w-10" />
                   <span className="min-w-0">
                     <span className="block truncate text-[15px] font-bold text-ink">{info.author}</span>
                     {info.subscribers && <span className="block truncate text-xs text-ink3">{info.subscribers}</span>}

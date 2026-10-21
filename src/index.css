@@ -716,6 +716,11 @@ body::before {
 .animate-slide-up {
   animation: ab-slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/* Full-screen player opening: rises from the mini player. "backwards" so no
+   transform lingers — the drag-to-close gesture sets its own. */
+.animate-sheet-up {
+  animation: ab-slide-up 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
 .gradient-drift {
   background-size: 200% 200%;
   animation: ab-drift 14s ease infinite;
