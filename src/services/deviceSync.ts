@@ -43,7 +43,7 @@ const dec = new TextDecoder();
 async function deriveKey(code: string): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey("raw", enc.encode(code), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: enc.encode("aurabeats-sync-v1"), iterations: 150_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: enc.encode("aurabeats-sync-v1"), iterations: 100_000, hash: "SHA-256" },
     base,
     { name: "AES-GCM", length: 256 },
     false,
@@ -218,36 +218,55 @@ class Mqtt {
   }
 }
 
-/** Every broker at once; works while at least one is reachable. */
+/**
+ * Every broker at once; ready as soon as the FIRST one answers (the others
+ * join when they connect), so a slow or blocked relay never delays the code.
+ */
 class Relay {
   private clients: Mqtt[] = [];
+  private live = new Set<Mqtt>();
+  private topics: string[] = [];
   private seen = new Set<string>();
+  private dead = false;
   onMessage: (topic: string, payload: Uint8Array) => void = () => {};
 
-  async connect(): Promise<void> {
-    const all = BROKERS.map((u) => new Mqtt(u));
-    const results = await Promise.allSettled(all.map((c) => c.ready));
-    this.clients = all.filter((_, i) => results[i].status === "fulfilled");
-    all.forEach((c, i) => results[i].status === "rejected" && c.close());
-    if (!this.clients.length) throw new Error("Couldn't reach the sync relay. Check the internet connection.");
-    for (const c of this.clients) {
-      c.onMessage = (topic, payload) => {
-        // the same message arrives once per broker: keep the first
-        const k = `${topic}:${payload.length}:${toB64(payload.slice(0, 18))}`;
-        if (this.seen.has(k)) return;
-        this.seen.add(k);
-        if (this.seen.size > 5000) this.seen.clear();
-        this.onMessage(topic, payload);
-      };
-    }
+  connect(): Promise<void> {
+    this.clients = BROKERS.map((u) => new Mqtt(u));
+    return new Promise((resolve, reject) => {
+      let failed = 0;
+      for (const c of this.clients) {
+        c.onMessage = (topic, payload) => {
+          // the same message arrives once per broker: keep the first
+          const k = `${topic}:${payload.length}:${toB64(payload.slice(0, 18))}`;
+          if (this.seen.has(k)) return;
+          this.seen.add(k);
+          if (this.seen.size > 5000) this.seen.clear();
+          this.onMessage(topic, payload);
+        };
+        c.ready.then(
+          () => {
+            if (this.dead) return c.close();
+            this.live.add(c);
+            this.topics.forEach((t) => c.subscribe(t));
+            resolve();
+          },
+          () => {
+            c.close();
+            if (++failed === this.clients.length) reject(new Error("Couldn't reach the sync relay. Check the internet connection."));
+          },
+        );
+      }
+    });
   }
   subscribe(topic: string) {
-    this.clients.forEach((c) => c.subscribe(topic));
+    this.topics.push(topic);
+    this.live.forEach((c) => c.subscribe(topic));
   }
   publish(topic: string, payload: Uint8Array) {
-    this.clients.forEach((c) => !c.closed && c.publish(topic, payload));
+    this.live.forEach((c) => !c.closed && c.publish(topic, payload));
   }
   close() {
+    this.dead = true;
     this.clients.forEach((c) => c.close());
   }
 }
@@ -264,7 +283,7 @@ type Msg =
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type SenderStatus =
-  | { phase: "connecting" }
+  | { phase: "connecting"; code: string; expiresAt: number }
   | { phase: "waiting"; code: string; expiresAt: number }
   | { phase: "sending"; code: string; expiresAt: number; device: string; progress: number }
   | { phase: "sent"; code: string; expiresAt: number; device: string }
@@ -285,7 +304,8 @@ export function startSender(device: string, getPayload: () => Promise<Payload>, 
   let chunks: string[] = [];
 
   (async () => {
-    onStatus({ phase: "connecting" });
+    // The code is made on this device: show it at once, connect meanwhile.
+    onStatus({ phase: "connecting", code, expiresAt });
     try {
       const [key, base] = await Promise.all([deriveKey(code), topicFor(code), relay.connect()]);
       if (stopped) return relay.close();
@@ -380,9 +400,9 @@ export function startReceiver(rawCode: string, device: string, onStatus: (s: Rec
       const say = async (m: Msg) => relay.publish(up, await seal(key, m));
       // Say hello until the sender answers (it may still be subscribing).
       void (async () => {
-        for (let n = 0; n < 12 && !meta && !stopped; n++) {
+        for (let n = 0; n < 24 && !meta && !stopped; n++) {
           await say({ t: "hello", device });
-          await sleep(2000);
+          await sleep(1000);
         }
         if (!meta && !stopped) {
           onStatus({ phase: "error", message: "No device answered. Check the code and keep Send open on the other device." });
@@ -454,4 +474,157 @@ export function deviceName(isApp: boolean): string {
   const os = /Android/i.test(ua) ? "Android" : /iPhone|iPad/i.test(ua) ? "iPhone" : /Windows/i.test(ua) ? "Windows" : /Mac/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : "";
   const kind = /Android|iPhone/i.test(ua) ? "phone" : "PC";
   return `${os ? `${os} ${kind}` : "Device"}${isApp ? " (app)" : ""}`;
+}
+
+/* ------------------------- nearby (same Wi-Fi) --------------------------- */
+/*
+ * Browsers can't look around the local network, but devices on the same
+ * Wi-Fi share one public internet address. So that address (hashed) is the
+ * meeting room: devices with "Nearby" open announce themselves there, show
+ * up by name, and one taps the other. The two then agree on a secret code
+ * with an ECDH key exchange (never sent anywhere) and the normal encrypted
+ * transfer runs with it. The receiving side always has to accept first.
+ */
+
+const IP_SOURCES: [string, (r: Response) => Promise<string>][] = [
+  ["https://api.ipify.org?format=json", async (r) => ((await r.json()) as { ip: string }).ip],
+  ["https://ipv4.icanhazip.com/", async (r) => (await r.text()).trim()],
+  ["https://api4.my-ip.io/v2/ip.txt", async (r) => (await r.text()).trim().split(/\s/)[0]],
+];
+
+/** This network's public IPv4 address (first source that answers). */
+async function publicIp(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let failed = 0;
+    for (const [url, read] of IP_SOURCES) {
+      fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) })
+        .then((r) => (r.ok ? read(r) : Promise.reject(new Error(String(r.status)))))
+        .then((ip) => (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip) ? resolve(ip) : Promise.reject(new Error("bad ip"))))
+        .catch(() => ++failed === IP_SOURCES.length && reject(new Error("Couldn't check which network this device is on.")));
+    }
+  });
+}
+
+const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, "0")).join("");
+
+export interface NearbyPeer {
+  id: string;
+  name: string;
+}
+export type NearbyEvent =
+  | { type: "status"; phase: "connecting" | "ready" }
+  | { type: "error"; message: string }
+  | { type: "peers"; peers: NearbyPeer[] }
+  /** someone wants to send their data here (answer with accept / decline) */
+  | { type: "offer"; from: NearbyPeer }
+  /** our offer was accepted: start sending with this code */
+  | { type: "accepted"; by: NearbyPeer; code: string }
+  | { type: "declined"; by: NearbyPeer };
+
+type RoomMsg =
+  | { t: "here"; id: string; name: string; pub: string }
+  | { t: "bye"; id: string }
+  | { t: "offer" | "accept" | "decline"; id: string; to: string };
+
+export interface Nearby {
+  offer(peerId: string): void;
+  /** Accept an offer; resolves with the code to receive with. */
+  accept(peerId: string): Promise<string>;
+  decline(peerId: string): void;
+  stop(): void;
+}
+
+/** Be visible to, and see, devices on the same network. */
+export function startNearby(name: string, onEvent: (e: NearbyEvent) => void): Nearby {
+  const id = Math.random().toString(36).slice(2, 10);
+  const relay = new Relay();
+  const peers = new Map<string, NearbyPeer & { pub: string; seen: number }>();
+  let stopped = false;
+  let send: (m: RoomMsg) => void = () => {};
+  let ecdh: CryptoKeyPair | null = null;
+  let beat: ReturnType<typeof setInterval> | undefined;
+
+  const list = () => onEvent({ type: "peers", peers: [...peers.values()].map((p) => ({ id: p.id, name: p.name })) });
+
+  /** Same 8-character code on both sides, from the ECDH shared secret. */
+  const codeWith = async (peerId: string): Promise<string> => {
+    const p = peers.get(peerId);
+    if (!p || !ecdh) throw new Error("That device is gone.");
+    const theirs = await crypto.subtle.importKey("raw", fromB64(p.pub) as BufferSource, { name: "ECDH", namedCurve: "P-256" }, false, []);
+    const bits = await crypto.subtle.deriveBits({ name: "ECDH", public: theirs }, ecdh.privateKey, 256);
+    const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array([...enc.encode("aurabeats-nearby:"), ...new Uint8Array(bits)])));
+    return Array.from(h.slice(0, CODE_LEN), (b) => ALPHABET[b % ALPHABET.length]).join("");
+  };
+
+  (async () => {
+    onEvent({ type: "status", phase: "connecting" });
+    try {
+      const [ip, pair] = await Promise.all([
+        publicIp(),
+        crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]) as Promise<CryptoKeyPair>,
+      ]);
+      ecdh = pair;
+      const pub = toB64(new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey)));
+      const roomHash = hex(await crypto.subtle.digest("SHA-256", enc.encode(`aurabeats-room:${ip}`)));
+      const roomKey = await crypto.subtle.importKey("raw", enc.encode(roomHash.slice(0, 32)), "AES-GCM", false, ["encrypt", "decrypt"]);
+      await relay.connect();
+      if (stopped) return relay.close();
+      const topic = `aurabeats/n1/${roomHash.slice(32, 56)}`;
+      relay.subscribe(topic);
+      send = (m) => void seal(roomKey, m).then((b) => !stopped && relay.publish(topic, b));
+
+      relay.onMessage = async (_t, payload) => {
+        const m = await open<RoomMsg>(roomKey, payload);
+        if (!m || stopped || m.id === id) return;
+        if (m.t === "here") {
+          const known = peers.get(m.id);
+          peers.set(m.id, { id: m.id, name: m.name, pub: m.pub, seen: Date.now() });
+          if (!known || known.name !== m.name) {
+            list();
+            if (!known) send({ t: "here", id, name, pub }); // say hi back at once
+          }
+        } else if (m.t === "bye") {
+          if (peers.delete(m.id)) list();
+        } else if (m.to === id) {
+          const p = peers.get(m.id);
+          if (!p) return;
+          const who = { id: p.id, name: p.name };
+          if (m.t === "offer") onEvent({ type: "offer", from: who });
+          else if (m.t === "decline") onEvent({ type: "declined", by: who });
+          else if (m.t === "accept") onEvent({ type: "accepted", by: who, code: await codeWith(p.id) });
+        }
+      };
+
+      const hello = () => send({ t: "here", id, name, pub });
+      hello();
+      beat = setInterval(() => {
+        hello();
+        const now = Date.now();
+        let changed = false;
+        for (const [k, p] of peers) if (now - p.seen > 10_000) changed = peers.delete(k) || changed;
+        if (changed) list();
+      }, 3000);
+      onEvent({ type: "status", phase: "ready" });
+    } catch (e) {
+      if (!stopped) onEvent({ type: "error", message: e instanceof Error ? e.message : String(e) });
+      relay.close();
+    }
+  })();
+
+  return {
+    offer: (to) => send({ t: "offer", id, to }),
+    accept: async (to) => {
+      const code = await codeWith(to);
+      send({ t: "accept", id, to });
+      return code;
+    },
+    decline: (to) => send({ t: "decline", id, to }),
+    stop: () => {
+      if (stopped) return;
+      send({ t: "bye", id });
+      stopped = true;
+      clearInterval(beat);
+      setTimeout(() => relay.close(), 300);
+    },
+  };
 }

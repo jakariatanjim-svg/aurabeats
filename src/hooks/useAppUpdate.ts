@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToastMessage } from "@/types";
 import { formatBytes } from "@/utils/format";
+import { confirmAction } from "@/components/Confirm";
 import {
   checkForUpdate,
   downloadAndInstallApk,
@@ -120,7 +121,7 @@ export function useAppUpdate(enabled: boolean, toast: Toast): AppUpdate {
       result.status === "unknown"
         ? `Cannot compare versions (installed ${installed}, published ${published}). Download it anyway?`
         : `Update AuraBeats ${installed} → ${published}? It downloads inside the app and opens the installer when it finishes.`;
-    if (!window.confirm(question)) return;
+    if (!(await confirmAction({ title: "Update AuraBeats?", message: question, confirmLabel: "Update", always: true, tone: "normal" }))) return;
 
     setDownloading(true);
     setProgress(0);

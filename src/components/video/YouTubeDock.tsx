@@ -193,6 +193,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               ifr.tabIndex = -1;
               e.target.setVolume(showVolumeUi ? storage.get<number>("video:ytVolume", 100) : 100);
               e.target.unMute(); // YouTube remembers "muted" across embeds; every video starts with sound
+              unmuteAt.current = Date.now();
               e.target.playVideo();
               setReady(true);
             },
@@ -257,7 +258,11 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setDuration(0);
     setState(YTState.UNSTARTED);
     recover.current = { since: 0, step: 0, reloaded: false };
-    if (!needsUnmuteRef.current) call("unMute");
+    if (!needsUnmuteRef.current) {
+      call("unMute");
+      unmuteAt.current = Date.now();
+    }
+    soundTest.current = null;
     call("loadVideoById", { videoId: d.id!, startSeconds: Math.floor(d.startAt) });
   }, [d.claim, d.id, d.startAt, call]);
 
@@ -289,9 +294,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   needsUnmuteRef.current = needsUnmute;
   const unmutedAt = useRef(0);
   useEffect(() => {
-    if (!needsUnmute) return;
+    // After the browser refused sound twice, stop retrying on every tap
+    // (each retry pauses the video): sound comes back from the button only.
+    if (!needsUnmute || soundBlocks.current >= 2) return;
     const go = () => {
       call("unMute");
+      unmuteAt.current = Date.now();
       if (call("getPlayerState") !== YTState.PLAYING) call("playVideo");
       unmutedAt.current = Date.now();
       setMuted(false);
@@ -307,6 +315,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   }, [needsUnmute, call]);
 
   /* ------------------------------- ads ---------------------------------- */
+  // Sound blocked by the browser (no tap yet, or a frame that may not play
+  // sound, like an embedded preview): unmuting then pauses the video, or
+  // "plays" with a frozen clock. That is neither an ad nor a stall, so before
+  // either is assumed the player tries the same thing muted. If it plays
+  // muted, sound was the problem → keep playing muted + show the sound button.
+  const unmuteAt = useRef(0);
+  const soundTest = useRef<{ at: number } | null>(null);
+  const soundBlocks = useRef(0);
   const adRef = useRef(false);
   const startedRef = useRef(false);
   // An ad only changes what is shown (YouTube's own layer, so its Skip
@@ -324,7 +340,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
   /* ------------------------------ polling ------------------------------- */
   const lastSave = useRef(0);
-  const stuck = useRef({ t: -1, since: 0 });
+  const stuck = useRef({ t: -1, since: 0, tested: false });
   // Stall recovery. Switching the sound on makes YouTube fetch an ad; when an
   // extension (or the browser) blocks that request, YouTube sits paused /
   // buffering until its ad wait times out (~15–20 s). Not an ad and nothing
@@ -351,28 +367,64 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         setStarted(true);
       }
 
-      // Ads: only a real one counts — YouTube says PLAYING but the video's
-      // own clock stands still for 2 s (the ad is what plays), or the player
-      // reports another video id. A slow start, buffering or a blocked ad is
-      // NOT an ad: the video simply plays. With a blocker detected, never.
+      const now = Date.now();
+      const isMuted = Boolean(call("isMuted"));
+      const vd = call("getVideoData") as { video_id?: string } | undefined;
+      const want = dock.get().id;
+      const otherId = Boolean(vd?.video_id && want && vd.video_id !== want);
+
+      // 1) A sound test is running: muted and moving → the browser blocked sound.
+      const test = soundTest.current;
+      if (test) {
+        if (s === YTState.PLAYING && advancing) {
+          soundTest.current = null;
+          soundBlocks.current += 1;
+          stuck.current.since = 0;
+          recover.current = { since: 0, step: 0, reloaded: recover.current.reloaded };
+          setNeedsUnmute(true);
+        } else if (now - test.at > 2500) {
+          soundTest.current = null; // muted didn't help: not a sound problem
+          stuck.current.tested = true;
+          if (!needsUnmuteRef.current) call("unMute");
+        }
+      }
+      // 2) Start one when the video froze with sound on: "playing" but the clock
+      //    stands still, or paused by itself right after sound was switched on.
+      const frozen = s === YTState.PLAYING && !advancing && !otherId;
+      const pausedAfterUnmute =
+        (s === YTState.PAUSED || s === YTState.UNSTARTED || s === YTState.CUED) && now - unmuteAt.current < 4000;
+      if (!soundTest.current && !isMuted && !needsUnmuteRef.current && wantPlay.current && !errRef.current && !adRef.current) {
+        const frozenFor = frozen ? (stuck.current.since ? now - stuck.current.since : 0) : 0;
+        if ((frozen && frozenFor > 1500 && !stuck.current.tested) || (pausedAfterUnmute && !advancing)) {
+          call("mute");
+          call("playVideo");
+          soundTest.current = { at: now };
+        }
+      }
+
+      // 3) Ads: only a real one counts — the player reports another video id,
+      //    or says PLAYING while the video's own clock stands still for 2 s
+      //    even after the muted test (the ad is what plays). Slow starts,
+      //    buffering, blocked ads (extension, DNS, anything) and blocked sound
+      //    are NOT ads. With a blocker detected, never.
       if (adBlockState() !== "on") {
-        const now = Date.now();
-        const vd = call("getVideoData") as { video_id?: string } | undefined;
-        const want = dock.get().id;
-        const otherId = Boolean(vd?.video_id && want && vd.video_id !== want);
         if (s === YTState.PLAYING && advancing && !otherId) {
           stuck.current.since = 0;
+          stuck.current.tested = false;
           leaveAd();
         } else if (s === YTState.PLAYING) {
           if (otherId) enterAd();
           else if (!stuck.current.since) stuck.current.since = now;
-          else if (now - stuck.current.since > 2000) enterAd();
+          else if (now - stuck.current.since > 2000 && !soundTest.current && (stuck.current.tested || isMuted || needsUnmuteRef.current)) enterAd();
         } else {
           stuck.current.since = 0;
           if (s !== YTState.BUFFERING && s !== YTState.PAUSED) leaveAd();
         }
       } else {
-        stuck.current.since = 0;
+        if (s === YTState.PLAYING && advancing) stuck.current.tested = false;
+        if (s === YTState.PLAYING && !advancing) {
+          if (!stuck.current.since) stuck.current.since = now;
+        } else stuck.current.since = 0;
         leaveAd();
       }
       stuck.current.t = t;
@@ -383,6 +435,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
         wantPlay.current &&
         dock.get().mode !== "none" &&
         !adRef.current &&
+        !soundTest.current &&
         !errRef.current &&
         !advancing &&
         (s === YTState.PAUSED || s === YTState.BUFFERING || s === YTState.UNSTARTED || s === YTState.CUED);
@@ -504,6 +557,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const seekBy = useCallback((s: number) => seek((Number(call("getCurrentTime")) || time) + s), [seek, call, time]);
   const unmute = useCallback(() => {
     call("unMute");
+    unmuteAt.current = Date.now();
     if (volume === 0) {
       call("setVolume", 60);
       setVolumeState(60);
@@ -1194,7 +1248,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               mode === "mini" && "top-2 left-2 px-2.5 py-1.5 text-[11px]",
             )}
           >
-            <VolumeX className="h-4 w-4" /> Tap anywhere for sound
+            <VolumeX className="h-4 w-4" />
+            {soundBlocks.current >= 2
+              ? window.self !== window.top
+                ? "Sound is blocked in this frame · open the site in its own tab"
+                : "Tap for sound"
+              : "Tap anywhere for sound"}
           </button>
         )}
 

@@ -11,7 +11,7 @@ const DB_NAME = "aurabeats_media";
 const STORE_NAME = "tracks";
 const DB_VERSION = 1;
 
-interface OfflineEntry {
+export interface OfflineEntry {
   id: string;
   track: Track;
   /** the audio itself (web, other sources)… */
@@ -139,6 +139,25 @@ export const db = {
         // Sort by savedAt desc
         resolve(results.sort((a, b) => b.savedAt - a.savedAt).map((r) => r.track));
       };
+    });
+  },
+
+  /** The whole saved record (for Undo after a removal). */
+  async getEntry(id: string): Promise<OfflineEntry | null> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(id);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve((request.result as OfflineEntry | undefined) ?? null);
+    });
+  },
+
+  async putEntry(entry: OfflineEntry): Promise<void> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put(entry);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
     });
   },
 

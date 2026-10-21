@@ -117,6 +117,9 @@ jobs:
               '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
               # Android 7-10: downloads into Download/AuraBeats by path (asked at runtime).
               '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />',
+              # Device sync: scan the QR code (asked only when Scan is tapped).
+              '<uses-permission android:name="android.permission.CAMERA" />',
+              '<uses-feature android:name="android.hardware.camera" android:required="false" />',
           ]
           add = "".join("    " + p + "\n" for p in perms if p.split('"')[1] not in text)
           if add:

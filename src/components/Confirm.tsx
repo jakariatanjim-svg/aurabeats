@@ -18,6 +18,8 @@ interface Ask {
   confirmLabel?: string;
   /** asked even when "Don't ask again" is on */
   always?: boolean;
+  /** not a deletion (e.g. installing an update): accent button, no warning icon */
+  tone?: "danger" | "normal";
   resolve: (ok: boolean) => void;
 }
 
@@ -75,9 +77,11 @@ export function ConfirmHost() {
       {ask && (
         <div className="space-y-4">
           <div className="flex gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-rose-500/12 text-rose-500">
-              <AlertTriangle className="h-5 w-5" />
-            </span>
+            {ask.tone !== "normal" && (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-rose-500/12 text-rose-500">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+            )}
             <p className="text-[13px] leading-relaxed text-ink2">{ask.message ?? "This can't be undone."}</p>
           </div>
           {!ask.always && (
@@ -95,7 +99,7 @@ export function ConfirmHost() {
             <Button variant="ghost" onClick={() => done(false)}>
               Cancel
             </Button>
-            <Button onClick={() => done(true)} className={cn("bg-rose-600! shadow-none! hover:brightness-110")}>
+            <Button onClick={() => done(true)} className={cn(ask.tone !== "normal" && "bg-rose-600! shadow-none! hover:brightness-110")}>
               {ask.confirmLabel ?? "Delete"}
             </Button>
           </div>

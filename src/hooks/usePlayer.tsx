@@ -26,6 +26,7 @@ import { db } from "@/utils/db";
 import { showVolumeUi } from "@/utils/device";
 import { shuffleArray, uid } from "@/utils/format";
 import type { RepeatMode, ToastMessage, Track, UserPlaylist, PlayerSettings } from "@/types";
+import { undoable } from "@/components/UndoToast";
 
 /**
  * Resolve a stream URL — if it's a lazy `yt-resolve:ID` placeholder,
@@ -271,13 +272,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [offlineTracks, toast]);
 
+  // Undo-able: the record goes now, the file only when the Undo time is up.
   const removeOffline = useCallback(async (id: string) => {
-    const src = await db.getTrackSource(id).catch(() => null);
-    if (src?.path) await removeOfflineFile(src.path);
+    const entry = await db.getEntry(id).catch(() => null);
     await db.deleteTrack(id);
     setOfflineTracks(await db.getAllTracks());
-    toast("Removed from offline storage", "info");
-  }, [toast]);
+    if (!entry) return;
+    undoable({
+      message: `Removed "${entry.track.title}" from offline`,
+      undo: async () => {
+        await db.putEntry(entry);
+        setOfflineTracks(await db.getAllTracks());
+      },
+      commit: () => (entry.path ? removeOfflineFile(entry.path) : undefined),
+    });
+  }, []);
 
   const isOffline = useCallback((id: string) => {
     return offlineTracks.some((t) => t.id === id);
@@ -756,10 +765,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const deletePlaylist = useCallback(
     (id: string) => {
+      const at = playlists.findIndex((p) => p.id === id);
+      const gone = playlists[at];
       setPlaylists((prev) => prev.filter((p) => p.id !== id));
-      toast("Playlist deleted", "info");
+      if (!gone) return;
+      undoable({
+        message: `Deleted "${gone.name}"`,
+        undo: () => setPlaylists((prev) => (prev.some((p) => p.id === id) ? prev : [...prev.slice(0, at), gone, ...prev.slice(at)])),
+      });
     },
-    [toast],
+    [playlists],
   );
 
   const renamePlaylist = useCallback((id: string, name: string) => {
@@ -866,7 +881,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       toast,
       dismissToast,
       removeHistory: (id: string) => setHistory((prev) => prev.filter((t) => t.id !== id)),
-      clearHistory: () => setHistory([]),
+      clearHistory: () => {
+        const snap = history;
+        setHistory([]);
+        if (snap.length) undoable({ message: "Listening history cleared", undo: () => setHistory(snap) });
+      },
     }),
     [
       isPlayingNow,

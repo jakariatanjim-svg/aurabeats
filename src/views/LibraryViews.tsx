@@ -21,7 +21,6 @@ import { cachedDeviceSongs, deviceMusicAvailable } from "@/services/deviceMusic"
 import type { UserPlaylist } from "@/types";
 import type { Track } from "@/types";
 import type { RouteKey } from "@/routes";
-import { confirmAction } from "@/components/Confirm";
 
 function PlaylistArt({ tracks, name }: { tracks: Track[]; name: string }) {
   const shown = tracks.filter((t) => t.artwork).slice(0, 4);
@@ -79,9 +78,7 @@ function PlaylistCard({ playlist, onOpen }: { playlist: UserPlaylist; onOpen: ()
         <IconButton
           size="sm"
           aria-label="Delete playlist"
-          onClick={async () => {
-            if (await confirmAction({ title: `Delete "${playlist.name}"?`, message: "The playlist is removed. The songs stay in your library." })) deletePlaylist(playlist.id);
-          }}
+          onClick={() => deletePlaylist(playlist.id)}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </IconButton>
@@ -300,11 +297,9 @@ export function PlaylistDetailView({ playlistId, onBack }: { playlistId: string;
             </IconButton>
             <IconButton
               aria-label="Delete playlist"
-              onClick={async () => {
-                if (await confirmAction({ title: `Delete "${playlist.name}"?`, message: "The playlist is removed. The songs stay in your library." })) {
-                  deletePlaylist(playlist.id);
-                  onBack();
-                }
+              onClick={() => {
+                deletePlaylist(playlist.id);
+                onBack();
               }}
             >
               <Trash2 className="h-4 w-4" />
@@ -537,11 +532,7 @@ export function DownloadsView() {
               context={offlineTracks}
               index={i}
               removeLabel="Remove from downloads"
-              onRemove={async () => {
-                if (await confirmAction({ title: "Remove offline copy?", message: `"${t.title}" will need the internet again.`, confirmLabel: "Remove" })) {
-                  removeOffline(t.id);
-                }
-              }}
+              onRemove={() => void removeOffline(t.id)}
             />
           ))}
         </div>

@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from "react";
 import { storage } from "@/utils/storage";
 import type { VideoItem } from "@/services/video/types";
+import { undoable } from "@/components/UndoToast";
 
 export interface FollowedChannel {
   id: string;
@@ -73,7 +74,11 @@ export const videoLibrary = {
   },
   positionOf: (id: string) => state.history.find((h) => h.id === id)?.position ?? 0,
   removeHistory: (id: string) => commit({ history: state.history.filter((h) => h.id !== id) }),
-  clearHistory: () => commit({ history: [] }),
+  clearHistory: () => {
+    const snap = state.history;
+    commit({ history: [] });
+    if (snap.length) undoable({ message: "Watch history cleared", undo: () => commit({ history: snap }) });
+  },
   inLater: (id: string) => state.later.some((v) => v.id === id),
   toggleLater(v: VideoItem) {
     if (videoLibrary.inLater(v.id)) commit({ later: state.later.filter((x) => x.id !== v.id) });

@@ -5,6 +5,8 @@ import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
 import { Tutorial } from "@/components/Tutorial";
 import { ConfirmHost } from "@/components/Confirm";
+import { OfflineScreen } from "@/components/OfflineScreen";
+import { useOnline } from "@/hooks/useOnline";
 import { TopBar } from "@/components/TopBar";
 import { PlayerBar } from "@/components/PlayerBar";
 import { Toaster } from "@/components/ui";
@@ -176,6 +178,7 @@ function Shell() {
   const cameFromPage = useRef(false);
   const prevRoute = useRef<RouteKey | null>(null);
   if (!route.startsWith("watch:")) baseRoute.current = route;
+  const online = useOnline();
   const shownRoute: RouteKey = isNative && route.startsWith("watch:") ? baseRoute.current : route;
   useEffect(() => {
     if (!isNative) return;
@@ -279,25 +282,31 @@ function Shell() {
             }
           >
             <div key={shownRoute} className="animate-fade-up mx-auto w-full max-w-[1600px] pb-8">
-              {shownRoute === "home" && <HomeView onNavigate={navigate} />}
-              {shownRoute === "search" && <SearchView />}
-              {shownRoute === "library" && <LibraryView onNavigate={navigate} />}
-              {shownRoute === "favorites" && <FavoritesView />}
-              {shownRoute === "history" && <HistoryView />}
-              {shownRoute === "settings" && <SettingsView />}
-              {shownRoute === "about" && <AboutView />}
-              {shownRoute === "privacy" && <PrivacyView />}
-              {shownRoute === "downloads" && <DownloadsView />}
-              {shownRoute === "device" && <DeviceMusicView />}
-              {shownRoute.startsWith("playlist:") && (
-                <PlaylistDetailView playlistId={shownRoute.slice("playlist:".length)} onBack={() => navigate("library")} />
+              {!online && needsInternet(shownRoute) ? (
+                <OfflineScreen onNavigate={navigate} />
+              ) : (
+                <>
+                {shownRoute === "home" && <HomeView onNavigate={navigate} />}
+                {shownRoute === "search" && <SearchView />}
+                {shownRoute === "library" && <LibraryView onNavigate={navigate} />}
+                {shownRoute === "favorites" && <FavoritesView />}
+                {shownRoute === "history" && <HistoryView />}
+                {shownRoute === "settings" && <SettingsView />}
+                {shownRoute === "about" && <AboutView />}
+                {shownRoute === "privacy" && <PrivacyView />}
+                {shownRoute === "downloads" && <DownloadsView />}
+                {shownRoute === "device" && <DeviceMusicView />}
+                {shownRoute.startsWith("playlist:") && (
+                  <PlaylistDetailView playlistId={shownRoute.slice("playlist:".length)} onBack={() => navigate("library")} />
+                )}
+                {shownRoute === "video" && <VideoHomeView onNavigate={navigate} />}
+                {shownRoute === "video-search" && <VideoSearchView />}
+                {shownRoute === "video-subs" && <VideoSubsView onNavigate={navigate} />}
+                {shownRoute === "video-library" && <VideoLibraryView />}
+                {!isNative && shownRoute.startsWith("watch:") && <WatchView key={route} id={shownRoute.slice("watch:".length)} onNavigate={navigate} />}
+                {shownRoute.startsWith("channel:") && <ChannelView id={shownRoute.slice("channel:".length)} />}
+                </>
               )}
-              {shownRoute === "video" && <VideoHomeView onNavigate={navigate} />}
-              {shownRoute === "video-search" && <VideoSearchView />}
-              {shownRoute === "video-subs" && <VideoSubsView onNavigate={navigate} />}
-              {shownRoute === "video-library" && <VideoLibraryView />}
-              {!isNative && shownRoute.startsWith("watch:") && <WatchView key={route} id={shownRoute.slice("watch:".length)} onNavigate={navigate} />}
-              {shownRoute.startsWith("channel:") && <ChannelView id={shownRoute.slice("channel:".length)} />}
             </div>
           </Suspense>
         </main>
@@ -329,6 +338,11 @@ function Shell() {
     </div>
   );
 }
+
+
+/** Pages that can't show anything without the internet (the offline page replaces them). */
+const needsInternet = (r: RouteKey) =>
+  r === "home" || r === "search" || r === "video" || r === "video-search" || r === "video-subs" || r.startsWith("watch:") || r.startsWith("channel:");
 
 export default function App() {
   return (

@@ -19,7 +19,7 @@ export const SETTING_KEYS = [
 /** Belong to this device only (never synced to another one). */
 const DEVICE_ONLY = new Set([
   "sidebarCollapsed", "video:miniPos", "volume", "muted", "video:ytVolume", "video:volume",
-  "tour:seen", "confirm:skip", "deviceMusic:asked",
+  "tour:seen", "confirm:skip", "deviceMusic:asked", "sync:name", "undo:secs",
 ]);
 const isPrivate = (k: string) => k.startsWith("account:");
 
@@ -66,6 +66,7 @@ export function summarize(data: Record<string, string>): Record<string, number> 
     "Followed channels": len(data, "video:follows"),
     "Videos watched": len(data, "video:history"),
     "Watch later": len(data, "video:later"),
+    Searches: len(data, "searchHistory"),
   };
 }
 

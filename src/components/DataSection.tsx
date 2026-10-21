@@ -8,7 +8,7 @@
  *    "Ask before deleting" switch for every confirmation in the app.
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Database, Download, Eraser, HardDrive, MessageSquareWarning, RotateCcw, ShieldAlert, Signal, Trash2, Upload } from "lucide-react";
+import { Database, Download, Eraser, HardDrive, MessageSquareWarning, RotateCcw, ShieldAlert, Signal, Trash2, Undo2, Upload } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatBytes } from "@/utils/format";
 import { storage } from "@/utils/storage";
@@ -19,6 +19,7 @@ import { appFileUsage, clearTempFiles } from "@/services/videoDownload";
 import { getVideoSettings, setVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 import { SectionHeader } from "@/components/ui";
 import { confirmAction, useAskBeforeDelete } from "@/components/Confirm";
+import { UNDO_CHOICES, useUndoSeconds } from "@/components/UndoToast";
 import { applyReplace, backupJson, isCacheKey, lsKeys, RAW_CACHES, SETTING_KEYS } from "@/utils/backup";
 
 async function saveBackup(json: string): Promise<string> {
@@ -192,14 +193,10 @@ export function DataSection() {
 export function DangerZone() {
   const { toast, clearOffline } = usePlayer();
   const [ask, setAsk] = useAskBeforeDelete();
+  const [undoSecs, setUndoSecs] = useUndoSeconds();
 
-  const clearCache = async () => {
-    const ok = await confirmAction({
-      title: "Clear cached data?",
-      message: "Saved feeds, lyrics and pictures are removed. They load again when needed; your library stays.",
-      confirmLabel: "Clear",
-    });
-    if (!ok) return;
+  // Harmless (everything loads again), so no question.
+  const clearCache = () => {
     for (const k of lsKeys()) if (isCacheKey(k)) localStorage.removeItem(k);
     RAW_CACHES.forEach((k) => localStorage.removeItem(k));
     void caches?.keys?.().then((ks) => ks.forEach((k) => void caches.delete(k))).catch(() => {});
@@ -237,7 +234,7 @@ export function DangerZone() {
       <SectionHeader title="Danger zone" subtitle="Deletes things on this device" icon={<ShieldAlert className="h-4 w-4 text-rose-500" />} />
       <div className="blur-panel divide-y divide-rose-500/15 border-rose-500/30! bg-rose-500/[0.03]! p-0">
         <Row danger icon={<Eraser className="h-4 w-4" />} title="Cached data" hint="Saved feeds and pictures; loads again when needed">
-          <Act danger onClick={() => void clearCache()}>
+          <Act danger onClick={clearCache}>
             Clear
           </Act>
         </Row>
@@ -251,7 +248,21 @@ export function DangerZone() {
             Erase
           </Act>
         </Row>
-        <Row danger icon={<MessageSquareWarning className="h-4 w-4" />} title="Ask before deleting" hint={ask ? "A check appears before anything is deleted" : "Deletes right away (Erase still asks)"}>
+        <Row danger icon={<Undo2 className="h-4 w-4" />} title="Undo time" hint="How long Undo stays after deleting">
+          <select
+            value={undoSecs}
+            onChange={(e) => setUndoSecs(Number(e.target.value))}
+            aria-label="Undo time"
+            className="focus-ring shrink-0 rounded-full border border-line bg-transparent px-3 py-1.5 text-xs font-bold text-ink2"
+          >
+            {UNDO_CHOICES.map((n) => (
+              <option key={n} value={n} className="bg-elev text-ink">
+                {n} seconds
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row danger icon={<MessageSquareWarning className="h-4 w-4" />} title="Ask before big deletes" hint={ask ? "Offline songs, restore, reset, sign out" : "Right away (Erase and Replace still ask)"}>
           <Switch on={ask} label="Ask before deleting" onClick={() => setAsk(!ask)} />
         </Row>
       </div>
