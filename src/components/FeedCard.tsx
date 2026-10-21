@@ -15,7 +15,6 @@ const SOURCE_LABEL: Record<string, string> = {
   audius: "Audius",
   jamendo: "Jamendo",
   archive: "Internet Archive",
-  radio: "Live radio",
 };
 
 /**

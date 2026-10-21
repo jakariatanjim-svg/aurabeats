@@ -2,7 +2,6 @@
 export type RouteKey =
   | "home"
   | "search"
-  | "radio"
   | "library"
   | "favorites"
   | "history"
@@ -31,7 +30,7 @@ export interface RouteMeta {
 }
 
 /* -------------------- clean slash URLs (History API) -------------------- *
- * Sections live on real paths — /home /search /radio /library /favorites
+ * Sections live on real paths — /home /search /library /favorites
  * /history /settings /about /playlist/<id> — served by ONE index.html thanks
  * to public/_redirects (Cloudflare SPA fallback). Static assets keep working
  * (Cloudflare serves the real file first; the fallback only catches routes
@@ -70,7 +69,7 @@ export function pathToRoute(pathname: string): RouteKey {
     return (["search", "subs", "library"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
   }
   const key = clean.slice(1);
-  const valid: RouteKey[] = ["home", "search", "radio", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device"];
+  const valid: RouteKey[] = ["home", "search", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device"];
   return valid.includes(key as RouteKey) ? (key as RouteKey) : "home";
 }
 
@@ -91,8 +90,6 @@ export function routeLabel(route: RouteKey): string {
       return "Discover";
     case "search":
       return "Search";
-    case "radio":
-      return "Live Radio";
     case "library":
       return "Your Library";
     case "favorites":

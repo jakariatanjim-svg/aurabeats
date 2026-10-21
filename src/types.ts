@@ -1,10 +1,10 @@
 /**
  * AuraBeats shared type definitions.
  * Every track/artist/playlist object in the app is produced by the live
- * network services (audius.ts / radio.ts) — nothing is authored statically.
+ * network services (audius.ts etc.) — nothing is authored statically.
  */
 
-export type TrackSource = "archive" | "audius" | "radio" | "jiosaavn" | "jamendo" | "youtube" | "soundcloud" | "local";
+export type TrackSource = "archive" | "audius" | "jiosaavn" | "jamendo" | "youtube" | "soundcloud" | "local";
 
 export interface PlayerSettings {
   queueEnabled: boolean;
@@ -73,7 +73,7 @@ export interface ViewDescriptor {
   label: string;
 }
 
-export type FeedKind = "trending" | "underground" | "genre" | "mood" | "search" | "artist" | "radio";
+export type FeedKind = "trending" | "underground" | "genre" | "mood" | "search" | "artist";
 
 export interface Feed {
   id: string;

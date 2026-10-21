@@ -16,11 +16,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://aurabeats.pages.dev/radio</loc>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://aurabeats.pages.dev/library</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>

@@ -1,11 +1,10 @@
-import { Heart, Home, Library, Radio, Rss } from "lucide-react";
+import { Heart, Home, Library, Rss } from "lucide-react";
 import { cn } from "@/utils/cn";
 import type { RouteKey } from "@/routes";
 import { modeOf } from "@/components/video/AppModeSwitch";
 
 const ITEMS: { key: RouteKey; label: string; icon: typeof Home }[] = [
   { key: "home", label: "Home", icon: Home },
-  { key: "radio", label: "Radio", icon: Radio },
   { key: "library", label: "Library", icon: Library },
   { key: "favorites", label: "Saved", icon: Heart },
 ];
@@ -28,7 +27,7 @@ export function MobileNav({
   const mode = modeOf(route);
   const items = mode === "video" ? VIDEO_ITEMS : ITEMS;
   return (
-    <nav className="ab-navbar blur-panel surface-raised fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! pb-[calc(var(--sa-bottom)+0.35rem)] pl-[calc(var(--sa-left)+0.5rem)] pr-[calc(var(--sa-right)+0.5rem)] pt-2 md:hidden">
+    <nav data-tour="nav-main" className="ab-navbar blur-panel surface-raised fixed inset-x-0 bottom-0 z-50 border-x-0! border-b-0! pb-[calc(var(--sa-bottom)+0.35rem)] pl-[calc(var(--sa-left)+0.5rem)] pr-[calc(var(--sa-right)+0.5rem)] pt-2 md:hidden">
       <div className={cn("grid gap-1.5", items.length === 3 ? "grid-cols-3" : items.length === 4 ? "grid-cols-4" : "grid-cols-5")}>
         {items.map(({ key, label, icon: Icon }) => {
           const active = route === key;
@@ -37,6 +36,7 @@ export function MobileNav({
               key={key}
               type="button"
               onClick={() => onNavigate(key)}
+              data-tour={`nav-${key}`}
               data-active={active ? "true" : undefined}
               aria-current={active ? "page" : undefined}
               className={cn(

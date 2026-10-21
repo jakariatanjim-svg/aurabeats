@@ -19,7 +19,6 @@ import {
   type ReactNode,
 } from "react";
 import { useAudioEngine, type AudioEngine } from "@/hooks/useAudioEngine";
-import { reportListen } from "@/services/radio";
 import { isYouTubePlayerReady } from "@/services/youtubePlayer";
 import { resolveStreamUrls as resolveSC } from "@/services/soundcloud";
 import { storage, session } from "@/utils/storage";
@@ -164,8 +163,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   const [shuffle, setShuffle] = useState<boolean>(() => storage.get("shuffle", false));
   const [repeat, setRepeat] = useState<RepeatMode>(() => storage.get<RepeatMode>("repeat", "off"));
-  const [favorites, setFavorites] = useState<Track[]>(() => storage.get<Track[]>("favorites", []));
-  const [history, setHistory] = useState<Track[]>(() => storage.get<Track[]>("history", []));
+  const [favorites, setFavorites] = useState<Track[]>(() => storage.get<Track[]>("favorites", []).filter((t) => (t.source as string) !== "radio"));
+  const [history, setHistory] = useState<Track[]>(() => storage.get<Track[]>("history", []).filter((t) => (t.source as string) !== "radio"));
   const [playlists, setPlaylists] = useState<UserPlaylist[]>(() => storage.get<UserPlaylist[]>("playlists", []));
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [volume, setVolumeState] = useState<number>(() => storage.get("volume", 0.85));
@@ -424,7 +423,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (!alive) return;
         engine.load(url, { autoplay: !restorePauseRef.current, live: current.isLive });
         restorePauseRef.current = false;
-        if (current.source === "radio") reportListen(current.id);
       } catch {
         if (!alive) return;
         toast(`Could not start "${current.title}" — skipping to next`, "error");

@@ -299,7 +299,7 @@ export function TopSearch({
       {/* PC: field in the bar, dropdown under it */}
       {pc && (
         <>
-      <div ref={deskBox} className={cn("relative w-full max-w-[36rem]", className)}>
+      <div ref={deskBox} data-tour="search" className={cn("relative w-full max-w-[36rem]", className)}>
         <div
           className={cn(
             "glass-inset flex items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] pr-1.5 pl-4 transition",
@@ -337,6 +337,7 @@ export function TopSearch({
         <button
           type="button"
           onClick={() => setSheet(true)}
+          data-tour="search"
           className="focus-ring glass-inset flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line/80 bg-ink/[0.03] px-3.5 py-2 text-left text-[14px] font-medium text-ink"
         >
           <Search className="h-4 w-4 shrink-0 text-ink3" />
@@ -346,6 +347,7 @@ export function TopSearch({
         <button
           type="button"
           aria-label="Search"
+          data-tour="search"
           onClick={() => setSheet(true)}
           className="focus-ring ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line text-ink2 transition hover:text-ink"
         >

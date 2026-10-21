@@ -7,7 +7,6 @@ import {
   Info,
   Library,
   Plus,
-  Radio,
   Settings,
   DownloadCloud,
   Rss,
@@ -30,7 +29,6 @@ interface NavItem {
 
 const MAIN: NavItem[] = [
   { key: "home", label: "Discover", icon: Home },
-  { key: "radio", label: "Live Radio", icon: Radio },
   { key: "library", label: "Your Library", icon: Library },
 ];
 
@@ -82,6 +80,7 @@ const NavItemButton = memo(function NavItemButton({
       type="button"
       onClick={() => onNavigate(item.key)}
       title={item.label}
+      data-tour={`nav-${item.key}`}
       data-active={active ? "true" : undefined}
       className={cn(
         "ab-nav-item focus-ring relative flex items-center gap-3 rounded-2xl text-sm font-semibold transition-colors duration-150",
@@ -172,7 +171,7 @@ export const Sidebar = memo(function Sidebar({
       />
 
       <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>
-        <div className="space-y-1">
+        <div className="space-y-1" data-tour="nav-main">
           {(video ? VIDEO_MAIN : MAIN).map((item) => (
             <NavItemButton
               key={item.key}

@@ -5,7 +5,7 @@
 # AuraBeats
 
 **Music and video, beautifully simple.**<br/>
-Songs, live radio and YouTube in one calm, free player — no account, no subscription.
+Songs and YouTube in one calm, free player — no account, no subscription.
 
 <br/>
 
@@ -21,7 +21,7 @@ Songs, live radio and YouTube in one calm, free player — no account, no subscr
 
 ## Overview
 
-AuraBeats brings full-length songs, live radio and YouTube videos together in a single, uncluttered player. Search once, tap, and listen — on the web, as an installed app, or on Android.
+AuraBeats brings full-length songs and YouTube videos together in a single, uncluttered player. Search once, tap, and listen — on the web, as an installed app, or on Android.
 
 Everything personal — favourites, playlists, history and followed channels — stays on your own device.
 
@@ -42,8 +42,8 @@ Everything personal — favourites, playlists, history and followed channels —
   </tr>
   <tr>
     <td valign="top">
-      <h3>Live radio</h3>
-      Thousands of stations from around the world, powered by Radio Browser.
+      <h3>Offline listening</h3>
+      On Android, save songs inside the app and play them without an internet connection.
     </td>
     <td valign="top">
       <h3>Synced lyrics</h3>

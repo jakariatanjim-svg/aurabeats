@@ -7,7 +7,6 @@
 export const CLEAN_PATHS: string[] = [
   "/home",
   "/search",
-  "/radio",
   "/library",
   "/favorites",
   "/history",

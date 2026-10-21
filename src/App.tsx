@@ -25,7 +25,6 @@ import { subscribeVideoSettings } from "@/services/video/settings";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
 const SearchView = lazy(() => import("@/views/SearchView").then((m) => ({ default: m.SearchView })));
-const RadioView = lazy(() => import("@/views/RadioView").then((m) => ({ default: m.RadioView })));
 const SettingsView = lazy(() => import("@/views/SettingsView").then((m) => ({ default: m.SettingsView })));
 const AboutView = lazy(() => import("@/views/AboutView").then((m) => ({ default: m.AboutView })));
 const PrivacyView = lazy(() => import("@/views/PrivacyView").then((m) => ({ default: m.PrivacyView })));
@@ -45,7 +44,7 @@ const FullScreenPlayer = lazy(() => import("@/components/FullScreenPlayer").then
 const QueuePanel = lazy(() => import("@/components/FullScreenPlayer").then((m) => ({ default: m.QueuePanel })));
 
 function Shell() {
-  // URL is the source of truth — real clean paths: /home /search /radio …
+  // URL is the source of truth — real clean paths: /home /search …
   const [route, setRoute] = useState<RouteKey>(() => pathToRoute(window.location.pathname));
   const [collapsed, setCollapsed] = useState<boolean>(() => storage.get("sidebarCollapsed", false));
 
@@ -281,7 +280,6 @@ function Shell() {
             <div key={shownRoute} className="animate-fade-up mx-auto w-full max-w-[1600px] pb-8">
               {shownRoute === "home" && <HomeView onNavigate={navigate} />}
               {shownRoute === "search" && <SearchView />}
-              {shownRoute === "radio" && <RadioView />}
               {shownRoute === "library" && <LibraryView onNavigate={navigate} />}
               {shownRoute === "favorites" && <FavoritesView />}
               {shownRoute === "history" && <HistoryView />}
@@ -306,7 +304,7 @@ function Shell() {
 
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
       <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={favorites.length} />
-      <Tutorial />
+      <Tutorial route={shownRoute} onNavigate={navigate} />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}
       {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
       {isNative && (

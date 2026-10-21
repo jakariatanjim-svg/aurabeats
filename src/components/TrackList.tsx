@@ -358,7 +358,7 @@ export function TrackRow({
                           ? "YouTube Music mirror · 320kbps"
                           : track.source === "local"
                             ? "File on this phone"
-                          : "Open radio directory"
+                          : "SoundCloud"
             }
           >
             {
@@ -368,7 +368,7 @@ export function TrackRow({
               track.source === "jamendo" ? "CC library" :
               track.source === "youtube" ? "yt mirror" :
               track.source === "local" ? "on device" :
-              "radio"
+              "soundcloud"
             }
           </span>
           {track.genre && !track.isLive && <span className="hidden shrink-0 opacity-60 md:inline">• {track.genre}</span>}
