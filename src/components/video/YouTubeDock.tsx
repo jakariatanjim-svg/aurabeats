@@ -1124,8 +1124,10 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  // Mouse wheel over the video = volume ±10 % (PC). Native listener: React's
-  // wheel handler is passive and couldn't stop the page from scrolling.
+  // Mouse wheel over the volume control (speaker icon + bar) = volume ±10 %
+  // (PC). Anywhere else on the video the wheel does nothing special, so the
+  // page scrolls as usual. Native listener: React's wheel handler is passive
+  // and couldn't stop the page from scrolling while over the control.
   const volRef = useRef(setVolume);
   volRef.current = setVolume;
   const fxRef = useRef(setVolFx);
@@ -1135,7 +1137,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     const box = boxRef.current;
     if (!box || !showVolumeUi || mode === "mini") return;
     const onWheel = (e: WheelEvent) => {
-      if (!e.deltaY || (e.target as HTMLElement | null)?.closest("[data-menu]")) return;
+      if (!e.deltaY || !(e.target as HTMLElement | null)?.closest("[data-volume]")) return;
       e.preventDefault();
       const n = Math.max(0, Math.min(100, Math.round(volNow.current / 10) * 10 + (e.deltaY < 0 ? 10 : -10)));
       volRef.current(n);
@@ -1511,7 +1513,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                     <SkipForward className="h-5 w-5 fill-current" />
                   </CtrlBtn>
                 )}
-                <div className="group/vol flex items-center">
+                <div className="group/vol flex items-center" data-volume>
                   <CtrlBtn label={muted || needsUnmute ? "Unmute (m)" : "Mute (m)"} onClick={toggleMute}>
                     {muted || needsUnmute || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                   </CtrlBtn>
