@@ -28,7 +28,7 @@ import { shuffleArray, uid } from "@/utils/format";
 import type { RepeatMode, ToastMessage, Track, UserPlaylist, PlayerSettings } from "@/types";
 import { undoable } from "@/components/UndoToast";
 import { useYtSession } from "@/services/yt/session";
-import { isSongLiked, likeApplies, setSongLiked, useLikedSongs } from "@/services/yt/music";
+import { isSongLiked, likeApplies, likeHeartedSongs, setSongLiked, useLikedSongs } from "@/services/yt/music";
 
 /**
  * Resolve a stream URL — if it's a lazy `yt-resolve:ID` placeholder,
@@ -789,6 +789,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [favorites, ytSessionNow, likedSongs],
   );
+
+  // Signed in: songs hearted earlier (guest) become real likes on the account.
+  const likedReady = !!ytSessionNow && likedSongs.key === ytSessionNow.key && !!likedSongs.list;
+  useEffect(() => {
+    if (!likedReady) return;
+    void likeHeartedSongs(favorites).then((n) => {
+      if (n) toast(`Liked ${n} hearted song${n === 1 ? "" : "s"} on YouTube Music`, "success");
+    });
+  }, [likedReady, favorites, toast]);
 
   const toggleFavorite = useCallback(
     (track: Track) => {

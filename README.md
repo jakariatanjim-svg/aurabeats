@@ -103,7 +103,7 @@ Everything personal — favourites, playlists, history and followed channels —
 AuraBeats works fully without an account. Signing in adds your own YouTube to it:
 
 - **Video** — Home shows YouTube's recommendations for you, Following shows your subscriptions, and Library has your History, Watch later, liked videos, playlists and your channel. **Like**, **Save** to playlists and **Subscribe** right from the video page.
-- **Music** — songs get a 👍 **Like** (YouTube Music) instead of the heart. Saved shows your liked songs, and Library shows your YouTube Music playlists.
+- **Music** — YouTube songs get a 👍 **Like** (YouTube Music) instead of the heart, and songs you hearted before signing in are liked for you. Songs from other sources keep the heart. Saved shows your liked songs, and Library shows your YouTube Music playlists.
 - What you watch is added to your YouTube history (you can turn this off).
 - Several accounts and brand channels: switch between them in Settings.
 

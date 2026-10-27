@@ -5,6 +5,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { Track } from "@/types";
 import { bestImage, findAll, isObj, parseDuration, text, type Obj } from "./parse";
+import { storage } from "@/utils/storage";
 import { musicCall, ytSession } from "./session";
 
 export interface YtmPlaylist {
@@ -211,3 +212,43 @@ export async function setSongLiked(track: Track, on: boolean): Promise<void> {
 }
 
 export { subscribeLiked };
+
+/* -------------------- hearted songs → YouTube Music likes ------------------- */
+
+const syncedKey = (sessionKey: string) => `ytacct:heartsLiked:${sessionKey}`;
+let syncing = false;
+
+/**
+ * Songs hearted on this device (guest) are liked on the signed-in account,
+ * once each (a later unlike on YouTube is respected). Already-liked songs are
+ * just marked done. Returns how many were newly liked.
+ */
+export async function likeHeartedSongs(hearted: Track[]): Promise<number> {
+  const s = ytSession();
+  if (!s || syncing || liked.key !== s.key || !liked.list) return 0;
+  const done = new Set(storage.get<string[]>(syncedKey(s.key), []));
+  // oldest first, so the newest heart ends up on top of Liked songs
+  const todo = hearted.filter((t) => t.source === "youtube" && t.id.startsWith("yt:") && !done.has(t.id)).reverse();
+  if (!todo.length) return 0;
+  syncing = true;
+  let n = 0;
+  try {
+    for (const t of todo) {
+      if (ytSession()?.key !== s.key) break;
+      if (!isSongLiked(t.id)) {
+        try {
+          await setSongLiked(t, true);
+          n++;
+          await new Promise((r) => setTimeout(r, 350));
+        } catch {
+          continue; // not marked: tried again next time
+        }
+      }
+      done.add(t.id);
+      storage.set(syncedKey(s.key), [...done]);
+    }
+  } finally {
+    syncing = false;
+  }
+  return n;
+}
