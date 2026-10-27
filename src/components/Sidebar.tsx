@@ -16,6 +16,8 @@ import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
 import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { useYtSession } from "@/services/yt/session";
+import { useSavedSongs } from "@/hooks/useSavedSongs";
+import { ThumbsUp } from "lucide-react";
 import { useYtSubscriptions } from "@/services/yt/library";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -115,7 +117,9 @@ export const Sidebar = memo(function Sidebar({
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
-  const { playlists, createPlaylist, favorites, history } = usePlayer();
+  const { playlists, createPlaylist, history } = usePlayer();
+  const saved = useSavedSongs();
+  const favorites = saved.tracks;
   const { follows: localFollows } = useVideoLibrary();
   // Settings / About are shared: keep the mode you came from.
   const video = modeOf(route) === "video";
@@ -291,7 +295,7 @@ export const Sidebar = memo(function Sidebar({
           {!collapsed && (
             <p className="mb-1 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Collection</p>
           )}
-          {(video ? VIDEO_COLLECTION : COLLECTION).map((item) => (
+          {(video ? VIDEO_COLLECTION : saved.signedIn ? COLLECTION.map((i) => (i.key === "favorites" ? { ...i, label: "Liked songs", icon: ThumbsUp } : i)) : COLLECTION).map((item) => (
             <NavItemButton
               key={item.key}
               item={item}

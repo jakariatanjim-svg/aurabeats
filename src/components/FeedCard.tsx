@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Heart, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { FavIcon } from "@/components/FavIcon";
 import { formatCount, formatTime, gradientFrom, initials } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Equalizer } from "@/components/ui";
@@ -137,7 +138,7 @@ export function FeedCard({ track, context, priority = false }: { track: Track; c
               fav ? "text-accent" : "text-ink3 hover:text-ink",
             )}
           >
-            <Heart className={cn("h-4 w-4", fav && "fill-current")} />
+            <FavIcon track={track} on={fav} className="h-4 w-4" />
           </button>
         </div>
       </div>

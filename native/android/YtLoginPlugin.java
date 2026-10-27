@@ -273,6 +273,7 @@ public class YtLoginPlugin extends Plugin {
             call.reject("bad url");
             return;
         }
+        final String reqHost = host;
         io.execute(() -> {
             HttpURLConnection conn = null;
             try {
@@ -293,11 +294,13 @@ public class YtLoginPlugin extends Plugin {
                 conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9");
                 conn.setRequestProperty("Accept-Encoding", "gzip");
                 conn.setRequestProperty("Cookie", cookieHeader(jar));
-                conn.setRequestProperty("Origin", ORIGIN);
-                conn.setRequestProperty("X-Origin", ORIGIN);
-                conn.setRequestProperty("Referer", ORIGIN + "/");
+                // music.youtube.com calls are signed for their own origin
+                final String origin = reqHost.equals("music.youtube.com") ? "https://music.youtube.com" : ORIGIN;
+                conn.setRequestProperty("Origin", origin);
+                conn.setRequestProperty("X-Origin", origin);
+                conn.setRequestProperty("Referer", origin + "/");
                 conn.setRequestProperty("X-Goog-AuthUser", "0");
-                String auth = authHeader(jar);
+                String auth = authHeader(jar, origin);
                 if (auth != null) conn.setRequestProperty("Authorization", auth);
                 if (pageId != null && !pageId.isEmpty()) conn.setRequestProperty("X-Goog-PageId", pageId);
                 Iterator<String> keys = headers.keys();
@@ -351,17 +354,17 @@ public class YtLoginPlugin extends Plugin {
     }
 
     /** SAPISIDHASH (+ 1P / 3P variants): how youtube.com proves the session on API calls. */
-    private static String authHeader(Map<String, String> jar) throws Exception {
+    private static String authHeader(Map<String, String> jar, String origin) throws Exception {
         String sapisid = jar.get("SAPISID");
         if (sapisid == null) sapisid = jar.get("__Secure-3PAPISID");
         if (sapisid == null) return null;
         long ts = System.currentTimeMillis() / 1000;
         List<String> parts = new ArrayList<>();
-        parts.add("SAPISIDHASH " + ts + "_" + sha1(ts + " " + sapisid + " " + ORIGIN));
+        parts.add("SAPISIDHASH " + ts + "_" + sha1(ts + " " + sapisid + " " + origin));
         String p1 = jar.get("__Secure-1PAPISID");
-        if (p1 != null) parts.add("SAPISID1PHASH " + ts + "_" + sha1(ts + " " + p1 + " " + ORIGIN));
+        if (p1 != null) parts.add("SAPISID1PHASH " + ts + "_" + sha1(ts + " " + p1 + " " + origin));
         String p3 = jar.get("__Secure-3PAPISID");
-        if (p3 != null) parts.add("SAPISID3PHASH " + ts + "_" + sha1(ts + " " + p3 + " " + ORIGIN));
+        if (p3 != null) parts.add("SAPISID3PHASH " + ts + "_" + sha1(ts + " " + p3 + " " + origin));
         return TextUtils.join(" ", parts);
     }
 

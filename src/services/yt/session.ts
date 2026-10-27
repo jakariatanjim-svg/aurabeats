@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from "react";
 import { storage } from "@/utils/storage";
 import { ytAccounts, ytAccountsSupported } from "./accounts";
-import { ytCall, ytPing } from "./transport";
+import { ytCall, ytMusicCall, ytPing } from "./transport";
 
 export interface YtSession {
   account: string;
@@ -37,6 +37,12 @@ export function call<T = unknown>(endpoint: string, body: Record<string, unknown
   const s = ytSession();
   if (!s) return Promise.reject(new Error("Not signed in"));
   return ytCall<T>(s.account, endpoint, body, s.pageId || undefined);
+}
+
+export function musicCall<T = unknown>(endpoint: string, body: Record<string, unknown> = {}, query = ""): Promise<T> {
+  const s = ytSession();
+  if (!s) return Promise.reject(new Error("Not signed in"));
+  return ytMusicCall<T>(s.account, endpoint, body, s.pageId || undefined, query);
 }
 
 export function ping(url: string): Promise<number> {

@@ -31,15 +31,25 @@ export class YtCallError extends Error {
   }
 }
 
-/** POST youtubei/v1/<endpoint> for an account (and channel). Returns the parsed JSON. */
-export async function ytCall<T = unknown>(account: string, endpoint: string, body: Record<string, unknown> = {}, pageId?: string): Promise<T> {
+export const MUSIC_CLIENT = { clientName: "WEB_REMIX", clientVersion: "1.20261020.01.00", hl: "en", gl: "US" };
+
+async function post<T>(
+  host: string,
+  client: typeof WEB_CLIENT,
+  clientId: string,
+  account: string,
+  endpoint: string,
+  body: Record<string, unknown>,
+  pageId?: string,
+  query = "",
+): Promise<T> {
   if (!ytTransportReady()) throw new YtCallError("YouTube sign-in isn't available here yet");
   const res = await YtLogin.request({
     account,
-    url: `https://www.youtube.com/youtubei/v1/${endpoint}?prettyPrint=false`,
+    url: `https://${host}/youtubei/v1/${endpoint}?prettyPrint=false${query}`,
     method: "POST",
-    body: JSON.stringify({ context: { client: WEB_CLIENT }, ...body }),
-    headers: { "X-Youtube-Client-Name": "1", "X-Youtube-Client-Version": WEB_CLIENT.clientVersion },
+    body: JSON.stringify({ context: { client }, ...body }),
+    headers: { "X-Youtube-Client-Name": clientId, "X-Youtube-Client-Version": client.clientVersion },
     pageId,
   });
   let data: unknown;
@@ -53,6 +63,16 @@ export async function ytCall<T = unknown>(account: string, endpoint: string, bod
     throw new YtCallError(msg || `YouTube answered ${res.status}`, res.status);
   }
   return data as T;
+}
+
+/** POST youtubei/v1/<endpoint> for an account (and channel). Returns the parsed JSON. */
+export function ytCall<T = unknown>(account: string, endpoint: string, body: Record<string, unknown> = {}, pageId?: string): Promise<T> {
+  return post<T>("www.youtube.com", WEB_CLIENT, "1", account, endpoint, body, pageId);
+}
+
+/** Same on music.youtube.com (YouTube Music's WEB_REMIX client). `query` = extra URL params. */
+export function ytMusicCall<T = unknown>(account: string, endpoint: string, body: Record<string, unknown> = {}, pageId?: string, query = ""): Promise<T> {
+  return post<T>("music.youtube.com", MUSIC_CLIENT, "67", account, endpoint, body, pageId, query);
 }
 
 /** Plain signed-in GET (e.g. the "add to watch history" ping). Returns the status. */

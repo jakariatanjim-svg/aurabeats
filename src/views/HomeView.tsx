@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { Heart, Loader2, Play, RefreshCw } from "lucide-react";
+import { Heart, Loader2, Play, RefreshCw, ThumbsUp } from "lucide-react";
+import { useSavedSongs } from "@/hooks/useSavedSongs";
 import { useDiscoverFeed } from "@/hooks/useDiscoverFeed";
 import { FeedCard, FeedCardSkeleton } from "@/components/FeedCard";
 import { IconButton } from "@/components/ui";
@@ -10,7 +11,11 @@ import { usePlayer } from "@/hooks/usePlayer";
 const GRID = "grid grid-cols-1 gap-x-4 gap-y-7 min-[560px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
 
 export function HomeView(_props: { onNavigate?: (r: "search") => void }) {
-  const { playAll, favorites, history } = usePlayer();
+  const { playAll, history } = usePlayer();
+  // signed in to YouTube: built from your YouTube Music likes
+  const saved = useSavedSongs();
+  const favorites = saved.tracks;
+  const Fav = saved.signedIn ? ThumbsUp : Heart;
 
   const feed = useDiscoverFeed(favorites, history);
   const hasFavourites = favorites.length > 0;
@@ -37,20 +42,20 @@ export function HomeView(_props: { onNavigate?: (r: "search") => void }) {
       {/* For you — infinite, from favourites (= subscriptions) + listening */}
       <section>
         <FeedHeader
-          icon={<Heart className="h-5 w-5 fill-current text-rose-500" />}
+          icon={<Fav className="h-5 w-5 fill-current text-rose-500" />}
           title="For you"
-          subtitle={hasFavourites ? "Songs like the ones you hearted" : "Built only from songs you heart"}
+          subtitle={hasFavourites ? `Songs like the ones you ${saved.signedIn ? "liked" : "hearted"}` : `Built only from songs you ${saved.signedIn ? "like" : "heart"}`}
           onPlayAll={feed.items.length ? () => playAll(feed.items, 0) : undefined}
           onRefresh={hasFavourites ? feed.refresh : undefined}
         />
 
-        {!hasFavourites && (
+        {!hasFavourites && !saved.loading && (
           <div className="blur-panel glass-inset mb-6 flex items-center gap-3 p-4">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/12 text-rose-500">
-              <Heart className="h-5 w-5" />
+              <Fav className="h-5 w-5" />
             </span>
             <p className="text-[13px] leading-snug text-ink2 sm:text-sm">
-              Tap <Heart className="inline h-3.5 w-3.5 -translate-y-px text-rose-500" /> on songs you like. For you then fills up with
+              Tap <Fav className="inline h-3.5 w-3.5 -translate-y-px text-rose-500" /> on songs you like. For you then fills up with
               songs like them and more from those artists — nothing else.
             </p>
           </div>

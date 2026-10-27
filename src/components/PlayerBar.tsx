@@ -1,7 +1,8 @@
 import { showVolumeUi } from "@/utils/device";
-import { Heart, ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download, MonitorPlay } from "lucide-react";
+import { ListMusic, Maximize2, Radio as RadioIcon, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, Play, Pause, Loader2, Download, MonitorPlay } from "lucide-react";
 import { videoIdOfTrack, watchTrackVideo } from "@/utils/watchVideo";
 import { cn } from "@/utils/cn";
+import { FavIcon } from "@/components/FavIcon";
 import { formatTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, Slider } from "@/components/ui";
@@ -198,7 +199,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
               }}
               className={cn("shrink-0", fav ? "text-accent" : "opacity-40 hover:opacity-100")}
             >
-              <Heart className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", fav && "fill-current")} />
+              <FavIcon track={current} on={fav} className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </IconButton>
           )}
         </button>

@@ -27,6 +27,8 @@ import { showVolumeUi } from "@/utils/device";
 import { shuffleArray, uid } from "@/utils/format";
 import type { RepeatMode, ToastMessage, Track, UserPlaylist, PlayerSettings } from "@/types";
 import { undoable } from "@/components/UndoToast";
+import { useYtSession } from "@/services/yt/session";
+import { isSongLiked, likeApplies, setSongLiked, useLikedSongs } from "@/services/yt/music";
 
 /**
  * Resolve a stream URL — if it's a lazy `yt-resolve:ID` placeholder,
@@ -779,10 +781,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const toggleMute = useCallback(() => setMutedState((m) => !m), []);
 
   /* ------------------------------ favourites ----------------------------- */
-  const isFavorite = useCallback((id: string) => favorites.some((t) => t.id === id), [favorites]);
+  // Signed in to YouTube: YouTube songs use Like (YouTube Music) instead of the local heart.
+  const ytSessionNow = useYtSession();
+  const likedSongs = useLikedSongs(!!ytSessionNow);
+  const isFavorite = useCallback(
+    (id: string) => (ytSessionNow && id.startsWith("yt:") ? isSongLiked(id) : favorites.some((t) => t.id === id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [favorites, ytSessionNow, likedSongs],
+  );
 
   const toggleFavorite = useCallback(
     (track: Track) => {
+      if (likeApplies(track)) {
+        const on = !isSongLiked(track.id);
+        setSongLiked(track, on).then(
+          () => toast(on ? `Liked "${track.title}"` : `Removed like from "${track.title}"`, on ? "success" : "info"),
+          (e) => toast((e as Error)?.message || "Couldn't reach YouTube Music", "error"),
+        );
+        return;
+      }
       setFavorites((prev) => {
         const exists = prev.some((t) => t.id === track.id);
         if (exists) {

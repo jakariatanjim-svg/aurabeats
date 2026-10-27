@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
+import { useSavedSongs } from "@/hooks/useSavedSongs";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
@@ -204,7 +205,8 @@ function Shell() {
   const videoMode = isVideoRoute(isNative ? (layer.mode === "full" ? route : shownRoute) : route);
   const watching = isNative ? layer.mode === "full" : route.startsWith("watch:");
 
-  const { setExpanded, setQueueOpen, queueOpen, next, previous, toggle, current, favorites, volume, setVolume, settings, expanded } = usePlayer();
+  const { setExpanded, setQueueOpen, queueOpen, next, previous, toggle, current, volume, setVolume, settings, expanded } = usePlayer();
+  const saved = useSavedSongs();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -313,7 +315,7 @@ function Shell() {
       </div>
 
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
-      <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={favorites.length} />
+      <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={saved.tracks.length} likeMode={saved.signedIn} />
       <Tutorial route={shownRoute} onNavigate={navigate} />
       <ConfirmHost />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}

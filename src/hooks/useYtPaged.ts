@@ -28,10 +28,10 @@ export function dropYtLists(prefix: string) {
   for (const k of [...store.keys()]) if (k.split("|")[1]?.startsWith(prefix)) put(k, EMPTY);
 }
 
-export function useYtPaged<T>(
+export function useYtPaged<T, P extends { next?: string } = YtPage>(
   name: string,
-  load: (cursor?: string) => Promise<YtPage>,
-  pick: (p: YtPage) => T[],
+  load: (cursor?: string) => Promise<P>,
+  pick: (p: P) => T[],
 ): PagedState<T> & { more: () => void; refresh: () => void; remove: (match: (t: T) => boolean) => void } {
   const key = `${ytSession()?.key ?? "none"}|${name}`;
   const loadRef = useRef({ load, pick });

@@ -2,7 +2,6 @@ import { showVolumeUi } from "@/utils/device";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
-  Heart,
   Loader2,
   Pause,
   Play,
@@ -21,6 +20,7 @@ import {
   AlignLeft,
   MonitorPlay, Film } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { FavIcon } from "@/components/FavIcon";
 import { videoIdOfTrack, watchTrackVideo, canSaveOffline } from "@/utils/watchVideo";
 import { requestVideoDownload } from "@/services/videoDownload";
 import { formatTime, gradientFrom } from "@/utils/format";
@@ -399,7 +399,7 @@ export function FullScreenPlayer() {
                 </IconButton>
               </div>
               <div className="flex items-center justify-center gap-1.5 border-t border-line pt-2.5 sm:gap-3">
-                <IconButton aria-label="Favourite" onClick={() => toggleFavorite(current)} className={cn(fav && "text-accent hover:text-accent")}><Heart className={cn("h-5 w-5", fav && "fill-current")} /></IconButton>
+                <IconButton aria-label="Favourite" onClick={() => toggleFavorite(current)} className={cn(fav && "text-accent hover:text-accent")}><FavIcon track={current} on={fav} className="h-5 w-5" /></IconButton>
                 {(offline || canSaveOffline(current)) && (
                   <IconButton aria-label={offline ? "Remove from offline" : "Save for offline"} onClick={() => offline ? removeOffline(current.id) : saveOffline(current)} className={cn(offline && "text-cyan-500 hover:text-cyan-500")}>{offline ? <Trash2 className="h-5 w-5" /> : <DownloadCloud className="h-5 w-5" />}</IconButton>
                 )}
