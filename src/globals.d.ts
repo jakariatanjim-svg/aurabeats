@@ -11,6 +11,8 @@ declare const __APP_VERSION__: string;
 interface ImportMetaEnv {
   /** "1" in APK builds: enables app-only code such as the TV-client fallback. */
   readonly VITE_APK?: string;
+  /** version of extension/manifest.json (set by vite.config.ts) */
+  readonly VITE_EXT_VERSION?: string;
 }
 interface ImportMeta {
   readonly env: ImportMetaEnv;

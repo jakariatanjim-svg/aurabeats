@@ -8,8 +8,9 @@
  */
 import { useSyncExternalStore } from "react";
 import { storage } from "@/utils/storage";
+import { isNative } from "@/services/video/net";
 import { lsKeys, NS } from "@/utils/backup";
-import { YtLogin, ytCall, ytTransportReady } from "./transport";
+import { isWebAccount, onTransportChange, YtLogin, ytCall, ytTransportReady } from "./transport";
 
 export interface YtChannelId {
   /** set for Brand-account channels (sent as X-Goog-PageId) */
@@ -186,7 +187,8 @@ function fromProfile(id: string, p: Profile, prev?: YtAccount): YtAccount {
 
 /** Opens Google's sign-in; resolves with the new (or re-signed) account, null if cancelled. */
 export async function addAccount(): Promise<YtAccount | null> {
-  if (!ytAccountsSupported()) throw new Error("YouTube sign-in works in the Android app");
+  if (!ytAccountsSupported()) throw new Error("YouTube sign-in works in the Android app (or the website with the AuraBeats extension)");
+  if (!isNative) return addWebAccount();
   let id: string;
   try {
     id = (await YtLogin.signIn()).account;
@@ -223,6 +225,8 @@ export async function refreshAccount(id: string): Promise<void> {
   try {
     const p = await readProfile(id, prev.pageId);
     if (p === "signed-out") upsert({ ...prev, needsSignIn: true });
+    // website: browser sign-ins are numbered, the number can move to another account
+    else if (isWebAccount(id) && prev.email && p.email && p.email !== prev.email) upsert({ ...prev, needsSignIn: true });
     else upsert(fromProfile(id, p, prev));
   } catch (e) {
     if (/not signed in/i.test(String((e as Error)?.message))) upsert({ ...prev, needsSignIn: true });
@@ -248,7 +252,9 @@ export function hideAccount(id: string): { restore: () => void; forget: () => Pr
   set({ accounts: state.accounts.filter((a) => a.id !== id) });
   return {
     restore: () => set({ accounts: before.accounts, active: before.active }),
-    forget: () => YtLogin.remove({ account: id }).catch(() => undefined),
+    forget: async () => {
+      if (!isWebAccount(id)) await YtLogin.remove({ account: id }).catch(() => undefined);
+    },
   };
 }
 
@@ -259,3 +265,54 @@ export function checkAccountsOnce() {
   checked = true;
   for (const a of state.accounts) void refreshAccount(a.id).catch(() => undefined);
 }
+
+/* ---------------------------- website accounts ---------------------------- */
+
+const GOOGLE_SIGN_IN = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
+const GOOGLE_ADD = "https://accounts.google.com/AddSession?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
+
+/**
+ * Website: accounts are the Google accounts signed in to YouTube in this
+ * browser ("web:0", "web:1", …). Adds the next one not added yet; when there
+ * is none, opens Google's sign-in in a new tab.
+ */
+async function addWebAccount(): Promise<YtAccount | null> {
+  set({ busy: true });
+  try {
+    const known = new Set(state.accounts.filter((a) => isWebAccount(a.id)).map((a) => a.email || a.name));
+    for (let i = 0; i < 10; i++) {
+      const id = `web:${i}`;
+      const p = await readProfile(id);
+      if (p === "signed-out") {
+        window.open(i === 0 ? GOOGLE_SIGN_IN : GOOGLE_ADD, "_blank", "noopener");
+        throw new Error(i === 0 ? "Sign in to YouTube in the new tab, then tap Connect again" : "Sign in with another account in the new tab, then tap Add account again");
+      }
+      const key = p.email || p.name;
+      if (known.has(key)) {
+        // re-connect an account that had signed out
+        const old = state.accounts.find((a) => isWebAccount(a.id) && (a.email || a.name) === key);
+        if (old?.needsSignIn) {
+          const acc = fromProfile(id, p, { ...old, id });
+          set({ accounts: state.accounts.filter((a) => a.id !== old.id) });
+          upsert(acc);
+          set({ active: id });
+          return acc;
+        }
+        continue;
+      }
+      const acc = fromProfile(id, p, state.accounts.find((a) => a.id === id));
+      upsert(acc);
+      set({ active: id });
+      return acc;
+    }
+    return null;
+  } finally {
+    set({ busy: false });
+  }
+}
+
+// Website: the extension connects a moment after the page loads.
+onTransportChange(() => {
+  set({});
+  checkAccountsOnce();
+});

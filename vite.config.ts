@@ -6,6 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
+import type { Plugin } from "vite";
+import { zipExtension } from "./scripts/zip-extension.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,7 +70,7 @@ function chunkGroup(id: string): string | undefined {
   }
   const f = id.replace(/\\/g, "/");
   if (f.includes("/src/utils/romanize")) return "romanize";
-  if (/\/src\/views\/(SettingsView|AboutView|PrivacyView)|\/src\/components\/(SyncSection|AccountSection|DataSection|HistorySection|video\/VideoSettingsSection)|\/src\/utils\/fullBackup/.test(f)) return "settings";
+  if (/\/src\/views\/(SettingsView|AboutView|PrivacyView)|\/src\/components\/(SyncSection|YtAccountSection|ExtensionCard|DataSection|HistorySection|video\/VideoSettingsSection)|\/src\/utils\/fullBackup/.test(f)) return "settings";
   if (/\/src\/views\/video\//.test(f)) return "video";
   if (/\/src\/views\/(HomeView|SearchView|LibraryViews|DeviceMusicView)/.test(f)) return "music";
   if (/\/src\/components\/(FullScreenPlayer|LyricsViewer)/.test(f)) return "player";
@@ -78,9 +80,31 @@ function chunkGroup(id: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Website: the AuraBeats Connector browser extension (extension/) is packed
+ * into /aurabeats-extension.zip on every build; Settings offers it.
+ */
+const extDir = path.resolve(__dirname, "extension");
+let extVersion = "1.0.0";
+try {
+  extVersion = JSON.parse(fs.readFileSync(path.join(extDir, "manifest.json"), "utf8")).version || extVersion;
+} catch {
+  /* keep the fallback */
+}
+
+function extensionZip(): Plugin {
+  return {
+    name: "aurabeats-extension-zip",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "aurabeats-extension.zip", source: zipExtension(extDir) });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), ...(isApk ? [viteSingleFile()] : [])],
+  plugins: [react(), tailwindcss(), ...(isApk ? [viteSingleFile()] : [extensionZip()])],
   build: isApk
     ? undefined
     : {
@@ -90,6 +114,7 @@ export default defineConfig({
   define: {
     __APP_BUILD_SHA__: JSON.stringify(buildSha),
     __APP_VERSION__: JSON.stringify(appVersion),
+    "import.meta.env.VITE_EXT_VERSION": JSON.stringify(extVersion),
   },
   resolve: {
     alias: {

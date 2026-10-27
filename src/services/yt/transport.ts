@@ -2,11 +2,13 @@
  * Signed-in YouTube calls (youtube.com's own API, "InnerTube", WEB client).
  *
  * The session never lives in JS. The Android app's YtLogin plugin keeps it
- * (encrypted) and adds it to each call. The website will use the browser
- * extension the same way (step 4), so callers only see ytCall().
+ * (encrypted) and adds it to each call. The website uses the AuraBeats
+ * Connector browser extension (the browser's own youtube.com sign-in) the
+ * same way, so callers only see ytCall().
  */
 import { registerPlugin } from "@capacitor/core";
 import { isNative } from "@/services/video/net";
+import { extension, extensionRequest } from "./extension";
 
 interface YtLoginNative {
   signIn(): Promise<{ account: string }>;
@@ -17,8 +19,22 @@ interface YtLoginNative {
 
 export const YtLogin = registerPlugin<YtLoginNative>("YtLogin");
 
-/** Where signed-in calls can run right now. */
-export const ytTransportReady = () => isNative;
+/** Where signed-in calls can run right now (app, or website + extension). */
+export const ytTransportReady = () => isNative || extension.get().connected;
+
+/** Called when the website's extension connects. */
+export const onTransportChange = (f: () => void) => extension.subscribe(f);
+
+/** Website accounts are the browser's Google sign-ins: "web:<index>". */
+export const isWebAccount = (id: string) => id.startsWith("web:");
+
+type Req = { account: string; url: string; method: string; body?: string; headers?: Record<string, string>; pageId?: string };
+
+function send(o: Req): Promise<{ status: number; body: string }> {
+  if (isNative) return YtLogin.request(o);
+  const { account, ...req } = o;
+  return extensionRequest({ ...req, authUser: account.slice(4) || "0" });
+}
 
 export const WEB_CLIENT = { clientName: "WEB", clientVersion: "2.20261020.01.00", hl: "en", gl: "US" };
 
@@ -44,7 +60,7 @@ async function post<T>(
   query = "",
 ): Promise<T> {
   if (!ytTransportReady()) throw new YtCallError("YouTube sign-in isn't available here yet");
-  const res = await YtLogin.request({
+  const res = await send({
     account,
     url: `https://${host}/youtubei/v1/${endpoint}?prettyPrint=false${query}`,
     method: "POST",
@@ -78,6 +94,6 @@ export function ytMusicCall<T = unknown>(account: string, endpoint: string, body
 /** Plain signed-in GET (e.g. the "add to watch history" ping). Returns the status. */
 export async function ytPing(account: string, url: string, pageId?: string): Promise<number> {
   if (!ytTransportReady()) throw new YtCallError("YouTube sign-in isn't available here yet");
-  const res = await YtLogin.request({ account, url, method: "GET", pageId });
+  const res = await send({ account, url, method: "GET", pageId });
   return res.status;
 }

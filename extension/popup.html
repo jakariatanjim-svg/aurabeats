@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { margin: 0; width: 250px; font: 13px/1.4 system-ui, sans-serif; background: #0b0b12; color: #eee; }
+      .wrap { padding: 14px; display: grid; gap: 10px; }
+      .head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; }
+      .head img { width: 24px; height: 24px; border-radius: 6px; }
+      .status { padding: 8px 10px; border-radius: 10px; background: #ffffff10; }
+      .ok { color: #34d399; } .warn { color: #fbbf24; }
+      a { display: block; text-align: center; padding: 8px; border-radius: 999px; background: #8b5cf6; color: #fff; text-decoration: none; font-weight: 700; }
+      a.ghost { background: transparent; border: 1px solid #ffffff30; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="head"><img src="icon-48.png" alt="" />AuraBeats Connector</div>
+      <div id="status" class="status">…</div>
+      <a href="https://aurabeats.pages.dev/settings" target="_blank">Open AuraBeats</a>
+      <a id="yt" class="ghost" href="https://www.youtube.com/" target="_blank" hidden>Sign in on YouTube</a>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

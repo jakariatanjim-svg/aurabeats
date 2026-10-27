@@ -12,6 +12,9 @@ import { confirmAction } from "@/components/Confirm";
 import { undoable } from "@/components/UndoToast";
 import { Switch } from "@/components/DataSection";
 import { useYtPrefs, ytPrefs } from "@/services/yt/session";
+import { useExtension } from "@/services/yt/extension";
+import { isNative } from "@/services/video/net";
+import { ExtensionCard } from "@/components/ExtensionCard";
 import {
   addAccount,
   checkAccountsOnce,
@@ -52,8 +55,11 @@ export function YtAccountSection() {
   const prefs = useYtPrefs();
   const [refreshing, setRefreshing] = useState<string | null>(null);
 
-  useEffect(() => checkAccountsOnce(), []);
-  if (!ytAccountsSupported()) return null;
+  const ext = useExtension();
+  useEffect(() => checkAccountsOnce(), [ext.connected]);
+  // app: always; website: the extension card, then accounts once it's connected
+  if (isNative && !ytAccountsSupported()) return null;
+  const ready = ytAccountsSupported();
 
   const add = async () => {
     try {
@@ -97,7 +103,8 @@ export function YtAccountSection() {
         }
       />
       <div className="blur-panel divide-y divide-line p-0">
-        {accounts.map((a) => (
+        {!isNative && <ExtensionCard />}
+        {ready && accounts.map((a) => (
           <AccountRow
             key={a.id}
             a={a}
@@ -109,12 +116,13 @@ export function YtAccountSection() {
             onSignInAgain={() => void add()}
           />
         ))}
-        {accounts.length > 0 && (
+        {ready && accounts.length > 0 && (
           <div className="flex items-center justify-between gap-3 p-4">
             <p className="min-w-0 text-[13px] font-semibold text-ink">Save what I watch to YouTube history</p>
             <Switch on={prefs.recordHistory} label="Save what I watch to YouTube history" onClick={() => ytPrefs.set({ recordHistory: !prefs.recordHistory })} />
           </div>
         )}
+        {ready && (
         <div className="flex items-center justify-between gap-3 p-4">
           <p className="min-w-0 text-[12px] text-ink3">{accounts.length ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}` : "Guest mode"}</p>
           <button
@@ -124,9 +132,10 @@ export function YtAccountSection() {
             className="focus-ring inline-flex shrink-0 items-center justify-center gap-2.5 rounded-full border border-line bg-white px-4 py-2.5 text-[13px] font-semibold text-[#1f1f1f] shadow-sm transition hover:shadow-md active:scale-[0.98] disabled:opacity-60"
           >
             {busy ? <Spinner className="h-[18px] w-[18px]" /> : <GoogleG className="h-[18px] w-[18px]" />}
-            {accounts.length ? "Add account" : "Sign in with Google"}
+            {accounts.length ? "Add account" : isNative ? "Sign in with Google" : "Connect YouTube"}
           </button>
         </div>
+        )}
       </div>
     </section>
   );

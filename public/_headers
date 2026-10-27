@@ -9,3 +9,6 @@
 
 /sw.js
   Cache-Control: no-cache
+
+/aurabeats-extension.zip
+  Cache-Control: no-cache

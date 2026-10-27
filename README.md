@@ -23,7 +23,7 @@ Songs and YouTube in one calm, free player — no account, no subscription.
 
 AuraBeats brings full-length songs and YouTube videos together in a single, uncluttered player. Search once, tap, and listen — on the web, as an installed app, or on Android.
 
-Everything personal — favourites, playlists, history and followed channels — stays on your own device.
+Everything personal — favourites, playlists, history and followed channels — stays on your own device. If you like, sign in with your YouTube account to bring your subscriptions, likes and playlists along.
 
 <br/>
 
@@ -98,17 +98,54 @@ Everything personal — favourites, playlists, history and followed channels —
 
 <br/>
 
-## Privacy
+## YouTube account (optional)
 
-- **No account.** Nothing to sign up for.
-- **On your device.** Favourites, playlists, history and follows are stored locally and can be cleared in Settings at any time.
-- **No servers of our own.** AuraBeats streams directly from public sources and stores no media.
+AuraBeats works fully without an account. Signing in adds your own YouTube to it:
+
+- **Video** — Home shows YouTube's recommendations for you, Following shows your subscriptions, and Library has your History, Watch later, liked videos, playlists and your channel. **Like**, **Save** to playlists and **Subscribe** right from the video page.
+- **Music** — songs get a 👍 **Like** (YouTube Music) instead of the heart. Saved shows your liked songs, and Library shows your YouTube Music playlists.
+- What you watch is added to your YouTube history (you can turn this off).
+- Several accounts and brand channels: switch between them in Settings.
+
+Your sign-in never leaves your device or browser, and it is never part of a backup or export. Signing out of AuraBeats doesn't change anything on your YouTube account.
+
+<details>
+<summary><b>Android app</b></summary>
+<br/>
+
+1. Open **Settings → YouTube account** and tap **Sign in with Google**.
+2. Sign in on Google's own page. You're back in AuraBeats when it's done.
+3. Add more accounts with **Add account**; pick a channel or tap **Switch** to change.
+
+</details>
+
+<details>
+<summary><b>Website (Chrome, Edge or Brave on a computer)</b></summary>
+<br/>
+
+The website uses a small browser extension, *AuraBeats Connector*, which lets AuraBeats use the YouTube account you're already signed in to in that browser.
+
+1. Open [aurabeats.pages.dev/settings](https://aurabeats.pages.dev/settings) → **YouTube account** and tap **Download**.
+2. Unzip the file. Keep the folder; don't delete it later.
+3. Open `chrome://extensions` (Edge: `edge://extensions`, Brave: `brave://extensions`).
+4. Turn on **Developer mode**.
+5. Click **Load unpacked** and choose the unzipped folder.
+6. Make sure you're signed in on [youtube.com](https://www.youtube.com/) in the same browser.
+7. Reload AuraBeats. Settings shows **Extension connected ✓**. Tap **Connect YouTube**.
+
+To use another Google account, sign in to it on YouTube in the same browser, then tap **Add account**.
+
+**Updating the extension:** when Settings shows **Update**, download it again, unzip it over the same folder, and press the reload button on *AuraBeats Connector* in the extensions page.
+
+</details>
 
 <br/>
 
-## Coming soon
+## Privacy
 
-- **Sign in to YouTube with Google** — use your Gmail account to bring your subscriptions, playlists and likes into AuraBeats.
+- **No account needed.** Nothing to sign up for. The optional YouTube sign-in stays on your device or browser.
+- **On your device.** Favourites, playlists, history and follows are stored locally and can be cleared in Settings at any time.
+- **No servers of our own.** AuraBeats streams directly from public sources and stores no media.
 
 <br/>
 
