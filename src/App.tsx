@@ -23,7 +23,7 @@ import { cn } from "@/utils/cn";
 import { App as CapApp } from "@capacitor/app";
 import { runBackHandler } from "@/utils/backStack";
 import { baseOrientation } from "@/utils/orientation";
-import { autoSync } from "@/services/ytAccount";
+import { dropOldAccountData } from "@/services/yt/accounts";
 import { subscribeVideoSettings } from "@/services/video/settings";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
@@ -145,9 +145,9 @@ function Shell() {
     };
   }, [scrollTop]);
 
-  // YouTube account (app): refresh subscriptions/likes/playlists when stale.
+  // The old TV sign-in is gone: wipe what it left behind (once, harmless).
   useEffect(() => {
-    if (isNative) autoSync();
+    dropOldAccountData();
   }, []);
 
   // App: upright on phones unless "Rotate for full screen" is on.

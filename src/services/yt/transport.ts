@@ -1,0 +1,56 @@
+/**
+ * Signed-in YouTube calls (youtube.com's own API, "InnerTube", WEB client).
+ *
+ * The session never lives in JS. The Android app's YtLogin plugin keeps it
+ * (encrypted) and adds it to each call. The website will use the browser
+ * extension the same way (step 4), so callers only see ytCall().
+ */
+import { registerPlugin } from "@capacitor/core";
+import { isNative } from "@/services/video/net";
+
+interface YtLoginNative {
+  signIn(): Promise<{ account: string }>;
+  list(): Promise<{ accounts: string[] }>;
+  remove(o: { account: string }): Promise<void>;
+  request(o: { account: string; url: string; method: string; body?: string; headers?: Record<string, string>; pageId?: string }): Promise<{ status: number; body: string }>;
+}
+
+export const YtLogin = registerPlugin<YtLoginNative>("YtLogin");
+
+/** Where signed-in calls can run right now. */
+export const ytTransportReady = () => isNative;
+
+export const WEB_CLIENT = { clientName: "WEB", clientVersion: "2.20261020.01.00", hl: "en", gl: "US" };
+
+export class YtCallError extends Error {
+  constructor(
+    message: string,
+    readonly status = 0,
+  ) {
+    super(message);
+  }
+}
+
+/** POST youtubei/v1/<endpoint> for an account (and channel). Returns the parsed JSON. */
+export async function ytCall<T = unknown>(account: string, endpoint: string, body: Record<string, unknown> = {}, pageId?: string): Promise<T> {
+  if (!ytTransportReady()) throw new YtCallError("YouTube sign-in isn't available here yet");
+  const res = await YtLogin.request({
+    account,
+    url: `https://www.youtube.com/youtubei/v1/${endpoint}?prettyPrint=false`,
+    method: "POST",
+    body: JSON.stringify({ context: { client: WEB_CLIENT }, ...body }),
+    headers: { "X-Youtube-Client-Name": "1", "X-Youtube-Client-Version": WEB_CLIENT.clientVersion },
+    pageId,
+  });
+  let data: unknown;
+  try {
+    data = JSON.parse(res.body || "{}");
+  } catch {
+    throw new YtCallError(`YouTube answered ${res.status}`, res.status);
+  }
+  if (res.status >= 400) {
+    const msg = (data as { error?: { message?: string } })?.error?.message;
+    throw new YtCallError(msg || `YouTube answered ${res.status}`, res.status);
+  }
+  return data as T;
+}

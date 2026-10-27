@@ -100,7 +100,8 @@ jobs:
 
       # Native plugins (native/android): VideoSaver = in-app video / song
       # downloads (joins YouTube's picture + sound with Android's MediaMuxer),
-      # DeviceMusic = songs already on the phone, Pip = floating video window.
+      # DeviceMusic = songs already on the phone, Pip = floating video window,
+      # YtLogin = YouTube account sign-in.
       # MainActivity registers them.
       - name: Add native plugins
         run: |
