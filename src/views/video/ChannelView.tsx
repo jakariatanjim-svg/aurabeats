@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
+import { useVideoLibrary } from "@/hooks/useVideoLibrary";
+import { FollowButton } from "@/components/video/YtActions";
 import { getChannel } from "@/services/video/api";
 import type { ChannelPage } from "@/services/video/types";
 import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton } from "@/components/video/VideoCards";
@@ -41,7 +42,6 @@ export function ChannelView({ id }: { id: string }) {
 
   if (error && !page) return <ErrorState message={error} onRetry={() => setNonce((n) => n + 1)} />;
 
-  const following = videoLibrary.isFollowing(id);
 
   return (
     <div className="space-y-6">
@@ -71,12 +71,7 @@ export function ChannelView({ id }: { id: string }) {
         </div>
         {page && (
           <div className="flex items-center gap-2">
-            <Button
-              variant={following ? "outline" : "solid"}
-              onClick={() => videoLibrary.toggleFollow({ id, name: page.name, avatar: page.avatar })}
-            >
-              {following ? "Following" : "Follow"}
-            </Button>
+            <FollowButton ch={{ id, name: page.name, avatar: page.avatar }} />
             <a
               href={`https://www.youtube.com/channel/${id}`}
               target="_blank"

@@ -10,6 +10,8 @@ import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { confirmAction } from "@/components/Confirm";
 import { undoable } from "@/components/UndoToast";
+import { Switch } from "@/components/DataSection";
+import { useYtPrefs, ytPrefs } from "@/services/yt/session";
 import {
   addAccount,
   checkAccountsOnce,
@@ -47,6 +49,7 @@ function Photo({ src, className }: { src?: string; className?: string }) {
 export function YtAccountSection() {
   const { accounts, active, busy } = useYtAccounts();
   const { toast } = usePlayer();
+  const prefs = useYtPrefs();
   const [refreshing, setRefreshing] = useState<string | null>(null);
 
   useEffect(() => checkAccountsOnce(), []);
@@ -106,6 +109,12 @@ export function YtAccountSection() {
             onSignInAgain={() => void add()}
           />
         ))}
+        {accounts.length > 0 && (
+          <div className="flex items-center justify-between gap-3 p-4">
+            <p className="min-w-0 text-[13px] font-semibold text-ink">Save what I watch to YouTube history</p>
+            <Switch on={prefs.recordHistory} label="Save what I watch to YouTube history" onClick={() => ytPrefs.set({ recordHistory: !prefs.recordHistory })} />
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3 p-4">
           <p className="min-w-0 text-[12px] text-ink3">{accounts.length ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}` : "Guest mode"}</p>
           <button

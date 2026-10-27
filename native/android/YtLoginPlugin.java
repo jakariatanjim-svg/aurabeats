@@ -263,7 +263,13 @@ public class YtLoginPlugin extends Plugin {
         final String body = call.getString("body", null);
         final String pageId = call.getString("pageId", null);
         final JSObject headers = call.getObject("headers", new JSObject());
-        if (!url.startsWith("https://")) {
+        // the session is only ever sent to youtube.com
+        String host = "";
+        try {
+            host = new URL(url).getHost();
+        } catch (Exception ignored) {
+        }
+        if (!url.startsWith("https://") || !(host.equals("youtube.com") || host.endsWith(".youtube.com"))) {
             call.reject("bad url");
             return;
         }

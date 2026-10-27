@@ -54,3 +54,10 @@ export async function ytCall<T = unknown>(account: string, endpoint: string, bod
   }
   return data as T;
 }
+
+/** Plain signed-in GET (e.g. the "add to watch history" ping). Returns the status. */
+export async function ytPing(account: string, url: string, pageId?: string): Promise<number> {
+  if (!ytTransportReady()) throw new YtCallError("YouTube sign-in isn't available here yet");
+  const res = await YtLogin.request({ account, url, method: "GET", pageId });
+  return res.status;
+}

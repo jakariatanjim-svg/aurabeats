@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { layerRefs, watchLayer, useWatchLayer } from "@/components/video/watchLayer";
 import { requestVideoDownload } from "@/services/videoDownload";
-import { Bookmark, BookmarkCheck, ChevronDown, Download, ExternalLink, RefreshCw, Share2, ShieldCheck, ThumbsUp } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, RefreshCw, Share2, ShieldCheck } from "lucide-react";
+import { FollowButton, LikeButton, SaveButton } from "@/components/video/YtActions";
 import { cn } from "@/utils/cn";
 import { formatCount, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -244,8 +245,6 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     }
   };
 
-  const following = videoLibrary.isFollowing(info?.authorId);
-  const saved = lib.later.some((v) => v.id === id);
   const progressOf = (vid: string) => {
     const h = lib.history.find((x) => x.id === vid);
     return h && h.duration ? h.position / h.duration : undefined;
@@ -345,28 +344,12 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                     {info.subscribers && <span className="block truncate text-xs text-ink3">{info.subscribers}</span>}
                   </span>
                 </a>
-                {info.authorId && (
-                  <Button
-                    variant={following ? "outline" : "solid"}
-                    onClick={() =>
-                      videoLibrary.toggleFollow({ id: info.authorId!, name: info.author, avatar: info.authorAvatar })
-                    }
-                  >
-                    {following ? "Following" : "Follow"}
-                  </Button>
-                )}
+                {info.authorId && <FollowButton ch={{ id: info.authorId, name: info.author, avatar: info.authorAvatar }} />}
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {info.likes !== undefined && (
-                  <span className="glass-inset inline-flex items-center gap-1.5 rounded-full border border-line bg-ink/[0.03] px-3.5 py-2 text-xs font-semibold text-ink2">
-                    <ThumbsUp className="h-3.5 w-3.5" /> {formatCount(info.likes)}
-                  </span>
-                )}
-                <Button variant="outline" className="px-3.5 text-xs" onClick={() => videoLibrary.toggleLater(info)}>
-                  {saved ? <BookmarkCheck className="h-3.5 w-3.5 text-accent" /> : <Bookmark className="h-3.5 w-3.5" />}
-                  {saved ? "Saved" : "Watch later"}
-                </Button>
+                <LikeButton id={id} likes={info.likes} />
+                <SaveButton v={info} />
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
                   <Share2 className="h-3.5 w-3.5" /> Share
                 </Button>

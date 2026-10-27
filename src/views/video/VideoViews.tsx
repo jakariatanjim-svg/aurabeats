@@ -9,6 +9,8 @@ import { Button, Chip, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { routeToPath, type RouteKey } from "@/routes";
 import { openSearch } from "@/utils/searchNav";
+import { useYtSession } from "@/services/yt/session";
+import { YtFollowing, YtHome, YtLibrary } from "./YtViews";
 
 function useProgress() {
   const lib = useVideoLibrary();
@@ -31,7 +33,12 @@ function useFollowingFeed() {
 
 /* --------------------------------- Home ---------------------------------- */
 
-export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
+export function VideoHomeView(props: { onNavigate: (r: RouteKey) => void }) {
+  return useYtSession() ? <YtHome /> : <LocalHome {...props} />;
+}
+
+/** Guest mode: built from what you watched and the channels you follow. */
+function LocalHome({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
   const lib = useVideoLibrary();
   const progress = useProgress();
   const { ids, feed } = useFollowingFeed();
@@ -129,7 +136,7 @@ export function VideoHomeView({ onNavigate }: { onNavigate: (r: RouteKey) => voi
 /* ------------------------------- Following ------------------------------- */
 
 export function VideoSubsView(props: { onNavigate?: (r: RouteKey) => void }) {
-  return <LocalFollowing {...props} />;
+  return useYtSession() ? <YtFollowing /> : <LocalFollowing {...props} />;
 }
 
 /** Channels followed on this device (guest mode). */
@@ -205,6 +212,10 @@ function LocalFollowing(_props: { onNavigate?: (r: RouteKey) => void }) {
 /* -------------------------------- Library -------------------------------- */
 
 export function VideoLibraryView() {
+  return useYtSession() ? <YtLibrary /> : <LocalLibrary />;
+}
+
+function LocalLibrary() {
   const lib = useVideoLibrary();
   const progress = useProgress();
   const [tab, setTab] = useState<"history" | "later">(lib.later.length && !lib.history.length ? "later" : "history");
