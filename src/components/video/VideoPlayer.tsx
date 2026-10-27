@@ -20,7 +20,8 @@ import { isNative } from "@/services/video/net";
 import { baseOrientation } from "@/utils/orientation";
 import { showVolumeUi } from "@/utils/device";
 import { layerControls, watchLayer } from "./watchLayer";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as RPointerEvent } from "react";
+import { pip, usePipActive, usePipSupported } from "@/services/pip";
 import {
   Check,
   FastForward,
@@ -44,7 +45,7 @@ import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
 import { storage } from "@/utils/storage";
 import type { VideoDetails } from "@/services/video/types";
-import { getVideoSettings } from "@/services/video/settings";
+import { getVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
@@ -63,6 +64,8 @@ export interface VideoPlayerProps {
   mini?: boolean;
   /** dragging the video down (the watch layer turns it into the miniplayer) */
   onDrag?: (phase: "move" | "end", dy: number, velocity: number) => void;
+  /** the picture's real shape (width / height), once known — sizes the player */
+  onAspect?: (ratio: number) => void;
 }
 
 type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
@@ -74,7 +77,7 @@ const mediaErr = (el: HTMLMediaElement) => {
   return e ? ` (code ${e.code}${e.message ? `: ${e.message.slice(0, 80)}` : ""})` : "";
 };
 
-export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag }: VideoPlayerProps) {
+export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag, onAspect }: VideoPlayerProps) {
   const plan: Plan | null = useMemo(() => makePlan(details.streams), [details.streams]);
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -83,7 +86,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const dual = plan?.mode === "dual";
   const master = useCallback(() => (dual ? audioRef.current : videoRef.current), [dual]);
 
-  const settings = getVideoSettings();
+  const settings = useSyncExternalStore(subscribeVideoSettings, getVideoSettings, getVideoSettings);
+  const inPip = usePipActive();
+  const pipOk = usePipSupported();
   const [auto, setAuto] = useState(settings.quality === "auto");
   const [qIndex, setQIndex] = useState(() =>
     plan && plan.qualities.length
@@ -363,7 +368,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     a.addEventListener("seeking", onAudioSeeking);
 
     const loop = setInterval(() => {
-      if (a.paused || !v.getAttribute("src") || v.readyState < 2 || document.hidden) return;
+      if (a.paused || !v.getAttribute("src") || v.readyState < 2 || (document.hidden && !pip.active)) return;
       const diff = v.currentTime - a.currentTime;
       if (Math.abs(diff) > 0.8) {
         v.currentTime = a.currentTime + 0.1;
@@ -437,7 +442,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       const v = videoRef.current;
       const a = audioRef.current;
       if (!v || !a || !v.getAttribute("src")) return;
-      if (document.hidden && document.pictureInPictureElement !== v) v.pause();
+      if (document.hidden && document.pictureInPictureElement !== v && !pip.active) v.pause();
       else if (!a.paused) {
         v.currentTime = a.currentTime;
         void v.play().catch(() => {});
@@ -488,6 +493,64 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     v.removeAttribute("src");
     v.load();
   }, [audioOnly, dual]);
+
+  /* ------------------- picture shape + floating window ------------------ */
+
+  // The real picture size: sizes the player on the page (vertical / 4:3 /
+  // wide videos) and the floating window.
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  const aspectCb = useRef(onAspect);
+  aspectCb.current = onAspect;
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const read = () => {
+      if (!v.videoWidth || !v.videoHeight) return;
+      setDims((d) => (d && d.w === v.videoWidth && d.h === v.videoHeight ? d : { w: v.videoWidth, h: v.videoHeight }));
+      aspectCb.current?.(v.videoWidth / v.videoHeight);
+    };
+    read();
+    v.addEventListener("loadedmetadata", read);
+    v.addEventListener("resize", read);
+    return () => {
+      v.removeEventListener("loadedmetadata", read);
+      v.removeEventListener("resize", read);
+    };
+  }, []);
+
+  // Leaving the app while the video plays → floating window (Android 8+).
+  const hasPicture = Boolean(videoSrc) && !audioOnly;
+  useEffect(() => {
+    if (!isNative) return;
+    pip.configure({
+      auto: settings.pipOnLeave && playing && hasPicture,
+      playing,
+      width: dims?.w ?? 16,
+      height: dims?.h ?? 9,
+    });
+  }, [settings.pipOnLeave, playing, hasPicture, dims]);
+  useEffect(
+    () => () => {
+      // the video is gone (closed / another one): nothing to float anymore
+      pip.configure({ auto: false, playing: false, width: 16, height: 9 });
+    },
+    [],
+  );
+  // The window's ✕ stops the video; its button plays / pauses.
+  const pipCbs = useRef({ pauseBoth, togglePlay });
+  pipCbs.current = { pauseBoth, togglePlay };
+  useEffect(() => {
+    const offDismiss = pip.onDismiss(() => pipCbs.current.pauseBoth());
+    const offToggle = pip.onToggle(() => pipCbs.current.togglePlay());
+    return () => {
+      offDismiss();
+      offToggle();
+    };
+  }, []);
+  // In the window: just the picture.
+  useEffect(() => {
+    if (inPip) setMenu(false);
+  }, [inPip]);
 
   /* ---------------------------- fullscreen ------------------------------ */
 
@@ -584,14 +647,24 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   useEffect(() => {
     if (!isNative) return;
     const mq = window.matchMedia("(orientation: landscape)");
+    let timer = 0;
+    // A moment later: the floating window also changes the page's shape,
+    // and its own signal can arrive just after this one.
     const on = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(check, 350);
+    };
+    const check = () => {
       const r = rotateRef.current;
-      if (!getVideoSettings().rotateFullscreen) return;
+      if (!getVideoSettings().rotateFullscreen || pip.active) return;
       if (mq.matches && fsRef.current === "off" && !r.mini && r.started() && isLandscapeVideo()) void r.enterFs(true);
       else if (!mq.matches && fsRef.current !== "off" && fsByRotation.current) void r.exitFs();
     };
     mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
+    return () => {
+      window.clearTimeout(timer);
+      mq.removeEventListener("change", on);
+    };
   }, []);
   const toggleFs = () => void (fs === "off" ? enterFs() : exitFs());
   useEffect(() => {
@@ -603,6 +676,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const togglePip = async () => {
     const v = videoRef.current;
     if (!v) return;
+    if (isNative) {
+      if (audioOnly) setAudioOnly(false);
+      await pip.enter();
+      return;
+    }
     try {
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
       else {
@@ -880,7 +958,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
 
   if (!plan) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-black p-6 text-center text-sm text-white/80">
+      <div className="flex h-full w-full items-center justify-center bg-black p-6 text-center text-sm text-white/80 sm:rounded-2xl">
         {details.live ? "This browser can't play live streams. Try the app or Chrome/Safari." : "No playable format for this device."}
       </div>
     );
@@ -889,7 +967,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const shown = scrub ?? time;
   const pct = duration ? (shown / duration) * 100 : 0;
   const bufPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
-  const showUi = !mini && (controls || !playing);
+  const showUi = !mini && !inPip && (controls || !playing);
 
   return (
     <div
@@ -898,7 +976,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       onPointerMove={(e) => e.pointerType === "mouse" && poke()}
       className={cn(
         "group/player relative w-full overflow-hidden bg-black text-white select-none",
-        fs === "off" && "aspect-video sm:rounded-2xl",
+        // fills the spot the page reserved (shaped like the video)
+        fs === "off" && "h-full sm:rounded-2xl",
+        inPip && "rounded-none!",
         fs === "native" && "h-full",
         fs === "css" && "fixed inset-0 z-[200] pt-(--sa-top) pb-(--sa-bottom)",
         !showUi && "cursor-none",
@@ -964,7 +1044,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       {/* center */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         {buffering && wantPlay.current ? (
-          <Loader2 className={cn("animate-spin text-white/90 drop-shadow", mini ? "h-16 w-16" : "h-12 w-12")} />
+          <Loader2 className={cn("animate-spin text-white/90 drop-shadow", inPip ? "h-8 w-8" : mini ? "h-16 w-16" : "h-12 w-12")} />
         ) : (
           showUi && (
             <button
@@ -1078,7 +1158,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             )}
           </CtlBtn>
           </span>
-          {typeof document !== "undefined" && document.pictureInPictureEnabled && (
+          {(pipOk || (!isNative && typeof document !== "undefined" && document.pictureInPictureEnabled)) && (
             <CtlBtn label="Picture in picture" onClick={togglePip}>
               <PictureInPicture2 className="h-5 w-5" />
             </CtlBtn>

@@ -10,10 +10,12 @@ export interface VideoSettings {
   dataSaver: boolean;
   /** app: turning the phone sideways opens full screen (off by default) */
   rotateFullscreen: boolean;
+  /** app: leaving the app while a video plays keeps it in a floating window */
+  pipOnLeave: boolean;
 }
 
 const KEY = "videoSettings";
-const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "", dataSaver: false, rotateFullscreen: false };
+const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "", dataSaver: false, rotateFullscreen: false, pipOnLeave: true };
 
 type Listener = () => void;
 const listeners = new Set<Listener>();

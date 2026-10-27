@@ -199,9 +199,23 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   useEffect(() => {
     if (embed) dockRefs.onEnded = onEnded;
   });
-  const { theater } = useDock();
+  const { theater, id: dockId, aspect: dockAspect } = useDock();
   const isLg = useMinWidth(1024);
+  const isSm = useMinWidth(640);
   const wide = embed && theater && isLg;
+
+  // The player takes the video's shape (vertical, 4:3, wide…) like YouTube,
+  // within limits so it never pushes the page off the screen. The picture
+  // inside always fits whole (black bars, never cropped).
+  const [appAspect, setAppAspect] = useState(16 / 9);
+  useEffect(() => setAppAspect(16 / 9), [id]);
+  const onAspect = useCallback((r: number) => {
+    if (r > 0 && Number.isFinite(r)) setAppAspect((cur) => (Math.abs(cur - r) > 0.01 ? r : cur));
+  }, []);
+  const ar = embed ? (dockId === id ? dockAspect : 16 / 9) : appAspect;
+  const clampAr = (lo: number, hi: number) => ({ aspectRatio: String(Math.min(hi, Math.max(lo, ar))) });
+  const slotStyle = wide ? clampAr(0.5, 2.4) : isSm ? clampAr(4 / 3, 2.4) : clampAr(0.8, 2.4);
+  const slotClass = wide ? "mx-auto max-h-[calc(100dvh-8.5rem)] w-full" : isSm ? "max-h-[calc(100dvh-9rem)] w-full sm:rounded-2xl" : "max-h-[62dvh] w-full";
 
   const pauseMusic = useCallback(() => {
     if (isPlaying) toggle();
@@ -258,7 +272,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     {/* Theater mode (desktop): full-width black stage above the columns */}
     {wide && (
       <div className="-mx-4 -mt-4 mb-5 bg-black sm:-mx-8">
-        <PlayerSlot id={id} startAt={startAt} className="mx-auto aspect-video max-h-[calc(100dvh-8.5rem)] w-full" />
+        <PlayerSlot id={id} startAt={startAt} className={slotClass} style={slotStyle} />
       </div>
     )}
     <div className="gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
@@ -266,9 +280,9 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
         {/* Player: edge-to-edge and sticky on phones, like the YouTube app */}
         <div className={cn("sticky top-0 z-20 -mx-4 -mt-4 bg-black sm:static sm:mx-0 sm:mt-0 sm:bg-transparent", wide && "hidden")}>
           {embed ? (
-            !wide && <PlayerSlot id={id} startAt={startAt} className="aspect-video w-full sm:rounded-2xl" />
+            !wide && <PlayerSlot id={id} startAt={startAt} className={slotClass} style={slotStyle} />
           ) : (
-            <LayerSlot host={layer.host}>
+            <LayerSlot host={layer.host} className={slotClass} style={slotStyle}>
             {details ? (
             <VideoPlayer
               key={details.streams.source}
@@ -281,9 +295,10 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
               onFatal={onFatal}
               mini={mini}
               onDrag={(ph, dy, v) => layerRefs.drag?.(ph, dy, v)}
+              onAspect={onAspect}
             />
           ) : (
-            <div className="relative aspect-video w-full overflow-hidden bg-black sm:rounded-2xl">
+            <div className="relative h-full w-full overflow-hidden bg-black sm:rounded-2xl">
               <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-50" />
               {!mini && (
                 <span className="absolute inset-0 flex items-center justify-center">
@@ -436,7 +451,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
  * App: reserves the player's spot on the page; the player itself lives in the
  * watch layer's host (so the miniplayer can move it without a reload).
  */
-function LayerSlot({ host, children }: { host: HTMLElement | null; children: ReactNode }) {
+function LayerSlot({ host, children, className, style }: { host: HTMLElement | null; children: ReactNode; className?: string; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     layerRefs.slot = ref.current;
@@ -446,14 +461,14 @@ function LayerSlot({ host, children }: { host: HTMLElement | null; children: Rea
   }, []);
   return (
     <>
-      <div ref={ref} className="aspect-video w-full bg-black sm:rounded-2xl" />
+      <div ref={ref} className={cn("bg-black", className)} style={style} />
       {host && createPortal(children, host)}
     </>
   );
 }
 
 /** Reserves the player's spot; the shared YouTube player positions itself over it. */
-function PlayerSlot({ id, startAt, className }: { id: string; startAt: number; className?: string }) {
+function PlayerSlot({ id, startAt, className, style }: { id: string; startAt: number; className?: string; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = ref.current!;
@@ -463,7 +478,7 @@ function PlayerSlot({ id, startAt, className }: { id: string; startAt: number; c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   return (
-    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)}>
+    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)} style={style}>
       <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-60" />
     </div>
   );

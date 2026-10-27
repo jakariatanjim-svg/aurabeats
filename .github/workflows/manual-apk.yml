@@ -100,7 +100,8 @@ jobs:
 
       # Native plugins (native/android): VideoSaver = in-app video / song
       # downloads (joins YouTube's picture + sound with Android's MediaMuxer),
-      # DeviceMusic = songs already on the phone. MainActivity registers them.
+      # DeviceMusic = songs already on the phone, Pip = floating video window.
+      # MainActivity registers them.
       - name: Add native plugins
         run: |
           PKG_DIR=android/app/src/main/java/dev/pages/aurabeats
@@ -128,6 +129,14 @@ jobs:
           # Android 10: lets the by-path fallback write to Download/ (ignored on 11+).
           if "requestLegacyExternalStorage" not in text:
               text = text.replace("<application", '<application android:requestLegacyExternalStorage="true"', 1)
+              path.write_text(text)
+          # Floating video window when leaving the app (picture-in-picture).
+          if "supportsPictureInPicture" not in text:
+              anchor = 'android:name=".MainActivity"'
+              if anchor not in text:
+                  print("::error::MainActivity not found in AndroidManifest.xml")
+                  raise SystemExit(1)
+              text = text.replace(anchor, anchor + ' android:supportsPictureInPicture="true"', 1)
               path.write_text(text)
           print("Declared:", add or "already present")
           PY

@@ -4,6 +4,7 @@ import { cn } from "@/utils/cn";
 import { SectionHeader } from "@/components/ui";
 import { appEnv } from "@/services/video/net";
 import { getVideoSettings, setVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
+import { usePipSupported } from "@/services/pip";
 
 const QUALITIES: { value: "auto" | number; label: string }[] = [
   { value: "auto", label: "Auto" },
@@ -18,6 +19,7 @@ const QUALITIES: { value: "auto" | number; label: string }[] = [
 export function VideoSettingsSection() {
   const s = useSyncExternalStore(subscribeVideoSettings, getVideoSettings, getVideoSettings);
   const [server, setServer] = useState(s.customServer);
+  const pipSupported = usePipSupported();
 
   return (
     <section>
@@ -51,6 +53,15 @@ export function VideoSettingsSection() {
             hint="Turning the phone sideways opens full screen"
             on={s.rotateFullscreen}
             onChange={() => setVideoSettings({ rotateFullscreen: !s.rotateFullscreen })}
+          />
+        )}
+
+        {appEnv === "apk" && pipSupported && (
+          <Toggle
+            title="Floating window"
+            hint="Keeps the video playing on top when you leave the app"
+            on={s.pipOnLeave}
+            onChange={() => setVideoSettings({ pipOnLeave: !s.pipOnLeave })}
           />
         )}
 

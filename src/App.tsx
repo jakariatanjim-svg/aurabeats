@@ -266,7 +266,7 @@ function Shell() {
               ? "pb-[calc(var(--sa-bottom)+12rem)] md:pb-[calc(var(--sa-bottom)+9rem)]"
               : "pb-[calc(var(--sa-bottom)+6.5rem)] md:pb-10",
             // room for the video miniplayer bar too
-            isNative && layer.mode === "mini" && (current ? "pb-[calc(var(--sa-bottom)+16.5rem)]" : "pb-[calc(var(--sa-bottom)+11rem)]"),
+            isNative && layer.mode === "mini" && (current ? "pb-[calc(var(--sa-bottom)+17.5rem)]" : "pb-[calc(var(--sa-bottom)+12rem)]"),
           )}
         >
           <Suspense
