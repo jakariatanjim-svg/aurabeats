@@ -110,6 +110,29 @@ export async function getVideoMeta(id: string): Promise<VideoDetails> {
 }
 
 /**
+ * The picture's shape (width / height) — vertical, 4:3, wide… — so the
+ * website's player can be sized like YouTube's instead of cropping. oEmbed's
+ * /shorts/ form reports the real shape (the /watch form is always 16:9) and
+ * works for every video. Falls back to 16:9.
+ */
+export async function getVideoAspect(id: string): Promise<number> {
+  return cached(`aspect:${id}`, 24 * 60 * 60 * 1000, async () => {
+    const url = `https://www.youtube.com/shorts/${id}`;
+    const o = await http<{ width?: number; height?: number }>(
+      `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`,
+      { timeout: 6000 },
+    );
+    const w = Number(o?.width);
+    const h = Number(o?.height);
+    if (!(w > 0 && h > 0)) throw new Error("no size");
+    const r = w / h;
+    // the sizes are small (200 × 113), so snap to the usual shapes
+    for (const s of [16 / 9, 9 / 16, 4 / 3, 1]) if (Math.abs(r - s) < 0.03) return s;
+    return Math.min(3, Math.max(0.4, r));
+  }).catch(() => 16 / 9);
+}
+
+/**
  * The video as it appears in search results — views, date, channel id,
  * avatar and the first lines of the description. Search keeps working when
  * YouTube bot-blocks the servers' watch-page access (most videos, Oct 2026).

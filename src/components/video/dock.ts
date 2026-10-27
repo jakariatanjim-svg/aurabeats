@@ -22,6 +22,8 @@ export interface DockState {
   /** next video for autoplay / the ⏭ button */
   next: VideoItem | null;
   theater: boolean;
+  /** the picture's shape (width / height) of the current video */
+  aspect: number;
 }
 
 let state: DockState = {
@@ -32,7 +34,10 @@ let state: DockState = {
   meta: null,
   next: null,
   theater: storage.get<boolean>("video:theater", false),
+  aspect: 16 / 9,
 };
+// shapes already looked up (instant on revisits)
+const aspects = new Map<string, number>();
 const listeners = new Set<() => void>();
 const set = (patch: Partial<DockState>) => {
   state = { ...state, ...patch };
@@ -63,7 +68,7 @@ export const dock = {
     }
     dockRefs.ended = false;
     dockRefs.time = startAt;
-    set({ id, startAt, mode: "inline", claim: state.claim + 1, meta: null, next: null });
+    set({ id, startAt, mode: "inline", claim: state.claim + 1, meta: null, next: null, aspect: aspects.get(id) ?? 16 / 9 });
   },
   /** Watch page unmounted: keep playing in the corner unless it finished. */
   release(slot: HTMLElement) {
@@ -71,6 +76,10 @@ export const dock = {
     dockRefs.slot = null;
     dockRefs.onEnded = null;
     if (state.mode === "inline") set({ mode: state.id && !dockRefs.ended ? "mini" : "none" });
+  },
+  setAspect(id: string, aspect: number) {
+    aspects.set(id, aspect);
+    if (state.id === id && Math.abs(state.aspect - aspect) > 0.001) set({ aspect });
   },
   setMeta(meta: VideoItem | null, next: VideoItem | null) {
     set({ meta, next });

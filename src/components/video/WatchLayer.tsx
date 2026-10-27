@@ -15,6 +15,7 @@ import { Pause, Play, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useBackHandler } from "@/utils/backStack";
 import { layerControls, layerRefs, useWatchLayer, watchLayer } from "./watchLayer";
+import { usePipActive } from "@/services/pip";
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
 const MS = 320;
@@ -28,6 +29,7 @@ interface Rect {
 
 export function WatchLayer({ children, musicBar, onMinimize }: { children: ReactNode; musicBar: boolean; onMinimize: () => void }) {
   const layer = useWatchLayer();
+  const inPip = usePipActive();
   const open = layer.mode !== "none" && layer.id !== null;
 
   // 0 = full page, 1 = miniplayer. Animated unless a finger is moving it.
@@ -43,7 +45,7 @@ export function WatchLayer({ children, musicBar, onMinimize }: { children: React
   const hostRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const full = useRef<Rect>({ left: 0, top: 0, width: innerWidth, height: (innerWidth * 9) / 16 });
-  const bar = useRef<Rect>({ left: 8, top: innerHeight - 160, width: innerWidth - 16, height: 64 });
+  const bar = useRef<Rect>({ left: 8, top: innerHeight - 160, width: innerWidth - 16, height: 80 });
 
   const setHost = useCallback((el: HTMLDivElement | null) => {
     hostRef.current = el;
@@ -206,9 +208,13 @@ export function WatchLayer({ children, musicBar, onMinimize }: { children: React
   const F = full.current;
   const B = bar.current;
   const M = { left: B.left, top: B.top, width: (B.height * 16) / 9, height: B.height };
+  // The small video keeps the page player's shape, fitted into the bar's
+  // video box (vertical / square videos get a narrower box).
+  const fit = F.width && F.height ? Math.min(M.width / F.width, M.height / F.height) : 1;
+  const mini = { left: M.left + (M.width - F.width * fit) / 2, top: M.top + (M.height - F.height * fit) / 2 };
   const lerp = (a: number, b: number) => a + (b - a) * p;
-  const R = { left: lerp(F.left, M.left), top: lerp(F.top, M.top), width: lerp(F.width, M.width) };
-  const scale = F.width ? R.width / F.width : 1;
+  const R = { left: lerp(F.left, mini.left), top: lerp(F.top, mini.top) };
+  const scale = lerp(1, fit);
   const anim = dragging ? "none" : `transform ${MS}ms ${EASE}, opacity ${MS}ms ${EASE}`;
   const still = p === 0 && down === 0 && !dragging;
   const hostStyle: React.CSSProperties = {
@@ -223,6 +229,8 @@ export function WatchLayer({ children, musicBar, onMinimize }: { children: React
     borderRadius: p > 0.02 ? `${12 / Math.max(scale, 0.05)}px` : undefined,
     opacity: closing ? 0 : 1,
   };
+  // Floating window (left the app): the app is now just the video.
+  const pipStyle: React.CSSProperties = { left: 0, top: 0, width: "100%", height: "100%", transform: "none", borderRadius: 0, transition: "none" };
   const sheetStyle: React.CSSProperties = {
     transform: p === 0 ? "none" : `translateY(${p * innerHeight}px)`,
     transition: anim,
@@ -239,7 +247,7 @@ export function WatchLayer({ children, musicBar, onMinimize }: { children: React
   const barPos = musicBar
     ? "bottom-[calc(10.4rem+var(--sa-bottom))] md:bottom-[calc(7.25rem+var(--sa-bottom))]"
     : "bottom-[calc(5.6rem+var(--sa-bottom))] md:bottom-[calc(1.25rem+var(--sa-bottom))]";
-  const barBox = cn("fixed right-2 left-2 h-16 md:right-4 md:left-auto md:w-[26rem]", barPos);
+  const barBox = cn("fixed right-2 left-2 h-20 md:right-4 md:left-auto md:w-[26rem]", barPos);
 
   if (!open) return null;
   return (
@@ -298,7 +306,11 @@ export function WatchLayer({ children, musicBar, onMinimize }: { children: React
       </div>
 
       {/* the player itself (moves between the page and the bar) */}
-      <div ref={setHost} style={hostStyle} className={cn("fixed z-[57] overflow-hidden bg-black", layer.mode === "mini" && "pointer-events-none")} />
+      <div
+        ref={setHost}
+        style={inPip ? pipStyle : hostStyle}
+        className={cn("fixed overflow-hidden bg-black", inPip ? "z-[1000]" : "z-[57]", layer.mode === "mini" && !inPip && "pointer-events-none")}
+      />
       {/* touches on the small video belong to the bar (tap = open, drag) */}
       {layer.mode === "mini" && !closing && (
         <div

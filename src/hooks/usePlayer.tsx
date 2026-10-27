@@ -102,6 +102,8 @@ interface PlayerContextValue {
   playNext: (track: Track) => void;
   removeFromQueue: (queueIndex: number) => void;
   clearQueue: () => void;
+  /** Stop and close the player (empties the queue). */
+  stop: () => void;
   jumpTo: (queueIndex: number) => void;
   next: () => void;
   previous: () => void;
@@ -136,6 +138,32 @@ interface PlayerContextValue {
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
+
+
+/**
+ * Android app: a song saved on the phone, ready for the player.
+ *
+ * The app's built-in file server answers the player's "give me bytes
+ * X–Y" requests wrongly (Capacitor bug), so <audio> often refused saved
+ * songs. Reading the whole file once (a few MB) and playing it from memory
+ * always works, and seeking is instant. The direct address stays as a
+ * fallback.
+ */
+async function savedFileUrl(path: string): Promise<string> {
+  const direct = Capacitor.convertFileSrc(path);
+  try {
+    const res = await fetch(direct);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    if (!buf.byteLength) throw new Error("empty file");
+    const ext = path.split("?")[0].split(".").pop()?.toLowerCase() ?? "";
+    const type =
+      ext === "mp3" ? "audio/mpeg" : ext === "webm" ? "audio/webm" : ext === "ogg" || ext === "opus" ? "audio/ogg" : ext === "wav" ? "audio/wav" : "audio/mp4";
+    return URL.createObjectURL(new Blob([buf], { type }));
+  } catch {
+    return direct;
+  }
+}
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const engine = useAudioEngine();
@@ -392,6 +420,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   /* --------------------------- stream loading ---------------------------- */
   const current = queue[index] ?? null;
   const resolvedUrlsRef = useRef<string[]>([]);
+  // The saved copy being played (a blob: address), freed on the next load.
+  const localUrlRef = useRef<string | null>(null);
+  const freeLocalUrl = () => {
+    if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
+    localUrlRef.current = null;
+  };
 
   useEffect(() => {
     if (!current) {
@@ -414,12 +448,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
         ]);
         if (offline && alive) {
-          // saved files (Android app) are served to the player by the app itself
-          const localUrl = offline.path ? Capacitor.convertFileSrc(offline.path) : URL.createObjectURL(offline.blob!);
+          const localUrl = offline.path ? await savedFileUrl(offline.path) : URL.createObjectURL(offline.blob!);
+          if (!alive) {
+            if (localUrl.startsWith("blob:")) URL.revokeObjectURL(localUrl);
+            return;
+          }
+          freeLocalUrl();
+          if (localUrl.startsWith("blob:")) localUrlRef.current = localUrl;
           engine.load(localUrl, { autoplay: !restorePauseRef.current, live: current.isLive });
           restorePauseRef.current = false;
           return;
         }
+        freeLocalUrl();
 
         // 2. Fall back to network
         if (attempt === 0 || resolvedUrlsRef.current.length === 0) {
@@ -680,6 +720,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     toast("Queue cleared", "info");
   }, [toast]);
 
+  const stop = useCallback(() => {
+    engineRef.current.pause();
+    queueRef.current = [];
+    setQueue([]);
+    setIndex(0);
+    setAttempt(0);
+    setExpanded(false);
+  }, []);
+
   const jumpTo = useCallback((queueIndex: number) => {
     setIndex(queueIndex);
     setAttempt(0);
@@ -854,6 +903,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playNext,
       removeFromQueue,
       clearQueue,
+      stop,
       jumpTo,
       next,
       previous,
@@ -912,6 +962,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playNext,
       removeFromQueue,
       clearQueue,
+      stop,
       jumpTo,
       next,
       previous,

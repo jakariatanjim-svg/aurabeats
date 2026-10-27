@@ -7,6 +7,9 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, Slider } from "@/components/ui";
 import { Visualizer } from "@/components/Visualizer";
 import { usePlaybackClock } from "@/hooks/usePlayer";
+import { useRef, type PointerEvent as RPointerEvent } from "react";
+
+const EASE = "cubic-bezier(.2,.8,.2,1)";
 
 export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
   const { currentTime, duration, bufferedAhead } = usePlaybackClock();
@@ -34,7 +37,77 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
     settings,
     downloadTrack,
     pause,
+    stop,
   } = usePlayer();
+
+  /* Phones: swipe the bar up = full player, push it firmly down = close
+   * (like the video miniplayer). A small or slow drag springs back. */
+  const panelRef = useRef<HTMLDivElement>(null);
+  const g = useRef({ id: -1, x: 0, y: 0, lastY: 0, lastT: 0, vy: 0, dir: "" as "" | "v" | "h" });
+  const swallowClick = useRef(false);
+  const place = (dy: number, animate: boolean) => {
+    const el = panelRef.current;
+    if (!el) return;
+    el.style.transition = animate ? `transform 260ms ${EASE}, opacity 260ms ${EASE}` : "none";
+    // upwards it only gives a little (it opens the player instead)
+    el.style.transform = dy ? `translateY(${dy > 0 ? dy : dy * 0.35}px)` : "";
+    el.style.opacity = dy > 0 ? String(Math.max(0.25, 1 - dy / 240)) : "";
+  };
+  const onDown = (e: RPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" || g.current.id !== -1) return;
+    if ((e.target as HTMLElement).closest("[role=slider]")) return; // seeking
+    const s = g.current;
+    s.id = e.pointerId;
+    s.x = e.clientX;
+    s.y = s.lastY = e.clientY;
+    s.lastT = e.timeStamp;
+    s.vy = 0;
+    s.dir = "";
+  };
+  const onMove = (e: RPointerEvent<HTMLDivElement>) => {
+    const s = g.current;
+    if (s.id !== e.pointerId) return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (e.timeStamp > s.lastT) {
+      s.vy = 0.7 * ((e.clientY - s.lastY) / (e.timeStamp - s.lastT)) + 0.3 * s.vy;
+      s.lastY = e.clientY;
+      s.lastT = e.timeStamp;
+    }
+    if (!s.dir && Math.hypot(dx, dy) > 8) {
+      s.dir = Math.abs(dy) > Math.abs(dx) ? "v" : "h";
+      // only now: capturing earlier would steal the buttons' taps
+      if (s.dir === "v") e.currentTarget.setPointerCapture?.(e.pointerId);
+    }
+    if (s.dir === "v") place(dy, false);
+  };
+  const onUp = (e: RPointerEvent<HTMLDivElement>) => {
+    const s = g.current;
+    if (s.id !== e.pointerId) return;
+    s.id = -1;
+    if (s.dir !== "v") return;
+    // it was a drag, not a tap on whatever is under the finger
+    swallowClick.current = true;
+    window.setTimeout(() => (swallowClick.current = false), 80);
+    const dy = e.clientY - s.y;
+    const el = panelRef.current;
+    const h = el?.offsetHeight ?? 72;
+    if (dy < -40) {
+      place(0, true);
+      setExpanded(true);
+    } else if (dy > h * 0.5 || (s.vy > 1.1 && dy > 40)) {
+      if (el) {
+        el.style.transition = `transform 240ms ${EASE}, opacity 240ms ${EASE}`;
+        el.style.transform = `translateY(${h + 140}px)`;
+        el.style.opacity = "0";
+      }
+      window.setTimeout(stop, 230);
+    } else place(0, true);
+  };
+  const onCancel = () => {
+    g.current.id = -1;
+    if (g.current.dir === "v") place(0, true);
+  };
 
   const fav = current ? isFavorite(current.id) : false;
   const hasVideo = Boolean(videoIdOfTrack(current));
@@ -47,7 +120,20 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
 
   return (
     <div className="ab-playerbar-wrap fixed inset-x-0 bottom-[calc(5.5rem+var(--sa-bottom))] z-[45] flex justify-center pointer-events-none px-2 md:bottom-5 md:px-5">
-      <div data-tour="player" className="blur-panel surface-raised glass-inset pointer-events-auto relative w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[0.55rem] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
+      <div
+        ref={panelRef}
+        data-tour="player"
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onCancel}
+        onClickCapture={(e) => {
+          if (!swallowClick.current) return;
+          swallowClick.current = false;
+          e.stopPropagation();
+          e.preventDefault();
+        }}
+        className="blur-panel surface-raised glass-inset pointer-events-auto relative touch-none md:touch-auto w-full max-w-[1200px] rounded-[var(--bar-radius)]! px-4 pt-1.5 pb-[0.55rem] shadow-(--bar-shadow) md:px-6 md:py-3 md:pb-3">
         {/* mobile progress line - moved to absolute top for better layout */}
         <div className="absolute top-[3px] left-6 right-6 md:hidden">
           <Slider

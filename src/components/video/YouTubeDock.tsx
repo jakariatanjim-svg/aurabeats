@@ -53,6 +53,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { videoLibrary } from "@/hooks/useVideoLibrary";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
+import { getVideoAspect } from "@/services/video/api";
 import { loadYT, QUALITY_WIDTH, qualityLabel, qualityTag, YT_ERRORS, YTState, type YTPlayer } from "./yt";
 
 const Q_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
@@ -831,22 +832,35 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  // Fit a 16:9 frame inside whatever box we have (fullscreen can be any shape).
+  // The picture's real shape (vertical, 4:3, wide…), so nothing is cut off.
+  useEffect(() => {
+    if (!d.id) return;
+    const id = d.id;
+    void getVideoAspect(id).then((ar) => dock.setAspect(id, ar));
+  }, [d.id]);
+
+  // Fit a frame of the video's shape inside whatever box we have (the page
+  // spot, the miniplayer, fullscreen — any shape). The iframe inside is twice
+  // as tall and YouTube centres the picture in it, so a frame of the same
+  // shape as the video shows all of it and none of YouTube's own UI.
+  const aspect = d.aspect || 16 / 9;
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box) return;
-    const ro = new ResizeObserver(() => {
+    const fit = () => {
       const W = box.clientWidth;
       const H = box.clientHeight;
       // Whole pixels only (size and position): half-pixel offsets on the
       // video layer can show up as a thin line on some GPUs.
-      const w = Math.floor(Math.min(W, (H * 16) / 9));
-      const h = Math.floor((w * 9) / 16);
+      const w = Math.floor(Math.min(W, H * aspect));
+      const h = Math.floor(w / aspect);
       setFrame({ w, h, boxH: H, x: Math.round((W - w) / 2), y: Math.round((H - h) / 2) });
-    });
+    };
+    const ro = new ResizeObserver(fit);
     ro.observe(box);
+    fit();
     return () => ro.disconnect();
-  }, []);
+  }, [aspect]);
 
   /* --------------------------- controls UI ------------------------------ */
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
