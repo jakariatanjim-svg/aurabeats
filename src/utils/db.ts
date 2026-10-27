@@ -142,6 +142,16 @@ export const db = {
     });
   },
 
+  /** Every saved record (full backup). */
+  async allEntries(): Promise<OfflineEntry[]> {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll();
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result as OfflineEntry[]);
+    });
+  },
+
   /** The whole saved record (for Undo after a removal). */
   async getEntry(id: string): Promise<OfflineEntry | null> {
     const db = await openDB();
