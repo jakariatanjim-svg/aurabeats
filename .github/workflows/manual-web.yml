@@ -5,7 +5,7 @@
 # Version scheme: 1.0 -> 1.1 -> ... -> 1.9 -> 2.0, derived from the highest
 # existing vX.Y tag. An override is published as an ordinary tag and therefore
 # becomes the baseline for the next automatic run.
-name: "Website — Release"
+name: "Website — Release (Primary)"
 
 on:
   workflow_dispatch:
