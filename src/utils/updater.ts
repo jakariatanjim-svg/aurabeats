@@ -165,7 +165,7 @@ export function releaseVersionLabel(release: LatestRelease): string {
  * to the system package installer — no browser hop, no notification shade.
  *
  * Requires the Android side to declare REQUEST_INSTALL_PACKAGES (the APK
- * workflow patches the manifest) and a stable signing key (signing/), otherwise
+ * workflow patches the manifest) and a stable signing key (GitHub Secrets), otherwise
  * Android refuses to install over the running build.
  */
 export async function downloadAndInstallApk(
