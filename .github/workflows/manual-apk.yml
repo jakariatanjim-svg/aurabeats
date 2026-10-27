@@ -55,13 +55,13 @@ jobs:
         run: |
           LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
           if [ -z "$LATEST_TAG" ]; then
-            echo "::error::No release exists yet. Run \"Website — Release\" first; this workflow only attaches an APK to an existing release."
+            echo "::error::No release exists yet. Run \"Website — Release (Primary)\" first; this workflow only attaches an APK to an existing release."
             exit 1
           fi
 
           VERSION=$(printf '%s' "$LATEST_TAG" | python3 -c 'import re,sys; m=re.fullmatch(r"v?(\d+)\.(\d+)", sys.stdin.read().strip()); print("%d.%d" % (int(m.group(1)), int(m.group(2))) if m else "")') || exit 1
           if [ -z "$VERSION" ]; then
-            echo "::error::Latest release tag '$LATEST_TAG' carries no MAJOR.MINOR version. Publish a versioned release with \"Website — Release\" first."
+            echo "::error::Latest release tag '$LATEST_TAG' carries no MAJOR.MINOR version. Publish a versioned release with \"Website — Release (Primary)\" first."
             exit 1
           fi
 

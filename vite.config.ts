@@ -68,7 +68,7 @@ function chunkGroup(id: string): string | undefined {
   }
   const f = id.replace(/\\/g, "/");
   if (f.includes("/src/utils/romanize")) return "romanize";
-  if (/\/src\/views\/(SettingsView|AboutView|PrivacyView)|\/src\/components\/(SyncSection|AccountSection|DataSection|HistorySection|video\/VideoSettingsSection)/.test(f)) return "settings";
+  if (/\/src\/views\/(SettingsView|AboutView|PrivacyView)|\/src\/components\/(SyncSection|AccountSection|DataSection|HistorySection|video\/VideoSettingsSection)|\/src\/utils\/fullBackup/.test(f)) return "settings";
   if (/\/src\/views\/video\//.test(f)) return "video";
   if (/\/src\/views\/(HomeView|SearchView|LibraryViews|DeviceMusicView)/.test(f)) return "music";
   if (/\/src\/components\/(FullScreenPlayer|LyricsViewer)/.test(f)) return "player";

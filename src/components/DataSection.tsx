@@ -2,13 +2,14 @@
  * Settings → Your data, and the Danger zone at the very bottom of Settings.
  * Everything AuraBeats keeps lives on this device.
  *
- *  - Your data: counts, backup / restore, storage used, offline songs
+ *  - Your data: counts, backup / restore, advanced export / import (the
+ *    whole app incl. offline songs, for a fresh install), storage used, offline songs
  *    (size + delete), leftover download files and data saver (app).
  *  - Danger zone: cached data, reset settings, erase everything, and the
  *    "Ask before deleting" switch for every confirmation in the app.
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Database, Download, Eraser, HardDrive, MessageSquareWarning, RotateCcw, ShieldAlert, Signal, Trash2, Undo2, Upload } from "lucide-react";
+import { Archive, ArchiveRestore, Database, Download, Eraser, HardDrive, MessageSquareWarning, RotateCcw, ShieldAlert, Signal, Trash2, Undo2, Upload } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatBytes } from "@/utils/format";
 import { storage } from "@/utils/storage";
@@ -42,6 +43,9 @@ export function DataSection() {
   const { toast, favorites, history, playlists, offlineTracks, clearOffline } = usePlayer();
   const vs = useSyncExternalStore(subscribeVideoSettings, getVideoSettings, getVideoSettings);
   const fileRef = useRef<HTMLInputElement>(null);
+  const fullRef = useRef<HTMLInputElement>(null);
+  // advanced export / import running: what it is doing right now
+  const [busy, setBusy] = useState<{ kind: "export" | "import"; text: string } | null>(null);
   const [used, setUsed] = useState<number | null>(null);
   const [offline, setOffline] = useState<{ count: number; bytes: number } | null>(null);
   const [temp, setTemp] = useState<number | null>(null);
@@ -88,6 +92,54 @@ export function DataSection() {
     }
   };
 
+  // Advanced: the whole app (every saved value + offline songs) in one file.
+  const exportFullData = async () => {
+    if (busy) return;
+    setBusy({ kind: "export", text: "Preparing…" });
+    try {
+      const { exportFull } = await import("@/utils/fullBackup");
+      const where = await exportFull((text) => setBusy({ kind: "export", text }));
+      toast(`Saved: ${where}`, "success");
+    } catch {
+      toast("Could not save the advanced export", "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const importFullData = async (file: File) => {
+    if (busy) return;
+    setBusy({ kind: "import", text: "Reading…" });
+    try {
+      const { openFull, restoreFull } = await import("@/utils/fullBackup");
+      let opened: Awaited<ReturnType<typeof openFull>>;
+      try {
+        opened = await openFull(file);
+      } catch {
+        toast("That file isn't an AuraBeats advanced export", "error");
+        return;
+      }
+      const m = opened.manifest;
+      const counts = Object.entries(opened.summary)
+        .filter(([, n]) => n > 0)
+        .map(([k, n]) => `${n} ${k.toLowerCase()}`);
+      if (m.media) counts.push(`${m.media} offline songs (${formatBytes(m.mediaBytes) || "0 B"})`);
+      const ok = await confirmAction({
+        title: "Restore everything?",
+        message: `Everything AuraBeats has on this ${isNative ? "phone" : "browser"} will be replaced by the file from ${new Date(m.at).toLocaleDateString()}${counts.length ? `: ${counts.join(", ")}` : ""}.`,
+        confirmLabel: "Restore",
+        always: true,
+      });
+      if (!ok) return;
+      await restoreFull(opened, (text) => setBusy({ kind: "import", text }));
+      window.location.reload();
+    } catch {
+      toast("Could not restore everything — try again", "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const deleteOffline = async () => {
     const ok = await confirmAction({
       title: "Delete offline songs?",
@@ -129,6 +181,35 @@ export function DataSection() {
               const f = e.target.files?.[0];
               e.target.value = "";
               if (f) void importData(f);
+            }}
+          />
+        </Row>
+
+        <Row
+          icon={<Archive className="h-4 w-4" />}
+          title="Advanced export"
+          hint={busy?.kind === "export" ? `${busy.text} · keep AuraBeats open` : `Everything, with offline songs${isNative ? " · Documents/AuraBeats" : ""}`}
+        >
+          <Act disabled={Boolean(busy)} onClick={() => void exportFullData()}>
+            {busy?.kind === "export" ? "Saving…" : "Export"}
+          </Act>
+        </Row>
+        <Row
+          icon={<ArchiveRestore className="h-4 w-4" />}
+          title="Advanced import"
+          hint={busy?.kind === "import" ? `${busy.text} · keep AuraBeats open` : "From an advanced export file"}
+        >
+          <Act disabled={Boolean(busy)} onClick={() => fullRef.current?.click()}>
+            {busy?.kind === "import" ? "Restoring…" : "Import"}
+          </Act>
+          <input
+            ref={fullRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void importFullData(f);
             }}
           />
         </Row>
