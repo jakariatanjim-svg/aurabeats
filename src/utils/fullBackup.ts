@@ -87,11 +87,14 @@ const mimeOf = (name: string) => {
 };
 const safeName = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 120) || "song.m4a";
 
+/** YouTube account info never travels (the sign-in itself stays inside the app, encrypted). */
+const isAccountKey = (k: string) => k.startsWith("ytacct:") || k.startsWith("account:");
+
 /** Everything in localStorage except caches that rebuild themselves. */
 function collectAll(): Record<string, string> {
   const data: Record<string, string> = {};
   for (const full of lsKeys()) {
-    if (!full.startsWith(NS) || isCacheKey(full)) continue;
+    if (!full.startsWith(NS) || isCacheKey(full) || isAccountKey(full.slice(NS.length))) continue;
     const v = localStorage.getItem(full);
     if (v !== null) data[full.slice(NS.length)] = v;
   }
@@ -335,9 +338,9 @@ export async function restoreFull(opened: OpenedFull, progress: Progress): Promi
   }
 
   // the saved values: replaced as a whole
-  for (const full of lsKeys()) if (full.startsWith(NS) && !isCacheKey(full)) localStorage.removeItem(full);
+  for (const full of lsKeys()) if (full.startsWith(NS) && !isCacheKey(full) && !isAccountKey(full.slice(NS.length))) localStorage.removeItem(full);
   for (const [k, v] of Object.entries(data)) {
-    if (typeof v !== "string") continue;
+    if (typeof v !== "string" || isAccountKey(k)) continue;
     try {
       localStorage.setItem(NS + k, v);
     } catch {

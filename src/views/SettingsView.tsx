@@ -22,7 +22,7 @@ import { installedVersionLabel } from "@/utils/updater";
 import { showVolumeUi } from "@/utils/device";
 import { Button, SectionHeader, Slider } from "@/components/ui";
 import { openTour } from "@/components/Tutorial";
-import { AccountSection } from "@/components/AccountSection";
+import { YtAccountSection } from "@/components/YtAccountSection";
 import type { ThemeName } from "@/types";
 import { VideoSettingsSection } from "@/components/video/VideoSettingsSection";
 import { HistorySection } from "@/components/HistorySection";
@@ -202,7 +202,7 @@ export function SettingsView() {
         </section>
       )}
 
-      <AccountSection />
+      <YtAccountSection />
 
       <button
         type="button"

@@ -80,7 +80,7 @@ function mobileSteps(): Step[] {
       target: ["nav-main"],
       title: "Video pages",
       body: isNative
-        ? "Home shows what you watched and your channels, Following has their new videos, and Library has history, Watch later and your YouTube likes and playlists."
+        ? "Home shows what you watched and your channels, Following has their new videos, and Library has history and Watch later. Signed in to YouTube (Settings), they show your recommendations, subscriptions, likes and playlists."
         : "Home shows what you watched and your channels, Following has their new videos, and Library has your history and Watch later.",
     },
     {

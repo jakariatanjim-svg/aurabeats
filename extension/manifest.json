@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "AuraBeats Connector",
+  "short_name": "AuraBeats",
+  "version": "1.0.0",
+  "description": "Lets the AuraBeats website use your YouTube account from this browser.",
+  "minimum_chrome_version": "116",
+  "icons": { "16": "icon-16.png", "48": "icon-48.png", "128": "icon-128.png" },
+  "permissions": ["cookies", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": ["https://www.youtube.com/*", "https://music.youtube.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://aurabeats.pages.dev/*", "https://*.aurabeats.pages.dev/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": { "default_title": "AuraBeats Connector", "default_popup": "popup.html" }
+}

@@ -15,6 +15,10 @@ import {
 import { AppModeSwitch, modeOf } from "@/components/video/AppModeSwitch";
 import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
+import { useYtSession } from "@/services/yt/session";
+import { useSavedSongs } from "@/hooks/useSavedSongs";
+import { ThumbsUp } from "lucide-react";
+import { useYtSubscriptions } from "@/services/yt/library";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, IconButton, WaveformLogo } from "@/components/ui";
@@ -113,10 +117,16 @@ export const Sidebar = memo(function Sidebar({
   collapsed: boolean;
   onToggleCollapse: () => void;
 }) {
-  const { playlists, createPlaylist, favorites, history } = usePlayer();
-  const { follows } = useVideoLibrary();
+  const { playlists, createPlaylist, history } = usePlayer();
+  const saved = useSavedSongs();
+  const favorites = saved.tracks;
+  const { follows: localFollows } = useVideoLibrary();
   // Settings / About are shared: keep the mode you came from.
   const video = modeOf(route) === "video";
+  // signed in: Follow = Subscribe, so list the account's subscriptions
+  const session = useYtSession();
+  const subs = useYtSubscriptions(video && !!session);
+  const follows = session ? (subs.list ?? []) : localFollows;
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -186,7 +196,7 @@ export const Sidebar = memo(function Sidebar({
 
         {!collapsed && video && follows.length > 0 && (
           <div>
-            <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Channels you follow</p>
+            <p className="mb-2 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">{session ? "Subscriptions" : "Channels you follow"}</p>
             {(
               <div className="space-y-0.5">
                 {follows.slice(0, 12).map((c) => (
@@ -285,7 +295,7 @@ export const Sidebar = memo(function Sidebar({
           {!collapsed && (
             <p className="mb-1 px-3 text-[10px] font-bold tracking-[0.16em] text-ink3 uppercase">Collection</p>
           )}
-          {(video ? VIDEO_COLLECTION : COLLECTION).map((item) => (
+          {(video ? VIDEO_COLLECTION : saved.signedIn ? COLLECTION.map((i) => (i.key === "favorites" ? { ...i, label: "Liked songs", icon: ThumbsUp } : i)) : COLLECTION).map((item) => (
             <NavItemButton
               key={item.key}
               item={item}

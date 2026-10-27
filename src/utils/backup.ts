@@ -21,7 +21,7 @@ const DEVICE_ONLY = new Set([
   "sidebarCollapsed", "video:miniPos", "volume", "muted", "video:ytVolume", "video:volume",
   "tour:seen", "confirm:skip", "deviceMusic:asked", "sync:name", "undo:secs",
 ]);
-const isPrivate = (k: string) => k.startsWith("account:");
+const isPrivate = (k: string) => k.startsWith("account:") || k.startsWith("ytacct:");
 
 export const lsKeys = () => {
   try {

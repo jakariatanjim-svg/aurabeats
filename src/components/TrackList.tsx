@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import {
   ChevronLeft,
   ChevronRight,
-  Heart,
   ListEnd,
   ListPlus,
   MoreHorizontal,
@@ -17,6 +16,7 @@ import {
   Film,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { FavIcon } from "@/components/FavIcon";
 import { formatCount, formatTime, gradientFrom, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, Button, Equalizer, IconButton, Modal } from "@/components/ui";
@@ -390,7 +390,7 @@ export function TrackRow({
         }}
         className={cn("transition", fav ? "text-accent opacity-100" : "opacity-0 group-hover/row:opacity-100 focus:opacity-100")}
       >
-        <Heart className={cn("h-4 w-4", fav && "fill-current")} />
+        <FavIcon track={track} on={fav} className="h-4 w-4" />
       </IconButton>
 
       {(offline || canSaveOffline(track)) && (
@@ -451,7 +451,7 @@ export function TrackCard({ track, context }: { track: Track; context?: Track[] 
               toggleFavorite(track);
             }}
           >
-            <Heart className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", fav && "fill-current")} />
+            <FavIcon track={track} on={fav} className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </IconButton>
           <PlayOverlay
             playing={isCurrent && isPlaying}

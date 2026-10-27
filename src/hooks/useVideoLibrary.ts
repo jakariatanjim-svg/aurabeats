@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 import { storage } from "@/utils/storage";
 import type { VideoItem } from "@/services/video/types";
 import { undoable } from "@/components/UndoToast";
+import { recordPlay } from "@/services/yt/library";
 
 export interface FollowedChannel {
   id: string;
@@ -71,6 +72,7 @@ export const videoLibrary = {
   recordProgress(v: VideoItem, position: number) {
     const rest = state.history.filter((h) => h.id !== v.id);
     commit({ history: [{ ...slim(v), watchedAt: Date.now(), position: Math.floor(position) }, ...rest].slice(0, MAX_HISTORY) });
+    if (position > 0) void recordPlay(v); // signed in: also your YouTube history (setting)
   },
   positionOf: (id: string) => state.history.find((h) => h.id === id)?.position ?? 0,
   removeHistory: (id: string) => commit({ history: state.history.filter((h) => h.id !== id) }),

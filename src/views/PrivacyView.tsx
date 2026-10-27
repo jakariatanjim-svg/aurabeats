@@ -18,7 +18,7 @@ const SECTIONS = [
       "No personal information (name, email, phone).",
       "No analytics, tracking pixels, or fingerprinting.",
       "No cookies — not even for ads, because AuraBeats is 100% ad-free.",
-      "No account creation, no login, no sign-up.",
+      "No AuraBeats account, no sign-up. The optional YouTube sign-in stays on your device (Android app) or in your browser (extension) and only talks to YouTube.",
     ],
   },
   {
@@ -63,7 +63,7 @@ export function PrivacyView() {
           Your data stays yours.
         </h1>
         <p className="max-w-xl text-sm leading-relaxed" style={{ color: "var(--c-ink2)" }}>
-          AuraBeats is a client-side web application. It has no server, no database, and no accounts.
+          AuraBeats is a client-side web application. It has no server, no database, and no accounts of its own.
           Everything you do — playlists, favourites, history, preferences — lives exclusively in your
           browser and never leaves your device.
         </p>

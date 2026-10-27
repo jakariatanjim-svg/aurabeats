@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
+import { useSavedSongs } from "@/hooks/useSavedSongs";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileNav } from "@/components/MobileNav";
@@ -23,7 +24,7 @@ import { cn } from "@/utils/cn";
 import { App as CapApp } from "@capacitor/app";
 import { runBackHandler } from "@/utils/backStack";
 import { baseOrientation } from "@/utils/orientation";
-import { autoSync } from "@/services/ytAccount";
+import { dropOldAccountData } from "@/services/yt/accounts";
 import { subscribeVideoSettings } from "@/services/video/settings";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
@@ -145,9 +146,9 @@ function Shell() {
     };
   }, [scrollTop]);
 
-  // YouTube account (app): refresh subscriptions/likes/playlists when stale.
+  // The old TV sign-in is gone: wipe what it left behind (once, harmless).
   useEffect(() => {
-    if (isNative) autoSync();
+    dropOldAccountData();
   }, []);
 
   // App: upright on phones unless "Rotate for full screen" is on.
@@ -204,7 +205,8 @@ function Shell() {
   const videoMode = isVideoRoute(isNative ? (layer.mode === "full" ? route : shownRoute) : route);
   const watching = isNative ? layer.mode === "full" : route.startsWith("watch:");
 
-  const { setExpanded, setQueueOpen, queueOpen, next, previous, toggle, current, favorites, volume, setVolume, settings, expanded } = usePlayer();
+  const { setExpanded, setQueueOpen, queueOpen, next, previous, toggle, current, volume, setVolume, settings, expanded } = usePlayer();
+  const saved = useSavedSongs();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -313,7 +315,7 @@ function Shell() {
       </div>
 
       {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
-      <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={favorites.length} />
+      <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={saved.tracks.length} likeMode={saved.signedIn} />
       <Tutorial route={shownRoute} onNavigate={navigate} />
       <ConfirmHost />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}

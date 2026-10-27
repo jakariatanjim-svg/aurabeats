@@ -12,10 +12,11 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // native/android: in-app downloads, songs already on the phone and
-        // the floating video window.
+        // the floating video window, YouTube account sign-in.
         registerPlugin(VideoSaverPlugin.class);
         registerPlugin(DeviceMusicPlugin.class);
         registerPlugin(PipPlugin.class);
+        registerPlugin(YtLoginPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

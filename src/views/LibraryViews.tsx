@@ -10,12 +10,17 @@ import {
   Trash2,
   DownloadCloud,
   Smartphone,
+  RefreshCw,
+  ThumbsUp,
 } from "lucide-react";
+import { useSavedSongs } from "@/hooks/useSavedSongs";
+import { YtmPlaylistDetail, YtmPlaylistsSection } from "@/views/YtmViews";
+import type { YtmPlaylist } from "@/services/yt/music";
 import { cn } from "@/utils/cn";
 import { formatDurationList, gradientFrom, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
-import { Button, IconButton, Modal, SectionHeader } from "@/components/ui";
-import { EmptyState } from "@/components/states";
+import { Button, IconButton, Modal, SectionHeader, Spinner } from "@/components/ui";
+import { EmptyState, ErrorState } from "@/components/states";
 import { TrackRow } from "@/components/TrackList";
 import { cachedDeviceSongs, deviceMusicAvailable } from "@/services/deviceMusic";
 import type { UserPlaylist } from "@/types";
@@ -88,9 +93,14 @@ function PlaylistCard({ playlist, onOpen }: { playlist: UserPlaylist; onOpen: ()
 }
 
 export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
-  const { playlists, favorites, history, offlineTracks, createPlaylist } = usePlayer();
+  const { playlists, history, offlineTracks, createPlaylist } = usePlayer();
+  const saved = useSavedSongs();
+  const favorites = saved.tracks;
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
+  const [ytmOpen, setYtmOpen] = useState<YtmPlaylist | null>(null);
+
+  if (ytmOpen) return <YtmPlaylistDetail pl={ytmOpen} onBack={() => setYtmOpen(null)} />;
 
   return (
     <div className="space-y-8 pb-4">
@@ -98,7 +108,7 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
         <div>
           <h2 className="text-2xl font-black tracking-tight text-ink">Your library</h2>
           <p className="mt-1 text-xs text-ink3">
-            {playlists.length} playlists · {favorites.length} favourites · {history.length} in history
+            {playlists.length} playlists · {favorites.length} {saved.signedIn ? "liked" : "favourites"} · {history.length} in history
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
@@ -110,9 +120,9 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
         <SectionHeader title="Quick access" subtitle="Auto-curated collections" />
         <div className={cn("grid grid-cols-1 gap-3", deviceMusicAvailable ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3")}>
           <CollectionTile
-            title="Favourites"
+            title={saved.signedIn ? "Liked songs" : "Favourites"}
             count={favorites.length}
-            icon={<Heart className="h-5 w-5" />}
+            icon={saved.signedIn ? <ThumbsUp className="h-5 w-5" /> : <Heart className="h-5 w-5" />}
             tint="bg-rose-500/20 text-rose-400"
             tracks={favorites}
             onOpen={() => onNavigate("favorites")}
@@ -145,6 +155,8 @@ export function LibraryView({ onNavigate }: { onNavigate: (r: RouteKey) => void 
           />
         </div>
       </section>
+
+      {saved.signedIn && <YtmPlaylistsSection onOpen={setYtmOpen} />}
 
       <section>
         <SectionHeader
@@ -414,7 +426,10 @@ export function PlaylistDetailView({ playlistId, onBack }: { playlistId: string;
 }
 
 export function FavoritesView() {
-  const { favorites, playAll } = usePlayer();
+  const { playAll } = usePlayer();
+  const saved = useSavedSongs();
+  const favorites = saved.tracks;
+  const Icon = saved.signedIn ? ThumbsUp : Heart;
   return (
     <div className="space-y-6 pb-4">
       <div className="blur-panel flex flex-col gap-5 p-5 sm:flex-row sm:items-end">
@@ -422,24 +437,42 @@ export function FavoritesView() {
           className="mx-auto flex aspect-square w-36 shrink-0 items-center justify-center rounded-2xl shadow-xl sm:mx-0 sm:w-40"
           style={{ backgroundImage: "linear-gradient(135deg, var(--c-accent), var(--c-accent2))" }}
         >
-          <Heart className="h-14 w-14 text-white/90 drop-shadow" />
+          <Icon className="h-14 w-14 text-white/90 drop-shadow" />
         </div>
         <div className="min-w-0 flex-1 text-center sm:text-left">
-          <p className="text-[10px] font-bold tracking-[0.2em] text-ink3 uppercase">Collection</p>
-          <h2 className="mt-1 text-3xl font-black tracking-tight text-ink">Favourites</h2>
+          <p className="text-[10px] font-bold tracking-[0.2em] text-ink3 uppercase">{saved.signedIn ? "YouTube Music" : "Collection"}</p>
+          <h2 className="mt-1 text-3xl font-black tracking-tight text-ink">{saved.signedIn ? "Liked songs" : "Favourites"}</h2>
           <p className="mt-1 text-xs text-ink3">
             {favorites.length} {favorites.length === 1 ? "track" : "tracks"}
           </p>
-          {favorites.length > 0 && (
-            <Button className="mt-4" onClick={() => playAll(favorites, 0)}>
-              <Play className="h-4 w-4 fill-current" /> Play all
-            </Button>
-          )}
+          <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+            {favorites.length > 0 && (
+              <Button onClick={() => playAll(favorites, 0)}>
+                <Play className="h-4 w-4 fill-current" /> Play all
+              </Button>
+            )}
+            {saved.signedIn && (
+              <Button variant="outline" onClick={saved.refresh} aria-label="Refresh">
+                <RefreshCw className={cn("h-4 w-4", saved.loading && "animate-spin")} />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       {favorites.length === 0 ? (
-        <EmptyState title="No favourites yet" hint="Tap the heart on any track to keep it here instantly." />
+        saved.loading ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : saved.error ? (
+          <ErrorState message={saved.error} onRetry={saved.refresh} />
+        ) : (
+          <EmptyState
+            title={saved.signedIn ? "No liked songs yet" : "No favourites yet"}
+            hint={saved.signedIn ? undefined : "Tap the heart on any track to keep it here instantly."}
+          />
+        )
       ) : (
         <div className="blur-panel p-2">
           {favorites.map((t, i) => (
