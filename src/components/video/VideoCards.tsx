@@ -8,6 +8,7 @@ import { routeToPath } from "@/routes";
 import type { ChannelItem, VideoItem } from "@/services/video/types";
 import { ytImgProps } from "@/utils/ytImg";
 import { rememberVideo } from "@/services/video/hints";
+import { extensionCanStream, useExtension } from "@/services/yt/extension";
 
 /** The same Google picture on its other host (yt3.ggpht.com ⇄ yt3.googleusercontent.com). */
 function otherHost(u?: string): string | undefined {
@@ -28,7 +29,9 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
   const [looked, setLooked] = useState<string | undefined>();
   const tries = [direct, otherHost(direct), saved, otherHost(saved), looked].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
   const src = tries.find((u) => !failed.includes(u));
-  // nothing (left) to show: look the channel's picture up once
+  // nothing (left) to show: look the channel's picture up once (again when
+  // the extension connects — it is the fallback when the open servers fail)
+  const extReady = extensionCanStream(useExtension());
   useEffect(() => {
     if (src || !channelId) return;
     let alive = true;
@@ -38,7 +41,7 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
     return () => {
       alive = false;
     };
-  }, [src, channelId]);
+  }, [src, channelId, extReady]);
   if (src) {
     return (
       <img
