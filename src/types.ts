@@ -65,7 +65,7 @@ export interface UserPlaylist {
 }
 
 /** Selectable theme cores. */
-export type ThemeName = "glassmorphism" | "material" | "liquid";
+export type ThemeName = "material" | "liquid";
 export type ThemeMode = "dark" | "light";
 
 export interface ViewDescriptor {

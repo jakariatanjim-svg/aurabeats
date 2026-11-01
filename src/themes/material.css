@@ -1,0 +1,195 @@
+/* ---------------------------- MATERIAL (M3) ----------------------------
+   Tonal palette generated from the accent (= M3 seed / primary): every
+   surface is neutral tinted with a little of the primary colour, exactly
+   like Material You. No blur, no glow, tonal elevation, M3 shape scale. */
+[data-theme="material"] {
+  --app-font: "Roboto", "Google Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --glow: transparent;
+  --glow-strength: 0;
+  --slider-fill: var(--c-accent);
+
+  --panel-backdrop: none;
+  --panel-backdrop-raised: none;
+  --panel-sheen: none;
+  --panel-border: 0 solid transparent;
+  --panel-radius: 16px; /* M3 shape: large */
+  --panel-shadow: 0 0 #0000; /* elevation level 0 — filled card */
+  --panel-highlight: 0 0 #0000;
+  --panel-hover-lift: 0px;
+
+  --shell-backdrop: none;
+  --shell-border: 0 solid transparent;
+  --shell-shadow: 0 0 #0000;
+  --shell-radius: 28px; /* M3 shape: extra large */
+  --bar-radius: 16px;
+  --app-bg-image: none;
+}
+
+[data-theme="material"][data-mode="dark"] {
+  --c-base: color-mix(in oklab, var(--c-accent) 4%, #0f0f13); /* surface dim */
+  --shell-bg: color-mix(in oklab, var(--c-accent) 5%, #141418); /* surface */
+  --c-elev: color-mix(in oklab, var(--c-accent) 8%, #1d1d22); /* surface container */
+  --c-elev-strong: color-mix(in oklab, var(--c-accent) 10%, #27272d); /* container high */
+  --c-elev2: color-mix(in oklab, var(--c-accent) 12%, #313138); /* container highest */
+  --c-line: color-mix(in oklab, var(--c-accent) 14%, #46464f); /* outline variant */
+  --c-ink: color-mix(in oklab, var(--c-accent) 4%, #e6e5ec); /* on surface */
+  --c-ink2: color-mix(in oklab, var(--c-accent) 8%, #c6c5d0); /* on surface variant */
+  --c-ink3: color-mix(in oklab, var(--c-accent) 8%, #91909a); /* outline */
+  --m-secondary-container: color-mix(in oklab, var(--c-accent) 30%, #24242a);
+  --m-on-secondary-container: color-mix(in oklab, var(--c-accent) 12%, #f1f0f6);
+  --bar-shadow: 0 3px 6px -1px rgb(0 0 0 / 0.45), 0 2px 4px rgb(0 0 0 / 0.3); /* level 2 */
+}
+
+[data-theme="material"][data-mode="light"] {
+  --c-base: color-mix(in oklab, var(--c-accent) 6%, #f1f1f6);
+  --shell-bg: color-mix(in oklab, var(--c-accent) 2%, #fdfcff);
+  --c-elev: color-mix(in oklab, var(--c-accent) 7%, #f1f0f5);
+  --c-elev-strong: color-mix(in oklab, var(--c-accent) 9%, #ebeaf0);
+  --c-elev2: color-mix(in oklab, var(--c-accent) 11%, #e4e3ea);
+  --c-line: color-mix(in oklab, var(--c-accent) 14%, #c7c6d0);
+  --c-ink: color-mix(in oklab, var(--c-accent) 4%, #1b1b21);
+  --c-ink2: color-mix(in oklab, var(--c-accent) 6%, #46464f);
+  --c-ink3: color-mix(in oklab, var(--c-accent) 6%, #77767f);
+  --m-secondary-container: color-mix(in oklab, var(--c-accent) 22%, #f4f3f8);
+  --m-on-secondary-container: color-mix(in oklab, var(--c-accent) 25%, #15151b);
+  --bar-shadow: 0 2px 6px -1px color-mix(in oklab, var(--c-accent) 12%, rgb(27 27 33 / 0.16)), 0 1px 3px rgb(27 27 33 / 0.08);
+  --shade: color-mix(in oklab, var(--c-accent) 18%, rgb(27 27 33));
+}
+
+
+/* ==========================================================================
+   Material UI component layer
+   Plain (unlayered) rules, so they win over Tailwind utilities without
+   !important. Components expose small hooks (ab-*, data-active) and this
+   layer reshapes them into Material 3 patterns.
+   ========================================================================== */
+
+/* Compact screens: the content pane is edge-to-edge, like a native M3 app. */
+@media (max-width: 639px) {
+  [data-theme="material"][data-mode] {
+    --shell-radius: 0px;
+  }
+}
+
+/* Typography: M3 type scale tops out at bold; 900 weights look off in Roboto. */
+[data-theme="material"] :is(.font-black, .font-extrabold) {
+  font-weight: 700;
+}
+[data-theme="material"] .tracking-tight {
+  letter-spacing: 0;
+}
+
+/* Feedback comes from state layers + ripple, not from shrinking. */
+[data-theme="material"] :is(button, a, [role="button"]):active {
+  scale: none;
+}
+[data-theme="material"] .blur-panel[class*="hover:-translate-y"]:hover {
+  translate: none;
+}
+
+/* Top app bar: sits on the surface colour, no divider. */
+[data-theme="material"] .ab-topbar {
+  --panel-fill: var(--shell-bg);
+}
+
+/* Filter chips: 8dp corners; selected = secondary container. */
+[data-theme="material"] .ab-chip {
+  border-radius: 8px;
+}
+[data-theme="material"] .ab-chip[data-active="true"] {
+  background-color: var(--m-secondary-container);
+  color: var(--m-on-secondary-container);
+  border-color: transparent;
+}
+
+/* Navigation drawer items: full pill, active indicator = secondary container. */
+[data-theme="material"] .ab-nav-item {
+  border-radius: 9999px;
+}
+[data-theme="material"] .ab-nav-item[data-active="true"] {
+  background-color: var(--m-secondary-container);
+  color: var(--m-on-secondary-container);
+}
+[data-theme="material"] .ab-nav-mark,
+[data-theme="material"] .ab-navline {
+  display: none;
+}
+
+/* Navigation bar: label under an icon that sits in a pill indicator. */
+[data-theme="material"] .ab-navbar {
+  border-top-color: transparent;
+  border-radius: 0;
+}
+[data-theme="material"] .ab-navbtn {
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--c-ink2);
+  font-weight: 500;
+}
+[data-theme="material"] .ab-navbtn[data-active="true"] {
+  color: var(--c-ink);
+  font-weight: 700;
+}
+[data-theme="material"] .ab-navicon {
+  isolation: isolate;
+}
+[data-theme="material"] .ab-navicon::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 3.5rem;
+  height: 2rem;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+[data-theme="material"] .ab-navbtn:hover .ab-navicon::before {
+  background-color: color-mix(in oklab, var(--c-ink) 8%, transparent);
+}
+[data-theme="material"] .ab-navbtn[data-active="true"] .ab-navicon::before {
+  background-color: var(--m-secondary-container);
+}
+[data-theme="material"] .ab-navbtn[data-active="true"] .ab-navicon > svg {
+  color: var(--m-on-secondary-container);
+  scale: none;
+}
+
+/* Ripple (see src/utils/ripple.ts). */
+.ab-ripple-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+.ab-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background-color: currentColor;
+  opacity: 0;
+  scale: 0;
+  pointer-events: none;
+  animation: ab-ripple 0.55s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+@keyframes ab-ripple {
+  0% {
+    scale: 0;
+    opacity: 0.16;
+  }
+  60% {
+    opacity: 0.12;
+  }
+  100% {
+    scale: 1;
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ab-ripple {
+    display: none;
+  }
+}

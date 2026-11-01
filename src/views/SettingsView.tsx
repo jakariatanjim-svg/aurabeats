@@ -46,7 +46,6 @@ const isPwaInstalled =
 
 /** Theme cores shown in Settings. */
 const THEME_CORES: { key: ThemeName; name: string; desc: string; icon: typeof Sparkles }[] = [
-  { key: "glassmorphism", name: "Glassmorphism", desc: "Frosted glass", icon: Sparkles },
   { key: "material", name: "Material UI", desc: "Material 3", icon: Shapes },
   { key: "liquid", name: "Liquid Glass", desc: "Clear glass", icon: Droplets },
 ];

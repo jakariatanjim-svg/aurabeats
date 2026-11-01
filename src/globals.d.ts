@@ -17,3 +17,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Vite: a stylesheet's processed text (theme sheets, see utils/themeSheets). */
+declare module "*.css?inline" {
+  const css: string;
+  export default css;
+}

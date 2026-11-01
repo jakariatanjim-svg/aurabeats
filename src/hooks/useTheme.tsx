@@ -1,5 +1,5 @@
 /**
- * Theme engine — Glassmorphism, Material UI (Material 3) or Liquid Glass (iOS 26) cores, plus dark and
+ * Theme engine — Material UI (Material 3) or Liquid Glass (iOS 26), plus dark and
  * light modes and a live accent colour system. Everything is written to CSS
  * custom properties on <html> so the whole UI re-tints instantly with zero
  * re-render cost, and persisted to localStorage.
@@ -8,6 +8,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { storage } from "@/utils/storage";
 import type { ThemeMode, ThemeName } from "@/types";
+import { applyThemeSheet } from "@/utils/themeSheets";
 
 export interface AccentPreset {
   name: string;
@@ -97,21 +98,24 @@ export function accentRgbString(hex: string): string {
 }
 
 export const THEMES: { key: ThemeName; name: string }[] = [
-  { key: "glassmorphism", name: "Glassmorphism" },
   { key: "material", name: "Material UI" },
   { key: "liquid", name: "Liquid Glass" },
 ];
 
-/** Reads the saved core, migrating the old "glassy" / "modern" keys. */
+/** Reads the saved look. Glassmorphism is gone: it (and the old "glassy"
+ *  key) becomes Liquid Glass, the closest look; "modern" was Material. */
 function loadTheme(): ThemeName {
-  const saved = storage.get<string>("theme", "glassmorphism");
-  if (saved === "material" || saved === "modern") return "material";
-  if (saved === "liquid") return "liquid";
-  return "glassmorphism";
+  const saved = storage.get<string>("theme", "liquid");
+  return saved === "material" || saved === "modern" ? "material" : "liquid";
 }
 
+// Before the first paint: only the saved look's stylesheet is switched on.
+const initialTheme = loadTheme();
+document.documentElement.dataset.theme = initialTheme;
+applyThemeSheet(initialTheme);
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeName>(loadTheme);
+  const [theme, setThemeState] = useState<ThemeName>(initialTheme);
   const [mode, setModeState] = useState<ThemeMode>(() => storage.get<ThemeMode>("mode", "dark"));
   // Default accent: Ocean (#3b82f6) — index 7 in ACCENTS
   const [blur, setBlurState] = useState<boolean>(() => storage.get<boolean>("blur", true));
@@ -124,6 +128,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
+    applyThemeSheet(theme);
     root.dataset.theme = theme;
     root.dataset.mode = mode;
     root.style.setProperty("--c-accent", accent);

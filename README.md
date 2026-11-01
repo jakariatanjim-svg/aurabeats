@@ -57,7 +57,7 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
     <td valign="top">
       <h3>Your look</h3>
-      Glassmorphism, Material and Liquid Glass designs, in light or dark, with your own accent colour.
+      Material and Liquid Glass designs, in light or dark, with your own accent colour.
     </td>
   </tr>
 </table>
