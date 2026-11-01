@@ -3,7 +3,7 @@
  * back to the on-device versions (Follow, Watch later) in guest mode.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Bookmark, BookmarkCheck, Check, ListPlus, Lock, Plus, ThumbsUp } from "lucide-react";
+import { Bookmark, BookmarkCheck, Check, Lock, Plus, ThumbsUp } from "lucide-react";
 import { Button, Modal, Spinner } from "@/components/ui";
 import { cn } from "@/utils/cn";
 import { formatCount } from "@/utils/format";
@@ -17,11 +17,15 @@ import {
   isSubscribed,
   likedNow,
   loadLike,
+  loadSaved,
+  savedNow,
+  savedTargetsNow,
   saveTargets,
   setInPlaylist,
   setLiked,
   setSubscribed,
   subscribeLikes,
+  subscribeSaved,
   useYtSubscriptions,
   type SaveTarget,
 } from "@/services/yt/library";
@@ -119,32 +123,48 @@ export function SaveButton({ v }: { v: VideoItem }) {
       </Button>
     );
   }
+  return <AccountSaveButton videoId={v.id} open={open} setOpen={setOpen} />;
+}
+
+/** Signed in: shows whether the video is saved anywhere; a tap opens the "Save to" menu. */
+function AccountSaveButton({ videoId, open, setOpen }: { videoId: string; open: boolean; setOpen: (o: boolean) => void }) {
+  const saved = useSyncExternalStore(subscribeSaved, () => savedNow(videoId), () => savedNow(videoId));
+  useEffect(() => {
+    void loadSaved(videoId).catch(() => undefined);
+  }, [videoId]);
   return (
     <>
-      <Button variant="outline" className="px-3.5 text-xs" onClick={() => setOpen(true)}>
-        <ListPlus className="h-3.5 w-3.5" /> Save
+      <Button
+        variant="outline"
+        aria-pressed={!!saved}
+        className={cn("px-3.5 text-xs", saved && "border-accent/50 text-accent")}
+        onClick={() => setOpen(true)}
+      >
+        {saved ? <BookmarkCheck key="on" className="h-3.5 w-3.5 animate-pop fill-current" /> : <Bookmark key="off" className="h-3.5 w-3.5" />}
+        {saved ? "Saved" : "Save"}
       </Button>
-      {open && <SaveSheet videoId={v.id} onClose={() => setOpen(false)} />}
+      {open && <SaveSheet videoId={videoId} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
 function SaveSheet({ videoId, onClose }: { videoId: string; onClose: () => void }) {
   const { toast } = usePlayer();
-  const [targets, setTargets] = useState<SaveTarget[] | null>(null);
+  const targets = useSyncExternalStore(subscribeSaved, () => savedTargetsNow(videoId), () => savedTargetsNow(videoId));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    saveTargets(videoId).then(setTargets, (e) => setError(errText(e)));
+    // always re-read: the video may have been saved elsewhere meanwhile
+    saveTargets(videoId).catch((e) => setError(errText(e)));
   }, [videoId]);
 
   const toggle = async (t: SaveTarget) => {
     setBusy(t.id);
     try {
       await setInPlaylist(t.id, videoId, !t.saved);
-      setTargets((all) => all?.map((x) => (x.id === t.id ? { ...x, saved: !t.saved } : x)) ?? null);
+      toast(t.saved ? `Removed from ${t.title}` : `Saved to ${t.title}`, "success");
       dropYtLists(t.id === "WL" ? "later" : `pl:${t.id}`);
       dropYtLists("playlists");
     } catch (e) {
@@ -169,11 +189,11 @@ function SaveSheet({ videoId, onClose }: { videoId: string; onClose: () => void 
           {targets ? (
             <div className="max-h-[50vh] divide-y divide-line overflow-y-auto">
               {targets.map((t) => (
-                <button key={t.id} type="button" disabled={busy === t.id} onClick={() => void toggle(t)} className="focus-ring flex w-full items-center gap-3 px-1 py-3 text-left">
-                  <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-md border", t.saved ? "border-accent bg-accent text-white" : "border-line")}>
-                    {busy === t.id ? <Spinner className="h-3.5 w-3.5 text-current" /> : t.saved && <Check className="h-3.5 w-3.5" />}
+                <button key={t.id} type="button" disabled={busy !== null} aria-pressed={t.saved} onClick={() => void toggle(t)} className="focus-ring flex w-full items-center gap-3 px-1 py-3 text-left">
+                  <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors duration-200", t.saved ? "border-accent bg-accent text-white" : "border-line")}>
+                    {busy === t.id ? <Spinner className="h-3.5 w-3.5 text-current" /> : t.saved && <Check className="h-3.5 w-3.5 animate-pop" />}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{t.title}</span>
+                  <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", t.saved ? "text-accent" : "text-ink")}>{t.title}</span>
                   {t.private && <Lock className="h-3.5 w-3.5 shrink-0 text-ink3" aria-label="Private" />}
                 </button>
               ))}

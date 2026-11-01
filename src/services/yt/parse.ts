@@ -83,7 +83,8 @@ function fromRenderer(r: Obj): VideoItem | null {
   const overlay = findAll(r.thumbnailOverlays, "thumbnailOverlayTimeStatusRenderer")[0];
   if (!duration && overlay) duration = parseDuration(text(overlay.text));
   const badges = JSON.stringify(r.badges ?? []) + JSON.stringify(r.thumbnailOverlays ?? []);
-  const live = /LIVE_NOW|"style":"LIVE"/.test(badges);
+  // a video with a length is never live (past streams keep their "LIVE" style)
+  const live = !duration && /BADGE_STYLE_TYPE_LIVE_NOW|"style":"LIVE"/.test(badges);
   const info = text(r.videoInfo); // playlists: "1.2M views • 3 years ago"
   const [infoViews, infoAgo] = info.split(/\s*•\s*/);
   const viewsText = text(r.viewCountText) || text(r.shortViewCountText) || infoViews || "";
@@ -119,9 +120,11 @@ function fromLockup(r: Obj): VideoItem | null {
       for (const p of findAll(row, "text")) parts.push(text(p));
     }
   }
-  const badgeTexts = findAll(r.contentImage, "thumbnailBadgeViewModel").map((b) => text(b.text));
-  const live = badgeTexts.some((t) => /^live$/i.test(t)) || /BADGE_STYLE_LIVE/.test(JSON.stringify(r.contentImage ?? {}));
+  const badges = findAll(r.contentImage, "thumbnailBadgeViewModel");
+  const badgeTexts = badges.map((b) => text(b.text));
   const durText = badgeTexts.find((t) => /^\d+(:\d+)+$/.test(t)) ?? "";
+  // only YouTube's own LIVE badge, and never on a video with a length
+  const live = !durText && badges.some((b) => /^live$/i.test(text(b.text)) || b.badgeStyle === "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE");
   const viewsPart = parts.find((p) => /views?|watching/i.test(p));
   const agoPart = parts.find((p) => /ago|streamed|premiered/i.test(p));
   const author = parts.find((p) => p && p !== viewsPart && p !== agoPart && !/^•$/.test(p)) ?? "";
@@ -229,4 +232,22 @@ export function readPage(root: unknown): YtPage {
   };
   walk(root);
   return page;
+}
+
+/**
+ * A playlist page (also Liked, Watch later): only the playlist's own videos.
+ * Below your own playlists YouTube adds a "Recommended videos" shelf (to add
+ * to the playlist); it lives outside the playlist list and is loaded by its
+ * own continuation, so both are skipped.
+ */
+export function readPlaylistPage(root: unknown, isFirst: boolean): YtPage {
+  const list = findAll(root, "playlistVideoListRenderer")[0] ?? findAll(root, "playlistVideoListContinuation")[0];
+  if (list) return readPage(list);
+  // a continuation of the list carries playlist rows; anything else is the shelf
+  if (findAll(root, "playlistVideoRenderer").length) {
+    const actions = [...findAll(root, "appendContinuationItemsAction"), ...findAll(root, "reloadContinuationItemsCommand")];
+    return readPage(actions.length ? actions : root);
+  }
+  // first page in an unknown layout: keep its videos, but don't load further
+  return isFirst ? { ...readPage(root), next: undefined } : { videos: [], playlists: [], channels: [] };
 }

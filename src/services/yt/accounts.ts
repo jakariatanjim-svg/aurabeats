@@ -157,7 +157,13 @@ function parseAccounts(r: unknown): Profile | null {
 async function readProfile(id: string, pageId?: string): Promise<Profile | "signed-out"> {
   const r = await ytCall(id, "account/accounts_list", {}, pageId || undefined);
   if (loggedOut(r)) return "signed-out";
-  return parseAccounts(r) ?? "signed-out";
+  const p = parseAccounts(r);
+  if (!p) return "signed-out";
+  // Only the Google part signed in (YouTube's own sign-in never finished)
+  // also lists just the Google name. Accounts without a channel are fine:
+  // YouTube itself then answers as signed in.
+  if (!p.channels.length && loggedOut(await ytCall(id, "guide", {}, pageId || undefined))) return "signed-out";
+  return p;
 }
 
 function upsert(acc: YtAccount) {
@@ -171,7 +177,8 @@ function fromProfile(id: string, p: Profile, prev?: YtAccount): YtAccount {
   const inUse = p.channels.find((c) => (c.pageId ?? "") === pageId) ?? own;
   return {
     id,
-    name: p.name,
+    // the YouTube channel in use when there is one, else the Google name
+    name: inUse?.name || p.name,
     email: p.email,
     handle: inUse?.handle,
     photo: inUse?.photo ?? own?.photo,
@@ -188,7 +195,7 @@ function fromProfile(id: string, p: Profile, prev?: YtAccount): YtAccount {
 /** Opens Google's sign-in; resolves with the new (or re-signed) account, null if cancelled. */
 export async function addAccount(): Promise<YtAccount | null> {
   if (!ytAccountsSupported()) throw new Error("YouTube sign-in works in the Android app (or the website with the AuraBeats extension)");
-  if (!isNative) return addWebAccount();
+  if (!isNative) throw new Error("Choose accounts with Connect YouTube");
   let id: string;
   try {
     id = (await YtLogin.signIn()).account;
@@ -204,7 +211,7 @@ export async function addAccount(): Promise<YtAccount | null> {
       throw new Error("Sign-in didn't finish. Please try again.");
     }
     // the same Google account signed in again: replace the old session
-    const same = state.accounts.find((a) => (p.email && a.email === p.email) || (!p.email && a.name === p.name));
+    const same = state.accounts.find((a) => (p.email && a.email === p.email) || (!p.email && (a.name === p.name || p.channels.some((c) => c.name === a.name))));
     if (same) {
       await YtLogin.remove({ account: same.id }).catch(() => undefined);
       set({ accounts: state.accounts.filter((a) => a.id !== same.id) });
@@ -243,7 +250,7 @@ export function switchChannel(id: string, pageId: string) {
   const acc = state.accounts.find((a) => a.id === id);
   const ch = acc?.channels.find((c) => (c.pageId ?? "") === pageId);
   if (!acc || !ch) return;
-  upsert({ ...acc, pageId, handle: ch.handle, photo: ch.photo ?? acc.photo, channelId: ch.channelId });
+  upsert({ ...acc, pageId, name: ch.name || acc.name, handle: ch.handle, photo: ch.photo ?? acc.photo, channelId: ch.channelId });
 }
 
 /** Hide now (Undo possible); `forget` deletes the sign-in for good. */
@@ -268,47 +275,61 @@ export function checkAccountsOnce() {
 
 /* ---------------------------- website accounts ---------------------------- */
 
-const GOOGLE_SIGN_IN = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
-const GOOGLE_ADD = "https://accounts.google.com/AddSession?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
+export const GOOGLE_SIGN_IN = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
+export const GOOGLE_ADD = "https://accounts.google.com/AddSession?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F";
+
+/** One Google account signed in to YouTube in this browser. */
+export interface BrowserAccount {
+  /** "web:<index>" (the browser's sign-in number) */
+  id: string;
+  name: string;
+  email?: string;
+  photo?: string;
+  channels: number;
+  /** already in AuraBeats (and still signed in) */
+  added: boolean;
+}
+
+const webKey = (a: { email?: string; name: string }) => a.email || a.name;
+const found = new Map<string, Profile>();
 
 /**
- * Website: accounts are the Google accounts signed in to YouTube in this
- * browser ("web:0", "web:1", …). Adds the next one not added yet; when there
- * is none, opens Google's sign-in in a new tab.
+ * Website: every Google account signed in to YouTube in this browser
+ * ("web:0", "web:1", …), read through the extension.
  */
-async function addWebAccount(): Promise<YtAccount | null> {
-  set({ busy: true });
-  try {
-    const known = new Set(state.accounts.filter((a) => isWebAccount(a.id)).map((a) => a.email || a.name));
-    for (let i = 0; i < 10; i++) {
-      const id = `web:${i}`;
-      const p = await readProfile(id);
-      if (p === "signed-out") {
-        window.open(i === 0 ? GOOGLE_SIGN_IN : GOOGLE_ADD, "_blank", "noopener");
-        throw new Error(i === 0 ? "Sign in to YouTube in the new tab, then tap Connect again" : "Sign in with another account in the new tab, then tap Add account again");
-      }
-      const key = p.email || p.name;
-      if (known.has(key)) {
-        // re-connect an account that had signed out
-        const old = state.accounts.find((a) => isWebAccount(a.id) && (a.email || a.name) === key);
-        if (old?.needsSignIn) {
-          const acc = fromProfile(id, p, { ...old, id });
-          set({ accounts: state.accounts.filter((a) => a.id !== old.id) });
-          upsert(acc);
-          set({ active: id });
-          return acc;
-        }
-        continue;
-      }
-      const acc = fromProfile(id, p, state.accounts.find((a) => a.id === id));
-      upsert(acc);
-      set({ active: id });
-      return acc;
-    }
-    return null;
-  } finally {
-    set({ busy: false });
+export async function listBrowserAccounts(): Promise<BrowserAccount[]> {
+  found.clear();
+  const out: BrowserAccount[] = [];
+  for (let i = 0; i < 10; i++) {
+    const id = `web:${i}`;
+    const p = await readProfile(id);
+    if (p === "signed-out") break;
+    const key = p.email || p.name;
+    if (out.some((a) => webKey(a) === key)) break; // past the last one: Google repeats the default
+    found.set(id, p);
+    const own = p.channels.find((c) => !c.pageId) ?? p.channels[0];
+    const old = state.accounts.find((a) => isWebAccount(a.id) && (a.email || a.name) === key);
+    out.push({ id, name: own?.name || p.name, email: p.email, photo: own?.photo, channels: p.channels.length, added: !!old && !old.needsSignIn && old.id === id });
   }
+  return out;
+}
+
+/** Adds (or re-connects) the chosen browser accounts; the first becomes the one in use. */
+export function addBrowserAccounts(ids: string[]): YtAccount[] {
+  const added: YtAccount[] = [];
+  for (const id of ids) {
+    const p = found.get(id);
+    if (!p) continue;
+    const key = p.email || p.name;
+    // the same Google account under another number (or signed out): replace it
+    const old = state.accounts.find((a) => isWebAccount(a.id) && ((a.email || a.name) === key || a.id === id));
+    if (old) set({ accounts: state.accounts.filter((a) => a !== old) });
+    const acc = fromProfile(id, p, old && (old.email || old.name) === key ? { ...old, id } : undefined);
+    upsert(acc);
+    added.push(acc);
+  }
+  if (added[0]) set({ active: added[0].id });
+  return added;
 }
 
 // Website: the extension connects a moment after the page loads.

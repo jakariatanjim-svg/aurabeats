@@ -5,6 +5,9 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.text.TextUtils;
@@ -147,11 +150,31 @@ public class YtLoginPlugin extends Plugin {
         cm.setAcceptThirdPartyCookies(web, true);
         root.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        final Runnable finishIfSignedIn = () -> {
+        // Keep the sign-in only once YouTube itself has finished it. After the
+        // Google page, accounts.youtube.com and youtube.com/signin still have
+        // to run; leaving earlier kept only the Google part (the Google name,
+        // no channel, no YouTube data).
+        final Handler ui = new Handler(Looper.getMainLooper());
+        final long[] onYouTubeSince = { 0 };
+        final Runnable[] check = new Runnable[1];
+        check[0] = () -> {
             if (done[0]) return;
+            if (!isYouTubePage(web.getUrl())) return;
             String c = cm.getCookie(ORIGIN);
             if (c == null || !(c.contains("SAPISID=") || c.contains("__Secure-3PAPISID="))) return;
+            long now = System.currentTimeMillis();
+            if (onYouTubeSince[0] == 0) {
+                onYouTubeSince[0] = now;
+                title.setText("Finishing sign-in…");
+            }
+            // LOGIN_INFO = YouTube's own sign-in; give it a few seconds to arrive
+            if (!c.contains("LOGIN_INFO=") && now - onYouTubeSince[0] < 6000) {
+                ui.removeCallbacks(check[0]);
+                ui.postDelayed(check[0], 800);
+                return;
+            }
             done[0] = true;
+            ui.removeCallbacks(check[0]);
             String id = UUID.randomUUID().toString();
             try {
                 saveJar(id, parseCookieHeader(c));
@@ -168,16 +191,17 @@ public class YtLoginPlugin extends Plugin {
             } catch (Exception ignored) {
             }
         };
+        final Runnable finishIfSignedIn = check[0];
 
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (url != null && url.contains("youtube.com")) finishIfSignedIn.run();
+                finishIfSignedIn.run();
             }
 
             @Override
             public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
-                if (url != null && url.contains("youtube.com") && !url.contains("accounts.")) finishIfSignedIn.run();
+                finishIfSignedIn.run();
             }
         });
 
@@ -190,6 +214,7 @@ public class YtLoginPlugin extends Plugin {
             return false;
         });
         d.setOnCancelListener(di -> {
+            ui.removeCallbacks(check[0]);
             if (!done[0]) {
                 done[0] = true;
                 cm.removeAllCookies(null);
@@ -210,6 +235,17 @@ public class YtLoginPlugin extends Plugin {
         dialog = d;
         d.show();
         web.loadUrl(SIGN_IN_URL);
+    }
+
+    /** A real YouTube page (not Google's pages, accounts.youtube.com or the /signin step). */
+    private static boolean isYouTubePage(String url) {
+        if (url == null) return false;
+        Uri u = Uri.parse(url);
+        String host = u.getHost();
+        String path = u.getPath() == null ? "" : u.getPath();
+        if (host == null) return false;
+        if (!host.equals("www.youtube.com") && !host.equals("m.youtube.com") && !host.equals("youtube.com")) return false;
+        return !path.startsWith("/signin") && !path.startsWith("/accounts") && !path.startsWith("/logout");
     }
 
     /** Hide the "this is an app's WebView" header when the WebView supports it (androidx.webkit, via reflection). */

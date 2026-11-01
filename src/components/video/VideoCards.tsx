@@ -8,20 +8,33 @@ import type { ChannelItem, VideoItem } from "@/services/video/types";
 import { ytImgProps } from "@/utils/ytImg";
 import { rememberVideo } from "@/services/video/hints";
 
+/** The same Google picture on its other host (yt3.ggpht.com ⇄ yt3.googleusercontent.com). */
+function otherHost(u?: string): string | undefined {
+  if (!u) return undefined;
+  if (u.includes("://yt3.ggpht.com/")) return u.replace("://yt3.ggpht.com/", "://yt3.googleusercontent.com/");
+  if (u.includes("://yt3.googleusercontent.com/")) return u.replace("://yt3.googleusercontent.com/", "://yt3.ggpht.com/");
+  return undefined;
+}
+
 export function Avatar({ name, src: rawSrc, channelId, className }: { name: string; src?: string; channelId?: string; className?: string }) {
-  const [broken, setBroken] = useState(false);
+  // pictures that failed to load (by URL, so a new picture for the same row is tried again)
+  const [failed, setFailed] = useState<string[]>([]);
   // Direct Google URL (also repairs proxy URLs saved earlier); lists without
   // an avatar (RSS feed, old history) use the one remembered for the channel.
   if (rawSrc) rememberAvatar(channelId, rawSrc);
-  const src = directImg(rawSrc) || avatarFor(channelId);
-  if (src && !broken) {
+  const direct = directImg(rawSrc);
+  const saved = avatarFor(channelId);
+  const tries = [direct, otherHost(direct), saved, otherHost(saved)].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
+  const src = tries.find((u) => !failed.includes(u));
+  if (src) {
     return (
       <img
+        key={src}
         src={src}
         alt=""
         loading="lazy"
         referrerPolicy="no-referrer"
-        onError={() => setBroken(true)}
+        onError={() => setFailed((f) => [...f, src])}
         className={cn("shrink-0 rounded-full bg-ink/10 object-cover", className)}
       />
     );

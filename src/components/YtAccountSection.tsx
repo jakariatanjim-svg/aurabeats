@@ -1,7 +1,8 @@
 /**
  * Settings → YouTube account (Android app, "Advanced users only").
  * Sign in with youtube.com's own Google page, keep several accounts, switch
- * accounts and channels. The website shows nothing yet (extension: step 4).
+ * accounts and channels. Website: the extension, then a picker of the
+ * browser's own Google accounts.
  */
 import { useEffect, useState } from "react";
 import { Check, CircleUserRound, RefreshCw, Trash2, TriangleAlert, UserRound } from "lucide-react";
@@ -15,6 +16,7 @@ import { useYtPrefs, ytPrefs } from "@/services/yt/session";
 import { useExtension } from "@/services/yt/extension";
 import { isNative } from "@/services/video/net";
 import { ExtensionCard } from "@/components/ExtensionCard";
+import { BrowserAccountsPicker } from "@/components/BrowserAccountsPicker";
 import {
   addAccount,
   checkAccountsOnce,
@@ -40,8 +42,9 @@ function GoogleG({ className }: { className?: string }) {
 }
 
 function Photo({ src, className }: { src?: string; className?: string }) {
-  return src ? (
-    <img src={src} alt="" referrerPolicy="no-referrer" className={cn("shrink-0 rounded-full object-cover", className)} />
+  const [bad, setBad] = useState<string | null>(null);
+  return src && bad !== src ? (
+    <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setBad(src)} className={cn("shrink-0 rounded-full object-cover", className)} />
   ) : (
     <span className={cn("flex shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent", className)}>
       <UserRound className="h-1/2 w-1/2" />
@@ -54,6 +57,7 @@ export function YtAccountSection() {
   const { toast } = usePlayer();
   const prefs = useYtPrefs();
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
 
   const ext = useExtension();
   useEffect(() => checkAccountsOnce(), [ext.connected]);
@@ -62,6 +66,8 @@ export function YtAccountSection() {
   const ready = ytAccountsSupported();
 
   const add = async () => {
+    // website: choose from the browser's accounts
+    if (!isNative) return setPicking(true);
     try {
       const acc = await addAccount();
       if (acc) toast(`Signed in as ${acc.name}`, "success");
@@ -137,6 +143,7 @@ export function YtAccountSection() {
         </div>
         )}
       </div>
+      {picking && <BrowserAccountsPicker onClose={() => setPicking(false)} />}
     </section>
   );
 }
