@@ -139,6 +139,31 @@ jobs:
                   raise SystemExit(1)
               text = text.replace(anchor, anchor + ' android:supportsPictureInPicture="true"', 1)
               path.write_text(text)
+          # Share → AuraBeats (text from YouTube & co.) and YouTube links
+          # opened with the app: the video plays inside AuraBeats.
+          if "android.intent.action.SEND" not in text:
+              anchor = 'android:name=".MainActivity"'
+              i = text.find(anchor)
+              j = text.find("</activity>", i)
+              if i < 0 or j < 0:
+                  print("::error::MainActivity not found in AndroidManifest.xml")
+                  raise SystemExit(1)
+              hosts = "".join('<data android:host="%s" />' % h for h in ["www.youtube.com", "youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"])
+              filters = (
+                  '<intent-filter android:label="Play in AuraBeats">'
+                  '<action android:name="android.intent.action.SEND" />'
+                  '<category android:name="android.intent.category.DEFAULT" />'
+                  '<data android:mimeType="text/plain" />'
+                  '</intent-filter>\n'
+                  '            <intent-filter>'
+                  '<action android:name="android.intent.action.VIEW" />'
+                  '<category android:name="android.intent.category.DEFAULT" />'
+                  '<category android:name="android.intent.category.BROWSABLE" />'
+                  '<data android:scheme="https" /><data android:scheme="http" />' + hosts +
+                  '</intent-filter>\n        '
+              )
+              text = text[:j] + "    " + filters + text[j:]
+              path.write_text(text)
           print("Declared:", add or "already present")
           PY
 

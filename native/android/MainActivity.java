@@ -1,5 +1,6 @@
 package dev.pages.aurabeats;
 
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 
@@ -17,7 +18,16 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DeviceMusicPlugin.class);
         registerPlugin(PipPlugin.class);
         registerPlugin(YtLoginPlugin.class);
+        registerPlugin(ShareTargetPlugin.class);
         super.onCreate(savedInstanceState);
+        // opened by "Share → AuraBeats" or a YouTube link
+        ShareTargetPlugin.handle(getIntent());
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        ShareTargetPlugin.handle(intent);
     }
 
     @Override

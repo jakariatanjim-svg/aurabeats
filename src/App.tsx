@@ -26,6 +26,7 @@ import { lastMode, rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
 import { App as CapApp } from "@capacitor/app";
 import { runBackHandler } from "@/utils/backStack";
+import { listenForShares } from "@/utils/shareTarget";
 import { baseOrientation } from "@/utils/orientation";
 import { dropOldAccountData } from "@/services/yt/accounts";
 import { subscribeVideoSettings } from "@/services/video/settings";
@@ -194,6 +195,15 @@ function Shell() {
       remove?.();
     };
   }, [scrollTop]);
+
+  // App: "Share → AuraBeats" from YouTube (or a YouTube link opened with
+  // the app) plays the video here, with listen / download / offline.
+  const navRef = useRef(navigate);
+  navRef.current = navigate;
+  useEffect(() => {
+    if (!isNative) return;
+    return listenForShares((r) => navRef.current(r));
+  }, []);
 
   // The old TV sign-in is gone: wipe what it left behind (once, harmless).
   useEffect(() => {
