@@ -13,7 +13,7 @@ Songs and YouTube in one calm, free player — no account, no subscription.
 &nbsp;
 [![Download for Android](https://img.shields.io/badge/Download-Android_APK-1e293b?style=for-the-badge&logo=android&logoColor=3ddc84)](https://github.com/jakariatanjim-svg/aurabeats/releases/latest)
 
-<sub>Web&nbsp;&nbsp;·&nbsp;&nbsp;Android&nbsp;&nbsp;·&nbsp;&nbsp;Installable on PC, Mac and iPhone</sub>
+<sub>Web&nbsp;&nbsp;·&nbsp;&nbsp;Android&nbsp;&nbsp;·&nbsp;&nbsp;Installable on PC and Mac</sub>
 
 </div>
 
@@ -21,7 +21,7 @@ Songs and YouTube in one calm, free player — no account, no subscription.
 
 ## Overview
 
-AuraBeats brings full-length songs and YouTube videos together in a single, uncluttered player. Search once, tap, and listen — on the web, as an installed app, or on Android.
+AuraBeats brings full-length songs and YouTube videos together in a single, uncluttered player. Search once, tap, and listen — on the web, as an installed app on your computer, or on Android. It opens on the side you used last, Music or Video.
 
 Everything personal — favourites, playlists, history and followed channels — stays on your own device. If you like, sign in with your YouTube account to bring your subscriptions, likes and playlists along.
 
@@ -37,13 +37,13 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
     <td width="50%" valign="top">
       <h3>Video</h3>
-      Switch to Video at any time. The Android app plays YouTube ad-free, in every available quality up to 4K. Follow channels and pick up where you left off.
+      Switch to Video at any time. The Android app plays YouTube ad-free, in every available quality up to 4K. On a computer, rest the mouse on a video for a quick preview. Follow channels and pick up where you left off.
     </td>
   </tr>
   <tr>
     <td valign="top">
       <h3>Offline listening</h3>
-      On Android, save songs inside the app and play them without an internet connection.
+      On Android, save songs and videos inside the app and play them without an internet connection.
     </td>
     <td valign="top">
       <h3>Synced lyrics</h3>
@@ -57,7 +57,17 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
     <td valign="top">
       <h3>Your look</h3>
-      Material and Liquid Glass designs, in light or dark, with your own accent colour.
+      Two designs, Material and Liquid Glass, in light or dark, with your own accent colour. Turn <b>Blur</b> off in Settings for a lighter look on slower devices.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h3>Share to AuraBeats</h3>
+      On Android, tap <b>Share</b> on any video in the YouTube app and choose <b>Play in AuraBeats</b> — it opens right in the app. On the web, paste a YouTube link into search to play it.
+    </td>
+    <td valign="top">
+      <h3>Better on the web</h3>
+      With the free AuraBeats Connector extension, videos play directly in the site's own player — including ones YouTube doesn't allow on other sites — and missing channel pictures are filled in.
     </td>
   </tr>
 </table>
@@ -71,14 +81,13 @@ Everything personal — favourites, playlists, history and followed channels —
 | **Web** | Open [aurabeats.pages.dev](https://aurabeats.pages.dev/) in any modern browser. |
 | **Android** | Download the APK from the [latest release](https://github.com/jakariatanjim-svg/aurabeats/releases/latest), open it and tap **Install**. |
 | **PC / Mac** | In Chrome or Edge, open the website and choose **Install app** from the address bar. |
-| **iPhone / iPad** | In Safari, open the website, tap **Share**, then **Add to Home Screen**. |
 
 <details>
 <summary><b>Android install notes</b></summary>
 <br/>
 
 - If Android asks, allow installs from your browser or file manager for this one install.
-- To update, open **Settings → Check App Update** in the app, or install the newest APK over the old one. Your favourites and settings are kept.
+- To update, open **Settings → App → Check App Update** in the app, or install the newest APK over the old one. Your favourites and settings are kept.
 
 </details>
 
@@ -105,7 +114,7 @@ AuraBeats works fully without an account. Signing in adds your own YouTube to it
 - **Video** — Home shows YouTube's recommendations for you, Following shows your subscriptions, and Library has your History, Watch later, liked videos, playlists and your channel. **Like**, **Save** to playlists and **Subscribe** right from the video page.
 - **Music** — YouTube songs get a 👍 **Like** (YouTube Music) instead of the heart, and songs you hearted before signing in are liked for you. Songs from other sources keep the heart. Saved shows your liked songs, and Library shows your YouTube Music playlists.
 - What you watch is added to your YouTube history (you can turn this off).
-- Several accounts and brand channels: switch between them in Settings.
+- Several accounts and brand channels: tap your picture in the top bar to switch, add or remove accounts, or hide channels you don't use.
 
 Your sign-in never leaves your device or browser, and it is never part of a backup or export. Signing out of AuraBeats doesn't change anything on your YouTube account.
 
@@ -123,7 +132,7 @@ Your sign-in never leaves your device or browser, and it is never part of a back
 <summary><b>Website (Chrome, Edge or Brave on a computer)</b></summary>
 <br/>
 
-The website uses a small browser extension, *AuraBeats Connector*, which lets AuraBeats use the YouTube account you're already signed in to in that browser.
+The website uses a small, free browser extension, *AuraBeats Connector*, which lets AuraBeats use the YouTube account you're already signed in to in that browser. It also lets videos play directly in AuraBeats' own player, even without signing in.
 
 1. Open [aurabeats.pages.dev/settings](https://aurabeats.pages.dev/settings) → **YouTube account** and tap **Download**.
 2. Extract the file into a folder (right-click → **Extract All**). Keep the folder; don't delete it later.
@@ -137,6 +146,8 @@ The website uses a small browser extension, *AuraBeats Connector*, which lets Au
 To use another Google account, sign in to it on YouTube in the same browser (or tap **Another account** in the list), then tap **Add account**.
 
 **Updating the extension:** when Settings shows **Update**, download it again, extract it over the same folder, and press the reload button on *AuraBeats Connector* in the extensions page.
+
+**Fewer interruptions:** the status lights under each video show whether the extension and an ad blocker are active. A free ad blocker such as uBlock Origin Lite removes ads from videos that use YouTube's own player.
 
 </details>
 
