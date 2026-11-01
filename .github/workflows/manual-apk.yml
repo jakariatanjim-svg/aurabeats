@@ -59,15 +59,10 @@ jobs:
             exit 1
           fi
 
-          VERSION=$(printf '%s' "$LATEST_TAG" | python3 -c 'import re,sys; m=re.fullmatch(r"v?(\d+)\.(\d+)", sys.stdin.read().strip()); print("%d.%d" % (int(m.group(1)), int(m.group(2))) if m else "")') || exit 1
-          if [ -z "$VERSION" ]; then
-            echo "::error::Latest release tag '$LATEST_TAG' carries no MAJOR.MINOR version. Publish a versioned release with \"Website — Release (Primary)\" first."
-            exit 1
-          fi
-
+          python3 .github/scripts/version.py latest "$LATEST_TAG"
+          VERSION=$(grep '^version=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
           {
             echo "tag=$LATEST_TAG"
-            echo "version=$VERSION"
             echo "asset=AuraBeats-$VERSION.apk"
           } >> "$GITHUB_OUTPUT"
           echo "Target release: $LATEST_TAG (version $VERSION)"
@@ -176,15 +171,14 @@ jobs:
           done
 
       # versionCode must strictly increase or Android refuses the APK as a
-      # downgrade. major*10 + minor tracks 1.0 -> 1.9 -> 2.0 as 10 -> 19 -> 20.
+      # downgrade. major*100 + minor*10 + patch keeps rising across X.Y and X.Y.Z
+      # (4.7 -> 470, 4.8.0 -> 480, 4.8.1 -> 481).
       - name: Stamp APK version
         id: stamp
         run: |
           VERSION="${{ steps.target.outputs.version }}"
-          VERSION_CODE=$(python3 -c "
-          major, minor = [int(p) for p in '$VERSION'.split('.')[:2]]
-          print(major * 10 + minor)
-          ") || exit 1
+          VERSION_CODE=$(python3 .github/scripts/version.py latest "v$VERSION" | grep '^code=' | cut -d= -f2)
+          [ -n "$VERSION_CODE" ] || exit 1
 
           python3 - "$VERSION" "$VERSION_CODE" <<'PY'
           import pathlib, re, sys

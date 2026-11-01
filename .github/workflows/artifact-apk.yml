@@ -29,37 +29,10 @@ jobs:
         run: |
           LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
           gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
-
-          VERSION=$(python3 - "$LATEST_TAG" /tmp/tags.txt <<'PY'
-          import re, sys
-
-          def parse(tag):
-              m = re.fullmatch(r"v?(\d+)\.(\d+)", tag.strip())
-              return (int(m.group(1)), int(m.group(2))) if m else None
-
-          pair = parse(sys.argv[1]) if sys.argv[1].strip() else None
-          if pair is None:
-              highest = None
-              with open(sys.argv[2], encoding="utf-8") as fh:
-                  for line in fh:
-                      found = parse(line)
-                      if found and (highest is None or found > highest):
-                          highest = found
-              if highest is None:
-                  pair = (1, 0)
-              elif highest[1] < 9:
-                  pair = (highest[0], highest[1] + 1)
-              else:
-                  pair = (highest[0] + 1, 0)
-          print("%d.%d" % pair)
-          PY
-          ) || exit 1
-
-          [ -n "$VERSION" ] || { echo "::error::Could not determine a version label."; exit 1; }
-          {
-            echo "version=$VERSION"
-            echo "asset=AuraBeats-$VERSION.apk"
-          } >> "$GITHUB_OUTPUT"
+          # the Latest release's version (or the next one when none exists) — a label only
+          python3 .github/scripts/version.py label-latest /tmp/tags.txt "$LATEST_TAG"
+          VERSION=$(grep '^version=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
+          echo "asset=AuraBeats-$VERSION.apk" >> "$GITHUB_OUTPUT"
           echo "Version label: v$VERSION (not published)"
 
       - name: Prepare artifact label
@@ -174,15 +147,14 @@ jobs:
           done
 
       # versionCode must strictly increase or Android refuses the APK as a
-      # downgrade. major*10 + minor tracks 1.0 -> 1.9 -> 2.0 as 10 -> 19 -> 20.
+      # downgrade. major*100 + minor*10 + patch keeps rising across X.Y and X.Y.Z
+      # (4.7 -> 470, 4.8.0 -> 480, 4.8.1 -> 481).
       - name: Stamp APK version
         id: stamp
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          VERSION_CODE=$(python3 -c "
-          major, minor = [int(p) for p in '$VERSION'.split('.')[:2]]
-          print(major * 10 + minor)
-          ") || exit 1
+          VERSION_CODE=$(python3 .github/scripts/version.py latest "v$VERSION" | grep '^code=' | cut -d= -f2)
+          [ -n "$VERSION_CODE" ] || exit 1
 
           python3 - "$VERSION" "$VERSION_CODE" <<'PY'
           import pathlib, re, sys

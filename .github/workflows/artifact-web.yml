@@ -28,32 +28,9 @@ jobs:
         id: version
         run: |
           gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
-
-          VERSION=$(python3 - /tmp/tags.txt <<'PY'
-          import re, sys
-
-          highest = None
-          with open(sys.argv[1], encoding="utf-8") as fh:
-              for line in fh:
-                  m = re.fullmatch(r"v?(\d+)\.(\d)", line.strip())
-                  if not m:
-                      continue
-                  pair = (int(m.group(1)), int(m.group(2)))
-                  if highest is None or pair > highest:
-                      highest = pair
-
-          if highest is None:
-              print("1.0")
-          elif highest[1] < 9:
-              print("%d.%d" % (highest[0], highest[1] + 1))
-          else:
-              print("%d.0" % (highest[0] + 1))
-          PY
-          ) || exit 1
-
-          [ -n "$VERSION" ] || { echo "::error::Could not determine a version label."; exit 1; }
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version label: v$VERSION (not published)"
+          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
+          # the version the next release would mint — a label only
+          python3 .github/scripts/version.py label /tmp/tags.txt "$LATEST_TAG"
 
       - name: Prepare artifact label
         id: label

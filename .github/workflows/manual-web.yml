@@ -2,16 +2,18 @@
 # the tag and the GitHub Release, and attaches the web bundle.
 # Versions are minted here only; "APK — Release" fills the release afterwards.
 #
-# Version scheme: 1.0 -> 1.1 -> ... -> 1.9 -> 2.0, derived from the highest
-# existing vX.Y tag. An override is published as an ordinary tag and therefore
-# becomes the baseline for the next automatic run.
+# Version scheme (.github/scripts/version.py): one dot 1.0 -> 1.1 -> ... -> 1.9
+# -> 2.0. A two-dot override (e.g. 4.8.0) switches to X.Y.Z, minor and patch
+# 0-9 (1.0.9 -> 1.1.0, 1.9.9 -> 2.0.0); a one-dot override switches back. The
+# next version is one step after the release marked Latest, so an override
+# (an ordinary tag + the Latest release) becomes the next run's baseline.
 name: "Website — Release (Primary)"
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version override (e.g. 3 or 1.4). Leave empty for the next automatic version."
+        description: "Version override: 3 or 1.4 (one dot), or 1.4.0 to switch to two dots. Leave empty for the next automatic version."
         required: false
         default: ""
         type: string
@@ -59,61 +61,9 @@ jobs:
           VERSION_OVERRIDE: ${{ inputs.version }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" --paginate --jq '.[].name' > /tmp/tags.txt || : > /tmp/tags.txt
-
-          # Python writes $GITHUB_OUTPUT directly so that annotation text can
-          # never end up inside a captured value.
-          python3 - /tmp/tags.txt <<'PY'
-          import os, re, subprocess, sys
-
-          override = os.environ.get("VERSION_OVERRIDE", "").strip()
-
-          raw = set()
-          highest = None
-          with open(sys.argv[1], encoding="utf-8") as fh:
-              for line in fh:
-                  tag = line.strip()
-                  if not tag:
-                      continue
-                  raw.add(tag)
-                  m = re.fullmatch(r"v?(\d+)\.(\d)", tag)
-                  if not m:
-                      continue
-                  pair = (int(m.group(1)), int(m.group(2)))
-                  if highest is None or pair > highest:
-                      highest = pair
-
-          def after(pair):
-              major, minor = pair
-              return (major, minor + 1) if minor < 9 else (major + 1, 0)
-
-          def fail(message):
-              print("::error::" + message)
-              raise SystemExit(1)
-
-          if override:
-              m = re.fullmatch(r"v?(\d+)(?:\.(\d+))?", override)
-              if not m:
-                  fail("Version override '%s' must look like 3 or 1.4." % override)
-              chosen = (int(m.group(1)), int(m.group(2) or 0))
-              if highest and chosen < highest:
-                  print("::warning::v%d.%d is older than the highest published v%d.%d. The next automatic run continues from v%d.%d."
-                        % (chosen + highest + after(highest)))
-              version = "%d.%d" % chosen
-          else:
-              version = "%d.%d" % (after(highest) if highest else (1, 0))
-
-          for existing in ("v" + version, version):
-              if existing in raw:
-                  fail("Tag %s already exists. Leave the override empty to auto-advance, or choose a free version." % existing)
-          published = subprocess.run(["gh", "release", "view", "v" + version],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-          if published:
-              fail("Release v%s already exists. Leave the override empty to auto-advance, or choose a free version." % version)
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write("version=%s\ntag=v%s\n" % (version, version))
-          print("Version: v%s" % version)
-          PY
+          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || true)
+          # writes version= / tag= to $GITHUB_OUTPUT
+          python3 .github/scripts/version.py next /tmp/tags.txt "$LATEST_TAG"
 
       - uses: actions/setup-node@v4
         with:
