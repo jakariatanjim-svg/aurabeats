@@ -54,6 +54,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { videoLibrary } from "@/hooks/useVideoLibrary";
 import { extensionCanStream, useExtension } from "@/services/yt/extension";
 import { DirectDock, useDirect } from "./DirectDock";
+import { navMemory } from "@/utils/navMemory";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
 import { getVideoAspect } from "@/services/video/api";
@@ -707,7 +708,9 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
   const toMini = () => {
     if (fs !== "off") void exitFs();
-    navigate("video");
+    // back to the page the video was opened from (search results, a channel…)
+    if (navMemory.cameFromPage) window.history.back();
+    else navigate(navMemory.lastPage as RouteKey);
   };
   const expand = () => navigate(`watch:${d.id}`);
   const closeNow = () => {

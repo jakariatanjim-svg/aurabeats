@@ -19,6 +19,8 @@ import { WatchLayer } from "@/components/video/WatchLayer";
 import { useWatchLayer, watchLayer } from "@/components/video/watchLayer";
 import { isNative } from "@/services/video/net";
 import { isVideoRoute, pathToRoute, routeToPath, type RouteKey } from "@/routes";
+import { navMemory } from "@/utils/navMemory";
+import { ProgressHold, TopProgress, topProgress } from "@/components/TopProgress";
 import { rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
 import { App as CapApp } from "@capacitor/app";
@@ -66,6 +68,15 @@ function Shell() {
   // (closing the phone search, repeating a search) must not jump to the top.
   const lastLoc = useRef(window.location.pathname + window.location.search);
 
+  // Leaving a page: remember its scroll. New page → top; Back/Forward → where it was.
+  const saveScroll = useCallback(() => {
+    const main = document.getElementById("ab-scroll");
+    if (main) navMemory.save(lastLoc.current, main.scrollTop);
+  }, []);
+  const jumpTop = useCallback(() => {
+    document.getElementById("ab-scroll")?.scrollTo({ top: 0 });
+  }, []);
+
   const navigate = useCallback((next: RouteKey) => {
     const path = routeToPath(next);
     if (window.location.pathname === path) {
@@ -76,24 +87,34 @@ function Shell() {
     }
     // Replace the bare "/" entry with "/home" so back-navigation stays inside the app.
     if (window.location.pathname === "/") window.history.replaceState(null, "", "/home");
+    saveScroll();
     window.history.pushState(null, "", path);
     lastLoc.current = path;
     setRoute(next);
-    scrollTop();
-  }, [scrollTop]);
+    // app: the video opens over the page, which keeps its place
+    if (!(isNative && next.startsWith("watch:"))) jumpTop();
+  }, [scrollTop, saveScroll, jumpTop]);
 
   // keep state in sync with the address bar (back / forward / pasted links)
   useEffect(() => {
     const onPop = () => {
       const loc = window.location.pathname + window.location.search;
+      const pushed = navMemory.pushing;
+      navMemory.pushing = false;
       if (loc === lastLoc.current) return;
+      const from = pathToRoute(lastLoc.current.split("?")[0]);
+      const to = pathToRoute(window.location.pathname);
+      saveScroll();
       lastLoc.current = loc;
-      setRoute(pathToRoute(window.location.pathname));
-      scrollTop();
+      setRoute(to);
+      // app: opening / closing the video layer leaves the page underneath alone
+      if (isNative && (from.startsWith("watch:") || to.startsWith("watch:"))) return;
+      if (pushed) jumpTop();
+      else navMemory.restore(loc, document.getElementById("ab-scroll"));
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [scrollTop]);
+  }, [saveScroll, jumpTop]);
 
   // Intercept plain app links (href="/search" with data-nav) for SPA navigation.
   useEffect(() => {
@@ -102,14 +123,15 @@ function Shell() {
       const anchor = (e.target as HTMLElement | null)?.closest?.("a[data-nav='true']") as HTMLAnchorElement | null;
       if (!anchor) return;
       e.preventDefault();
+      saveScroll();
       window.history.pushState(null, "", anchor.pathname + anchor.search);
       lastLoc.current = anchor.pathname + anchor.search;
       setRoute(pathToRoute(window.location.pathname));
-      scrollTop();
+      jumpTop();
     };
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
-  }, [scrollTop]);
+  }, [saveScroll, jumpTop]);
 
   // Android back button / gesture: close the top overlay, else the previous
   // page, else this mode's start page; only from there leave the app (to the
@@ -177,6 +199,15 @@ function Shell() {
   useEffect(() => {
     rememberRoute(route);
   }, [route]);
+  // thin progress line on every page change (not on the first load)
+  const firstRoute = useRef(true);
+  useEffect(() => {
+    if (firstRoute.current) {
+      firstRoute.current = false;
+      return;
+    }
+    topProgress.start();
+  }, [route]);
   // App: the watch page is a layer (with a miniplayer) over the page you came
   // from, which stays on screen underneath.
   const layer = useWatchLayer();
@@ -184,10 +215,17 @@ function Shell() {
   const cameFromPage = useRef(false);
   const prevRoute = useRef<RouteKey | null>(null);
   if (!route.startsWith("watch:")) baseRoute.current = route;
+  navMemory.lastPage = baseRoute.current;
   const online = useOnline();
   const shownRoute: RouteKey = isNative && route.startsWith("watch:") ? baseRoute.current : route;
   useEffect(() => {
-    if (!isNative) return;
+    if (route.startsWith("watch:")) {
+      navMemory.cameFromPage = prevRoute.current !== null && !prevRoute.current.startsWith("watch:");
+    } else navMemory.cameFromPage = false;
+    if (!isNative) {
+      prevRoute.current = route;
+      return;
+    }
     if (route.startsWith("watch:")) {
       cameFromPage.current = prevRoute.current !== null && !prevRoute.current.startsWith("watch:");
       watchLayer.open(route.slice("watch:".length));
@@ -279,6 +317,7 @@ function Shell() {
           <Suspense
             fallback={
               <div className="blur-panel p-6 animate-fade-in">
+                <ProgressHold />
                 <div className="skeleton h-4 w-32 rounded-full" />
                 <div className="mt-4 space-y-3">
                   <div className="skeleton h-10 w-full rounded-2xl" />
@@ -323,6 +362,7 @@ function Shell() {
       <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={saved.tracks.length} likeMode={saved.signedIn} />
       <Tutorial route={shownRoute} onNavigate={navigate} />
       <ConfirmHost />
+      <TopProgress />
       {/* Website video player: one YouTube iframe for watch page + miniplayer */}
       {!isNative && <YouTubeDock navigate={navigate} musicBar={Boolean(current)} />}
       {isNative && (

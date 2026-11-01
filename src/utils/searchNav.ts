@@ -5,6 +5,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { searchHistory, type SearchMode } from "@/utils/searchHistory";
+import { navMemory } from "@/utils/navMemory";
 
 export function searchPath(mode: SearchMode, q = ""): string {
   const base = mode === "video" ? "/video/search" : "/search";
@@ -27,6 +28,7 @@ export function goPath(path: string, replace = false) {
     window.history.pushState(null, "", path);
   }
   // The shell and the results page follow the address bar via popstate.
+  navMemory.pushing = true;
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 

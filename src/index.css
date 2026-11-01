@@ -597,6 +597,14 @@ body::before {
 }
 
 /* ------------------------------ animations ----------------------------- */
+@keyframes ab-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.85);
+  }
+}
 @keyframes ab-spin {
   to {
     transform: rotate(360deg);
