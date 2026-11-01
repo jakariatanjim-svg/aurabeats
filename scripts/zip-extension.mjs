@@ -29,8 +29,11 @@ function listFiles(dir, base = dir) {
     });
 }
 
-/** @returns {Buffer} the zip; every file sits inside `folder/`. */
-export function zipExtension(dir, folder = "aurabeats-extension") {
+/**
+ * @returns {Buffer} the zip. Files sit at its top level (no folder inside), so
+ * unzipping gives one folder with the extension files directly in it.
+ */
+export function zipExtension(dir, folder = "") {
   const locals = [];
   const centrals = [];
   let offset = 0;
@@ -40,7 +43,7 @@ export function zipExtension(dir, folder = "aurabeats-extension") {
   for (const rel of listFiles(dir)) {
     const data = fs.readFileSync(path.join(dir, rel));
     const packed = zlib.deflateRawSync(data, { level: 9 });
-    const name = Buffer.from(`${folder}/${rel}`, "utf8");
+    const name = Buffer.from(folder ? `${folder}/${rel}` : rel, "utf8");
     const crc = crc32(data);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);

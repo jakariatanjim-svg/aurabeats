@@ -82,7 +82,8 @@ function chunkGroup(id: string): string | undefined {
 
 /**
  * Website: the AuraBeats Connector browser extension (extension/) is packed
- * into /aurabeats-extension.zip on every build; Settings offers it.
+ * into /aurabeats-extension.zip (+ its version in /aurabeats-extension.json)
+ * on every build; Settings offers it.
  */
 const extDir = path.resolve(__dirname, "extension");
 let extVersion = "1.0.0";
@@ -98,6 +99,9 @@ function extensionZip(): Plugin {
     apply: "build",
     generateBundle() {
       this.emitFile({ type: "asset", fileName: "aurabeats-extension.zip", source: zipExtension(extDir) });
+      // the latest version, read live by Settings (never cached), so an open
+      // or cached page still knows when the connected extension is old
+      this.emitFile({ type: "asset", fileName: "aurabeats-extension.json", source: JSON.stringify({ version: extVersion }) });
     },
   };
 }

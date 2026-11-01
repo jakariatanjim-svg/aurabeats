@@ -126,17 +126,17 @@ Your sign-in never leaves your device or browser, and it is never part of a back
 The website uses a small browser extension, *AuraBeats Connector*, which lets AuraBeats use the YouTube account you're already signed in to in that browser.
 
 1. Open [aurabeats.pages.dev/settings](https://aurabeats.pages.dev/settings) → **YouTube account** and tap **Download**.
-2. Unzip the file. Keep the folder; don't delete it later.
+2. Extract the file into a folder (right-click → **Extract All**). Keep the folder; don't delete it later.
 3. Open `chrome://extensions` (Edge: `edge://extensions`, Brave: `brave://extensions`).
 4. Turn on **Developer mode**.
-5. Click **Load unpacked** and choose the unzipped folder.
+5. Click **Load unpacked** and choose that folder.
 6. Make sure you're signed in on [youtube.com](https://www.youtube.com/) in the same browser.
 7. Reload AuraBeats. Settings shows **Extension connected ✓**. Tap **Connect YouTube**.
 8. Tick the accounts you want (one or several) and tap **Add**.
 
 To use another Google account, sign in to it on YouTube in the same browser (or tap **Another account** in the list), then tap **Add account**.
 
-**Updating the extension:** when Settings shows **Update**, download it again, unzip it over the same folder, and press the reload button on *AuraBeats Connector* in the extensions page.
+**Updating the extension:** when Settings shows **Update**, download it again, extract it over the same folder, and press the reload button on *AuraBeats Connector* in the extensions page.
 
 </details>
 

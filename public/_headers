@@ -12,3 +12,6 @@
 
 /aurabeats-extension.zip
   Cache-Control: no-cache
+
+/aurabeats-extension.json
+  Cache-Control: no-cache

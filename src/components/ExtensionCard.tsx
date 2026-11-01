@@ -7,7 +7,7 @@ import { CheckCircle2, ChevronDown, Copy, Download, Puzzle, RefreshCw } from "lu
 import { Button } from "@/components/ui";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
-import { EXTENSION_VERSION, EXTENSION_ZIP, extensionOutdated, useExtension } from "@/services/yt/extension";
+import { EXTENSION_FILE, EXTENSION_ZIP, extensionOutdated, useExtension } from "@/services/yt/extension";
 
 type Browser = "chrome" | "edge" | "brave" | "other";
 
@@ -59,7 +59,7 @@ export function ExtensionCard() {
   const download = async () => {
     setProgress(0);
     try {
-      await downloadWithProgress(EXTENSION_ZIP, `aurabeats-extension-${EXTENSION_VERSION}.zip`, setProgress);
+      await downloadWithProgress(`${EXTENSION_ZIP}?v=${ext.latest}`, EXTENSION_FILE, setProgress);
       setGuide(true);
     } catch (e) {
       toast((e as Error)?.message || "Download failed", "error");
@@ -86,7 +86,7 @@ export function ExtensionCard() {
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14px] font-bold text-ink">{ext.connected ? "Extension connected ✓" : "AuraBeats extension"}</p>
           <p className="truncate text-[12px] text-ink3">
-            {outdated ? `v${ext.version} · update to v${EXTENSION_VERSION}` : ext.connected ? `v${ext.version ?? EXTENSION_VERSION}` : "Chrome · Edge · Brave"}
+            {outdated ? `v${ext.version} · update to v${ext.latest}` : ext.connected ? `v${ext.version ?? ext.latest}` : "Chrome · Edge · Brave"}
           </p>
         </div>
         <Button variant={ext.connected && !outdated ? "outline" : "solid"} className="shrink-0 text-xs" disabled={progress !== null} onClick={() => void download()}>
@@ -107,7 +107,7 @@ export function ExtensionCard() {
 function InstallGuide({ open, onToggle, page, browser, onCopy }: { open: boolean; onToggle: () => void; page: string; browser: Browser; onCopy: () => void }) {
   const devMode = browser === "edge" ? "Developer mode (left side)" : "Developer mode (top right)";
   const steps = [
-    <>Download the extension and unzip it (keep the folder; don't delete it later).</>,
+    <>Download the extension and extract it into a folder (keep the folder; don't delete it later).</>,
     <>
       Open{" "}
       <button type="button" onClick={onCopy} className="inline-flex items-center gap-1 rounded-md bg-ink/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-ink">
@@ -142,7 +142,7 @@ function InstallGuide({ open, onToggle, page, browser, onCopy }: { open: boolean
             ))}
           </ol>
           <p className="text-[11px] leading-relaxed text-ink3">
-            Update: download again, unzip over the same folder, then press the reload button on the extension in {page}.
+            Update: download again, extract it over the same folder, then press the reload button on the extension in {page}.
           </p>
         </div>
       )}
