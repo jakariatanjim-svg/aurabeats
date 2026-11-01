@@ -137,10 +137,11 @@ export const VideoCard = memo(function VideoCard({
   rememberVideo(v); // the watch page shows this instantly
   return (
     <div className="group min-w-0">
-      <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="focus-ring block rounded-2xl" aria-label={v.title}>
-        <Thumb v={v} progress={progress} />
+      {/* phones (one column): edge to edge, like the YouTube app */}
+      <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="focus-ring block rounded-2xl max-[519px]:-mx-4 max-[519px]:rounded-none" aria-label={v.title}>
+        <Thumb v={v} progress={progress} className="max-[519px]:rounded-none" />
       </a>
-      <div className="mt-2.5 flex gap-2.5">
+      <div className="mt-2.5 flex gap-2.5 max-[519px]:mt-2">
         {!hideChannel &&
           (v.authorId ? (
             <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" aria-label={v.author} className="shrink-0">
@@ -155,14 +156,16 @@ export const VideoCard = memo(function VideoCard({
           </a>
           {!hideChannel && (
             v.authorId ? (
-              <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" className="mt-0.5 block truncate text-xs text-ink3 hover:text-ink">
+              <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" className="mt-0.5 block truncate text-xs text-ink3 hover:text-ink max-[519px]:hidden">
                 {v.author}
               </a>
             ) : (
-              <p className="mt-0.5 truncate text-xs text-ink3">{v.author}</p>
+              <p className="mt-0.5 truncate text-xs text-ink3 max-[519px]:hidden">{v.author}</p>
             )
           )}
-          <p className="truncate text-xs text-ink3">{metaLine(v)}</p>
+          <p className="truncate text-xs text-ink3 max-[519px]:hidden">{metaLine(v)}</p>
+          {/* phones: channel · views · when on one line */}
+          <p className="mt-0.5 truncate text-xs text-ink3 min-[520px]:hidden">{[hideChannel ? "" : v.author, metaLine(v)].filter(Boolean).join(" · ")}</p>
         </div>
       </div>
     </div>
@@ -218,7 +221,7 @@ export function ChannelRow({ c }: { c: ChannelItem }) {
 
 export function VideoGrid({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("grid grid-cols-1 gap-x-4 gap-y-7 min-[520px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4", className)}>
+    <div className={cn("grid grid-cols-1 gap-x-4 gap-y-6 min-[520px]:grid-cols-2 min-[520px]:gap-y-7 lg:grid-cols-3 2xl:grid-cols-4", className)}>
       {children}
     </div>
   );

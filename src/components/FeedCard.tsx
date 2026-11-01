@@ -160,3 +160,119 @@ export function FeedCardSkeleton() {
     </div>
   );
 }
+
+/**
+ * Phones: one song per line (YouTube Music's "Quick picks" look) — small
+ * cover, title, artist; the whole line plays the song.
+ */
+export function FeedRow({ track, context }: { track: Track; context?: Track[] }) {
+  const { playNow, current, isPlaying, toggle, isFavorite, toggleFavorite } = usePlayer();
+  const isCurrent = current?.id === track.id;
+  const fav = isFavorite(track.id);
+  const [imgStage, setImgStage] = useState(0);
+  const chain = [track.artwork, track.artworkFallback].filter(Boolean) as string[];
+  const img = chain[imgStage];
+  const play = () => {
+    if (isCurrent) toggle();
+    else playNow(track, context);
+  };
+  const meta = [track.artist, track.playCount ? `${formatCount(track.playCount)} plays` : null].filter(Boolean).join(" · ");
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      aria-label={`Play ${track.title} by ${track.artist}`}
+      onClick={play}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          play();
+        }
+      }}
+      className="group focus-ring flex min-w-0 cursor-pointer items-center gap-3 rounded-xl py-1.5 select-none active:bg-ink/[0.05]"
+    >
+      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-elev2">
+        {img ? (
+          <img
+            {...(imgStage === 0 && track.source === "youtube" ? ytImgProps(img) : { src: img })}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgStage((s) => s + 1)}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-white/90" style={{ backgroundImage: gradientFrom(track.title) }}>
+            {initials(track.title)}
+          </div>
+        )}
+        {isCurrent && (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/45">
+            <Equalizer active={isPlaying} className="text-white" />
+          </span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <h3 className={cn("truncate text-[15px] leading-snug font-semibold", isCurrent ? "text-accent" : "text-ink")}>{track.title}</h3>
+        <p className="truncate text-[13px] text-ink3">{meta}</p>
+      </div>
+      <div className="-mr-1 flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          aria-label={fav ? "Remove from favourites" : "Add to favourites"}
+          onClick={() => toggleFavorite(track)}
+          className={cn("focus-ring flex h-9 w-9 items-center justify-center rounded-full", fav ? "text-accent" : "text-ink3")}
+        >
+          <FavIcon track={track} on={fav} className="h-4 w-4" />
+        </button>
+        <TrackMenu track={track} context={context} triggerClassName="text-ink3" />
+      </div>
+    </article>
+  );
+}
+
+export function FeedRowSkeleton() {
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <div className="skeleton h-14 w-14 shrink-0 rounded-lg" />
+      <div className="flex-1 space-y-2">
+        <div className="skeleton h-3.5 w-3/4 rounded" />
+        <div className="skeleton h-3 w-1/2 rounded" />
+      </div>
+    </div>
+  );
+}
+
+/** Phones: square covers in a sideways row (YouTube Music's "Listen again"). */
+export function SquareCard({ track, context }: { track: Track; context?: Track[] }) {
+  const { playNow, current, isPlaying, toggle } = usePlayer();
+  const isCurrent = current?.id === track.id;
+  const [imgStage, setImgStage] = useState(0);
+  const chain = [track.artworkLarge || track.artwork, track.artwork, track.artworkFallback].filter(Boolean) as string[];
+  const img = chain[imgStage];
+  return (
+    <button
+      type="button"
+      onClick={() => (isCurrent ? toggle() : playNow(track, context))}
+      className="group w-32 shrink-0 snap-start text-left"
+      aria-label={`Play ${track.title} by ${track.artist}`}
+    >
+      <span className="relative block aspect-square overflow-hidden rounded-xl bg-elev2">
+        {img ? (
+          <img src={img} alt="" loading="lazy" decoding="async" onError={() => setImgStage((s) => s + 1)} className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-lg font-black text-white/90" style={{ backgroundImage: gradientFrom(track.title) }}>
+            {initials(track.title)}
+          </span>
+        )}
+        {isCurrent && (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/45">
+            <Equalizer active={isPlaying} className="text-white" />
+          </span>
+        )}
+      </span>
+      <span className={cn("mt-1.5 block truncate text-[13px] font-semibold", isCurrent ? "text-accent" : "text-ink")}>{track.title}</span>
+      <span className="block truncate text-xs text-ink3">{track.artist}</span>
+    </button>
+  );
+}

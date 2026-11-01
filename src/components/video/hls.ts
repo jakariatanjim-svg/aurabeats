@@ -108,7 +108,8 @@ export async function attachHls(video: HTMLVideoElement, url: string, onFatal: (
       video.load();
     };
   }
-  const { default: Hls } = await import("hls.js");
+  // the light build: plain HLS playback is all that's needed (no DRM / subtitles)
+  const { default: Hls } = await import("hls.js/light");
   if (!Hls.isSupported()) {
     video.src = url;
     return () => video.removeAttribute("src");

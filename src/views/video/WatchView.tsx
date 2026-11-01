@@ -382,7 +382,8 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 {info.authorId && <FollowButton ch={{ id: info.authorId, name: info.author, avatar: info.authorAvatar }} />}
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              {/* phones: one sideways row of buttons (YouTube app); wraps on wider screens */}
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
                 <LikeButton id={id} likes={info.likes} />
                 <SaveButton v={info} />
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
