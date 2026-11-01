@@ -135,6 +135,19 @@ jobs:
               )
               text = text[:j] + "    " + filters + text[j:]
               path.write_text(text)
+          # Sign in with microG RE (optional): Android must let the app see
+          # microG, and microG treats AuraBeats as the YouTube app (the same
+          # meta-data the ReVanced YouTube apps carry), so Google accepts it.
+          if "app.revanced.android.gms" not in text:
+              queries = '    <queries><package android:name="app.revanced.android.gms" /></queries>\n'
+              text = text.replace("</manifest>", queries + "</manifest>", 1)
+              spoof = (
+                  '\n        <meta-data android:name="app.revanced.android.gms.SPOOFED_PACKAGE_NAME" android:value="com.google.android.youtube" />'
+                  '\n        <meta-data android:name="app.revanced.android.gms.SPOOFED_PACKAGE_SIGNATURE" android:value="24bb24c05e47e0aefa68a58a766179d9b613a600" />'
+              )
+              k = text.find(">", text.find("<application"))
+              text = text[:k + 1] + spoof + text[k + 1:]
+              path.write_text(text)
           print("Declared:", add or "already present")
           PY
 

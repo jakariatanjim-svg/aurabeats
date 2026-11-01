@@ -12,6 +12,9 @@ import { extension, extensionRequest } from "./extension";
 
 interface YtLoginNative {
   signIn(): Promise<{ account: string }>;
+  /** the same, with an account already added in microG RE */
+  signInMicroG(): Promise<{ account: string }>;
+  microgStatus(): Promise<{ installed: boolean }>;
   list(): Promise<{ accounts: string[] }>;
   remove(o: { account: string }): Promise<void>;
   request(o: { account: string; url: string; method: string; body?: string; headers?: Record<string, string>; pageId?: string }): Promise<{ status: number; body: string }>;

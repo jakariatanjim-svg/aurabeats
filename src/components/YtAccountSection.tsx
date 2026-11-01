@@ -22,6 +22,7 @@ import {
   addAccount,
   checkAccountsOnce,
   hideAccount,
+  microgInstalled,
   refreshAccount,
   switchAccount,
   switchChannel,
@@ -49,6 +50,11 @@ export function YtAccountSection() {
   const prefs = useYtPrefs();
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  // app: microG RE installed → "Sign in with microG" next to Google's
+  const [microg, setMicrog] = useState(false);
+  useEffect(() => {
+    void microgInstalled().then(setMicrog);
+  }, []);
 
   const ext = useExtension();
   useEffect(() => checkAccountsOnce(), [ext.connected]);
@@ -56,11 +62,11 @@ export function YtAccountSection() {
   if (isNative && !ytAccountsSupported()) return null;
   const ready = ytAccountsSupported();
 
-  const add = async () => {
+  const add = async (via: "google" | "microg" = "google") => {
     // website: choose from the browser's accounts
     if (!isNative) return setPicking(true);
     try {
-      const acc = await addAccount();
+      const acc = await addAccount(via);
       if (acc) toast(`Signed in as ${acc.name}`, "success");
     } catch (e) {
       toast((e as Error)?.message || "Sign-in failed", "error");
@@ -122,6 +128,17 @@ export function YtAccountSection() {
         {ready && (
         <div className="flex items-center justify-between gap-3 p-4">
           <p className="min-w-0 text-[12px] text-ink3">{accounts.length ? `${accounts.length} account${accounts.length === 1 ? "" : "s"}` : "Guest mode"}</p>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {microg && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void add("microg")}
+              className="focus-ring inline-flex shrink-0 items-center justify-center rounded-full border border-line px-4 py-2.5 text-[13px] font-semibold text-ink transition hover:border-accent hover:text-accent active:scale-[0.98] disabled:opacity-60"
+            >
+              Sign in with microG
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -131,6 +148,7 @@ export function YtAccountSection() {
             {busy ? <Spinner className="h-[18px] w-[18px]" /> : <GoogleG className="h-[18px] w-[18px]" />}
             {accounts.length ? "Add account" : isNative ? "Sign in with Google" : "Connect YouTube"}
           </button>
+          </div>
         </div>
         )}
       </div>
