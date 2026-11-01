@@ -170,7 +170,7 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     return (
       <div className="flex h-full flex-col justify-center gap-5 px-6 sm:px-10" aria-busy="true">
         {[78, 62, 88, 54, 70].map((w, i) => (
-          <div key={i} className="h-7 animate-pulse rounded-full bg-ink/8 sm:h-8" style={{ width: `${w}%`, animationDelay: `${i * 120}ms` }} />
+          <div key={i} className="skeleton h-7 rounded-full sm:h-8" style={{ width: `${w}%`, animationDelay: `${i * 120}ms` }} />
         ))}
       </div>
     );

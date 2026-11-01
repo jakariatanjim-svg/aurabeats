@@ -19,9 +19,9 @@ import type { YtmPlaylist } from "@/services/yt/music";
 import { cn } from "@/utils/cn";
 import { formatDurationList, gradientFrom, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
-import { Button, IconButton, Modal, SectionHeader, Spinner } from "@/components/ui";
+import { Button, IconButton, Modal, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
-import { TrackRow } from "@/components/TrackList";
+import { TrackRow, TrackRowSkeleton } from "@/components/TrackList";
 import { cachedDeviceSongs, deviceMusicAvailable } from "@/services/deviceMusic";
 import type { UserPlaylist } from "@/types";
 import type { Track } from "@/types";
@@ -462,9 +462,7 @@ export function FavoritesView() {
 
       {favorites.length === 0 ? (
         saved.loading ? (
-          <div className="flex justify-center py-10">
-            <Spinner />
-          </div>
+          <TrackRowSkeleton rows={8} />
         ) : saved.error ? (
           <ErrorState message={saved.error} onRetry={saved.refresh} />
         ) : (
