@@ -55,6 +55,14 @@ export function pathToRoute(pathname: string): RouteKey {
     const id = clean.slice("/playlist/".length);
     return id ? (`playlist:${id}` as RouteKey) : "library";
   }
+  // YouTube-style addresses (youtube.com → aurabeats.pages.dev) open the video
+  if (clean === "/watch") {
+    const v = typeof location !== "undefined" ? new URLSearchParams(location.search).get("v") : null;
+    return v && /^[\w-]{11}$/.test(v) ? (`watch:${v}` as RouteKey) : "video";
+  }
+  const yt = clean.match(/^\/(?:shorts|live|embed)\/([\w-]{11})$/) ?? clean.match(/^\/([\w-]{11})$/);
+  if (yt && !["home", "search", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device", "video"].includes(yt[1]))
+    return `watch:${yt[1]}` as RouteKey;
   if (clean.startsWith("/watch/")) {
     const id = decodeURIComponent(clean.slice("/watch/".length));
     return id ? (`watch:${id}` as RouteKey) : "video";

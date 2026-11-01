@@ -49,7 +49,12 @@ const QueuePanel = lazy(() => import("@/components/FullScreenPlayer").then((m) =
 
 function Shell() {
   // URL is the source of truth — real clean paths: /home /search …
-  const [route, setRoute] = useState<RouteKey>(() => pathToRoute(window.location.pathname));
+  const [route, setRoute] = useState<RouteKey>(() => {
+    const r = pathToRoute(window.location.pathname);
+    // a YouTube-style address (/watch?v=…, /shorts/…, youtu.be-style) → our own
+    if (r.startsWith("watch:") && window.location.pathname !== routeToPath(r)) window.history.replaceState(null, "", routeToPath(r));
+    return r;
+  });
   const [collapsed, setCollapsed] = useState<boolean>(() => storage.get("sidebarCollapsed", false));
 
   const scrollTop = useCallback(() => {

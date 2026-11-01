@@ -147,9 +147,8 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
       setStartAt(at || lastT.current);
       setExclude((x) => [...x, details.streams.source]);
       setDetails(null);
-      toast("Switching to another ad-free server…", "info");
     },
-    [details, toast],
+    [details],
   );
 
   const info = details ?? meta;
@@ -360,16 +359,6 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 >
                   <Download className="h-3.5 w-3.5" /> Download
                 </Button>
-                {!embed && (
-                  <Button
-                    variant="outline"
-                    className="px-3.5 text-xs"
-                    onClick={() => onFatal("user", lastT.current)}
-                    title="Use a different ad-free server"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" /> Another server
-                  </Button>
-                )}
               </div>
 
               {(info.description || info.snippet) ? (

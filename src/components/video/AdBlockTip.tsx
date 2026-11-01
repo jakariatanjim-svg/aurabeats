@@ -173,7 +173,7 @@ function Light({ tone, group, name, value, action }: { tone: Tone; group: string
 }
 
 /** Computers with a Chromium browser can use the AuraBeats extension. */
-const extensionPossible = () => typeof window !== "undefined" && matchMedia("(pointer: fine)").matches && !/Firefox\//.test(navigator.userAgent);
+export const extensionPossible = () => typeof window !== "undefined" && matchMedia("(pointer: fine)").matches && !/Firefox\//.test(navigator.userAgent);
 
 /** Under the video: Necessary (extension) and For best experience (ad blocker). */
 export function AdBlockTip() {

@@ -191,7 +191,7 @@ export function TopSearch({
     const replace = sheet && sheetPushed.current;
     sheetPushed.current = false;
     setSheet(false);
-    const vid = mode === "video" ? videoIdIn(t) : null;
+    const vid = videoIdIn(t); // a pasted YouTube link plays right away (music search too)
     if (vid) {
       if (replace) goPath(`/watch/${vid}`, true);
       else onNavigate(`watch:${vid}`);

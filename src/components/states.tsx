@@ -13,7 +13,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       </div>
       {onRetry && (
         <Button variant="outline" onClick={onRetry}>
-          <RefreshCw className="h-3.5 w-3.5" /> Try another mirror
+          <RefreshCw className="h-3.5 w-3.5" /> Try again
         </Button>
       )}
     </div>

@@ -51,6 +51,21 @@ export function extensionOutdated(v: string | null): boolean {
   return false;
 }
 
+function atLeast(v: string | null, min: string): boolean {
+  if (!v) return false;
+  const a = v.split(".").map(Number);
+  const b = min.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return true;
+}
+
+/** Can the connected extension fetch video streams (real player on the website)? */
+export function extensionCanStream(s: ExtState = state): boolean {
+  return s.connected && atLeast(s.version, "1.2.0");
+}
+
 type Res = { status: number; body: string; error?: string };
 const waiting = new Map<string, (r: Res) => void>();
 let seq = 0;
@@ -79,7 +94,16 @@ if (isBrowser) {
 }
 
 /** One YouTube request through the extension. */
-export function extensionRequest(req: { url: string; method: string; body?: string; headers?: Record<string, string>; pageId?: string; authUser?: string }): Promise<Res> {
+export function extensionRequest(req: {
+  url: string;
+  method: string;
+  body?: string;
+  headers?: Record<string, string>;
+  pageId?: string;
+  authUser?: string;
+  /** no sign-in (video streams; extension 1.2+) */
+  anon?: boolean;
+}): Promise<Res> {
   if (!state.connected) return Promise.reject(new Error("The AuraBeats extension isn't connected"));
   const id = `r${Date.now().toString(36)}${(seq++).toString(36)}`;
   return new Promise<Res>((resolve, reject) => {

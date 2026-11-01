@@ -14,8 +14,13 @@
  *  2. Same again with a fresh identity.
  *  3. TV client via youtubei.js (deciphers URLs with YouTube's player JS).
  * Every failure reason is kept, so the app can show what YouTube said.
+ *
+ * Website: the same VISIONOS request goes through the AuraBeats browser
+ * extension (1.2+), so the answer — and the stream addresses tied to the
+ * asker's IP — belong to this computer, and a plain <video> can play them.
  */
 import { http, isNative } from "./net";
+import { extensionCanStream, extensionRequest } from "@/services/yt/extension";
 import { guessRegion } from "./settings";
 import type { AudioStream, MuxedStream, StreamSet, VideoDetails, VideoStream } from "./types";
 import { thumbFor } from "./types";
@@ -70,7 +75,15 @@ export interface PlayerResponse {
   microformat?: { playerMicroformatRenderer?: { publishDate?: string; uploadDate?: string; ownerProfileUrl?: string } };
 }
 
-export const deviceExtractionAvailable = isNative;
+/** App always; website when the extension can fetch streams. */
+export const deviceExtractionAvailable = (): boolean => isNative || extensionCanStream();
+
+/** Website: a request through the extension (no sign-in). */
+async function viaExtension(url: string, method: "GET" | "POST", body?: unknown, headers: Record<string, string> = {}): Promise<string> {
+  const r = await extensionRequest({ url, method, body: body == null ? undefined : JSON.stringify(body), headers, anon: true });
+  if (r.status < 200 || r.status >= 300) throw new Error(`YouTube answered ${r.status}`);
+  return r.body;
+}
 
 /* ------------------------- visitor identity ----------------------------- */
 
@@ -101,11 +114,13 @@ function localVisitorData(): string {
 
 async function fetchVisitorData(): Promise<string | undefined> {
   try {
-    const text = await http<string>(
-      "https://www.youtube.com/sw.js_data",
-      { timeout: 6000, headers: { "User-Agent": DEVICE_UA, Referer: "https://www.youtube.com/sw.js", Accept: "*/*" } },
-      "text",
-    );
+    const text = isNative
+      ? await http<string>(
+          "https://www.youtube.com/sw.js_data",
+          { timeout: 6000, headers: { "User-Agent": DEVICE_UA, Referer: "https://www.youtube.com/sw.js", Accept: "*/*" } },
+          "text",
+        )
+      : await viaExtension("https://www.youtube.com/sw.js_data", "GET");
     const data = JSON.parse(String(text).replace(/^\)\]\}'\s*/, ""));
     const v = data?.[0]?.[2]?.[0]?.[0]?.[13];
     return typeof v === "string" && v.length > 10 ? v : undefined;
@@ -154,7 +169,29 @@ function explain(status: string | undefined, reason: string | undefined): string
 }
 
 async function visionos(videoId: string, vd: string): Promise<PlayerResponse> {
-  const data = await http<PlayerResponse>(
+  const body = {
+    context: { client: { ...CLIENT, gl: guessRegion(), visitorData: vd } },
+    videoId,
+    contentCheckOk: true,
+    racyCheckOk: true,
+  };
+  const data = isNative
+    ? await visionosApp(body, vd)
+    : (JSON.parse(
+        await viaExtension("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", "POST", body, {
+          "X-YouTube-Client-Name": CLIENT_ID,
+          "X-YouTube-Client-Version": CLIENT.clientVersion,
+          "X-Goog-Visitor-Id": vd,
+        }),
+      ) as PlayerResponse);
+  const status = data.playabilityStatus?.status;
+  if (status !== "OK") throw new Error(explain(status, data.playabilityStatus?.reason));
+  if (!data.streamingData || !data.videoDetails) throw new Error("no streams in answer");
+  return data;
+}
+
+async function visionosApp(body: unknown, vd: string): Promise<PlayerResponse> {
+  return http<PlayerResponse>(
     "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
     {
       method: "POST",
@@ -166,30 +203,21 @@ async function visionos(videoId: string, vd: string): Promise<PlayerResponse> {
         "X-Goog-Visitor-Id": vd,
         Origin: "https://www.youtube.com",
       },
-      body: {
-        context: { client: { ...CLIENT, gl: guessRegion(), visitorData: vd } },
-        videoId,
-        contentCheckOk: true,
-        racyCheckOk: true,
-      },
+      body,
     },
   );
-  const status = data.playabilityStatus?.status;
-  if (status !== "OK") throw new Error(explain(status, data.playabilityStatus?.reason));
-  if (!data.streamingData || !data.videoDetails) throw new Error("no streams in answer");
-  return data;
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 140);
 
 export async function devicePlayer(videoId: string): Promise<VideoDetails> {
-  if (!isNative) throw new Error("device extraction needs the app");
+  if (!deviceExtractionAvailable()) throw new Error("needs the app or the AuraBeats extension");
   const reasons: string[] = [];
   for (const fresh of [false, true]) {
     try {
       return toDetails(await visionos(videoId, await visitorData(fresh)));
     } catch (e) {
-      reasons.push(`App client${fresh ? " (new id)" : ""}: ${msg(e)}`);
+      reasons.push(`${isNative ? "App" : "Extension"} client${fresh ? " (new id)" : ""}: ${msg(e)}`);
       // Removed / private / region-blocked: another client won't help.
       if (/unavailable|private|removed|not available in your country/i.test(msg(e))) throw new DeviceError(reasons);
     }
