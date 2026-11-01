@@ -5,7 +5,7 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 import type { VideoItem } from "@/services/video/types";
-import { findAll, readPage, text, type YtChannel, type YtPage, type YtPlaylist } from "./parse";
+import { findAll, readPage, readPlaylistPage, text, type YtChannel, type YtPage, type YtPlaylist } from "./parse";
 import { call, ping, ytPrefs, ytSession } from "./session";
 import { WEB_CLIENT } from "./transport";
 
@@ -19,12 +19,18 @@ async function browse(browseId: string, cursor?: string): Promise<YtPage> {
   return readPage(r);
 }
 
+/** A playlist (VL…) page: its own videos only, never YouTube's suggestions. */
+async function browsePlaylist(browseId: string, cursor?: string): Promise<YtPage> {
+  const r = await call("browse", cursor ? { continuation: cursor } : { browseId });
+  return readPlaylistPage(r, !cursor);
+}
+
 export const ytHome = (cursor?: string) => browse("FEwhat_to_watch", cursor);
 export const ytSubsFeed = (cursor?: string) => browse("FEsubscriptions", cursor);
 export const ytHistory = (cursor?: string) => browse("FEhistory", cursor);
-export const ytLiked = (cursor?: string) => browse("VLLL", cursor);
-export const ytWatchLater = (cursor?: string) => browse("VLWL", cursor);
-export const ytPlaylistVideos = (id: string, cursor?: string) => browse(id.startsWith("VL") ? id : `VL${id}`, cursor);
+export const ytLiked = (cursor?: string) => browsePlaylist("VLLL", cursor);
+export const ytWatchLater = (cursor?: string) => browsePlaylist("VLWL", cursor);
+export const ytPlaylistVideos = (id: string, cursor?: string) => browsePlaylist(id.startsWith("VL") ? id : `VL${id}`, cursor);
 
 /** All your playlists (without Liked / Watch later, which have their own tabs). */
 export async function ytPlaylists(): Promise<YtPlaylist[]> {
@@ -162,13 +168,53 @@ export interface SaveTarget {
 /** Watch later + your playlists, with whether the video is already in each. */
 export async function saveTargets(videoId: string): Promise<SaveTarget[]> {
   const r = await call("playlist/get_add_to_playlist", { videoIds: [videoId], excludeWatchLater: false });
-  const out = findAll(r, "playlistAddToOptionRenderer").map((o) => ({
+  let out = findAll(r, "playlistAddToOptionRenderer").map((o) => ({
     id: String(o.playlistId ?? ""),
     title: text(o.title),
-    saved: o.containsSelectedVideos === "ALL",
+    saved: o.containsSelectedVideos === "ALL" || o.containsSelectedVideos === "SOME",
     private: o.privacy === "PRIVATE",
   }));
-  return out.filter((t) => t.id);
+  // newer dialog layout: list items that toggle a playlist
+  if (!out.length) {
+    out = findAll(r, "listItemViewModel").map((o) => {
+      const edit = findAll(o, "playlistEditEndpoint")[0] ?? findAll(o, "addToPlaylistCommand")[0];
+      return { id: String(edit?.playlistId ?? ""), title: text(o.title), saved: o.isSelected === true, private: /PRIVACY_PRIVATE|"LOCK"/.test(JSON.stringify(o)) };
+    });
+  }
+  const seen = new Set<string>();
+  const list = out.filter((t) => t.id && !seen.has(t.id) && seen.add(t.id));
+  setSaved(videoId, list);
+  return list;
+}
+
+/* Where each video is saved (per session), so the Save button can show it. */
+const savedCache = new Map<string, SaveTarget[]>();
+const savedL = new Set<() => void>();
+const savedKey = (videoId: string) => `${ytSession()?.key}|${videoId}`;
+function setSaved(videoId: string, list: SaveTarget[]) {
+  savedCache.set(savedKey(videoId), list);
+  savedL.forEach((f) => f());
+}
+
+/** The cached save list of a video (undefined = not read yet). */
+export const savedTargetsNow = (videoId: string) => savedCache.get(savedKey(videoId));
+
+/** Saved in Watch later or any playlist? (undefined = not known yet) */
+export function savedNow(videoId: string): boolean | undefined {
+  return savedTargetsNow(videoId)?.some((t) => t.saved);
+}
+
+export function subscribeSaved(f: () => void) {
+  savedL.add(f);
+  return () => {
+    savedL.delete(f);
+  };
+}
+
+/** Reads the save state once per session and video. */
+export function loadSaved(videoId: string): Promise<SaveTarget[]> {
+  const known = savedTargetsNow(videoId);
+  return known ? Promise.resolve(known) : saveTargets(videoId);
 }
 
 export async function setInPlaylist(playlistId: string, videoId: string, on: boolean): Promise<void> {
@@ -177,11 +223,17 @@ export async function setInPlaylist(playlistId: string, videoId: string, on: boo
     actions: [on ? { action: "ACTION_ADD_VIDEO", addedVideoId: videoId } : { action: "ACTION_REMOVE_VIDEO_BY_VIDEO_ID", removedVideoId: videoId }],
   });
   if (r?.status && r.status !== "STATUS_SUCCEEDED") throw new Error("YouTube didn't save that");
+  const list = savedTargetsNow(videoId);
+  if (list) setSaved(videoId, list.map((t) => (t.id === playlistId ? { ...t, saved: on } : t)));
 }
 
 export async function createPlaylist(title: string, videoIds: string[] = [], privacyStatus: "PRIVATE" | "UNLISTED" | "PUBLIC" = "PRIVATE"): Promise<string> {
   const r = await call<{ playlistId?: string }>("playlist/create", { title, privacyStatus, videoIds });
   if (!r?.playlistId) throw new Error("YouTube didn't create the playlist");
+  for (const id of videoIds) {
+    const list = savedTargetsNow(id);
+    if (list) setSaved(id, [{ id: r.playlistId, title, saved: true, private: privacyStatus === "PRIVATE" }, ...list]);
+  }
   return r.playlistId;
 }
 

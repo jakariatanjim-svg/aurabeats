@@ -55,6 +55,8 @@ export function useAudioEngine(): AudioEngine {
   const [volume, setVolumeState] = useState(0.85);
   const [muted, setMutedState] = useState(false);
   const [isLive, setIsLive] = useState(false);
+  /** the track itself says it's a live stream */
+  const liveHintRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [endTick, setEndTick] = useState(0);
   const [errorTick, setErrorTick] = useState(0);
@@ -83,6 +85,7 @@ export function useAudioEngine(): AudioEngine {
     setBufferedAhead(0);
     setIsBuffering(true);
     setIsLive(Boolean(opts.live));
+    liveHintRef.current = Boolean(opts.live);
 
     if (src.startsWith("yt-resolve:")) {
       const videoId = src.replace("yt-resolve:", "");
@@ -280,9 +283,12 @@ export function useAudioEngine(): AudioEngine {
     const syncDuration = () => {
       if (isYtMode) return;
       const d = el.duration;
-      const live = !Number.isFinite(d) || d === 0 || d > 60 * 60 * 6;
+      // NaN / 0 = not known yet (not "live"); only an endless stream is live
+      if (Number.isNaN(d) || d === 0) return;
+      // files without a length in their header also report Infinity
+      const live = d === Infinity && liveHintRef.current;
       setIsLive(live);
-      setDuration(live ? 0 : d);
+      setDuration(Number.isFinite(d) ? d : 0);
     };
 
     const onPlay = () => { if (!isYtMode) { setIsPlaying(true); setError(null); } };

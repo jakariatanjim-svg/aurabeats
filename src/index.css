@@ -721,6 +721,20 @@ body::before {
 .animate-sheet-up {
   animation: ab-slide-up 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
+/* A tick / filled icon appearing (Saved, checked). */
+.animate-pop {
+  animation: ab-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes ab-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
 .gradient-drift {
   background-size: 200% 200%;
   animation: ab-drift 14s ease infinite;
