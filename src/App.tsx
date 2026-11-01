@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
 import { useSavedSongs } from "@/hooks/useSavedSongs";
@@ -77,6 +78,24 @@ function Shell() {
     document.getElementById("ab-scroll")?.scrollTo({ top: 0 });
   }, []);
 
+  // Website: the tapped thumbnail grows into the player (View Transitions).
+  const showRoute = useCallback((next: RouteKey, after?: () => void) => {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    const id = next.startsWith("watch:") ? next.slice("watch:".length) : null;
+    const thumb = id ? (document.querySelector(`[data-vt-thumb="${CSS.escape(id)}"]`) as HTMLElement | null) : null;
+    if (isNative || !thumb || !doc.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setRoute(next);
+      after?.();
+      return;
+    }
+    thumb.style.viewTransitionName = "ab-player";
+    doc.startViewTransition(() => {
+      thumb.style.viewTransitionName = "";
+      flushSync(() => setRoute(next));
+      after?.();
+    });
+  }, []);
+
   const navigate = useCallback((next: RouteKey) => {
     const path = routeToPath(next);
     if (window.location.pathname === path) {
@@ -90,10 +109,9 @@ function Shell() {
     saveScroll();
     window.history.pushState(null, "", path);
     lastLoc.current = path;
-    setRoute(next);
     // app: the video opens over the page, which keeps its place
-    if (!(isNative && next.startsWith("watch:"))) jumpTop();
-  }, [scrollTop, saveScroll, jumpTop]);
+    showRoute(next, isNative && next.startsWith("watch:") ? undefined : jumpTop);
+  }, [scrollTop, saveScroll, jumpTop, showRoute]);
 
   // keep state in sync with the address bar (back / forward / pasted links)
   useEffect(() => {
@@ -126,12 +144,11 @@ function Shell() {
       saveScroll();
       window.history.pushState(null, "", anchor.pathname + anchor.search);
       lastLoc.current = anchor.pathname + anchor.search;
-      setRoute(pathToRoute(window.location.pathname));
-      jumpTop();
+      showRoute(pathToRoute(window.location.pathname), jumpTop);
     };
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
-  }, [saveScroll, jumpTop]);
+  }, [saveScroll, jumpTop, showRoute]);
 
   // Android back button / gesture: close the top overlay, else the previous
   // page, else this mode's start page; only from there leave the app (to the

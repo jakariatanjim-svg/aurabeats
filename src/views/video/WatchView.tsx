@@ -452,7 +452,7 @@ function PlayerSlot({ id, startAt, className, style }: { id: string; startAt: nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   return (
-    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)} style={style}>
+    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)} style={{ ...style, viewTransitionName: "ab-player" }}>
       <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-60" />
     </div>
   );

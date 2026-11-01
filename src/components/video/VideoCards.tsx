@@ -1,5 +1,6 @@
 import { avatarFor, directImg, rememberAvatar } from "@/utils/img";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { HoverPreview, hoverPreviewOk } from "./HoverPreview";
 import { Clock, Radio as LiveIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, formatTime, gradientFrom, initials, relativeTime } from "@/utils/format";
@@ -64,8 +65,26 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
 
 function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; className?: string }) {
   const [src, setSrc] = useState(v.thumbnail);
+  // PC: rest the mouse on it → a preview plays inside
+  const [preview, setPreview] = useState(false);
+  const timer = useRef(0);
+  const enter = () => {
+    if (v.live || !hoverPreviewOk()) return;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setPreview(true), 700);
+  };
+  const leave = () => {
+    window.clearTimeout(timer.current);
+    setPreview(false);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
-    <div className={cn("relative aspect-video w-full overflow-hidden rounded-2xl bg-ink/[0.06]", className)}>
+    <div
+      data-vt-thumb={v.id}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+      className={cn("relative aspect-video w-full overflow-hidden rounded-2xl bg-ink/[0.06]", className)}
+    >
       <img
         {...(src === v.thumbnail ? ytImgProps(src) : { src })}
         alt=""
@@ -84,7 +103,8 @@ function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; cl
           {formatTime(v.duration)}
         </span>
       ) : null}
-      {progress !== undefined && progress > 0 && (
+      {preview && <HoverPreview id={v.id} />}
+      {!preview && progress !== undefined && progress > 0 && (
         <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30">
           <span className="block h-full bg-red-600" style={{ width: `${Math.min(100, progress * 100)}%` }} />
         </span>
