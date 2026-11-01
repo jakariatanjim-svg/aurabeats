@@ -22,7 +22,7 @@ import { isNative } from "@/services/video/net";
 import { isVideoRoute, pathToRoute, routeToPath, type RouteKey } from "@/routes";
 import { navMemory } from "@/utils/navMemory";
 import { ProgressHold, TopProgress, topProgress } from "@/components/TopProgress";
-import { rememberRoute } from "@/components/video/AppModeSwitch";
+import { lastMode, rememberRoute } from "@/components/video/AppModeSwitch";
 import { cn } from "@/utils/cn";
 import { App as CapApp } from "@capacitor/app";
 import { runBackHandler } from "@/utils/backStack";
@@ -53,7 +53,12 @@ const QueuePanel = lazy(() => import("@/components/FullScreenPlayer").then((m) =
 function Shell() {
   // URL is the source of truth — real clean paths: /home /search …
   const [route, setRoute] = useState<RouteKey>(() => {
-    const r = pathToRoute(window.location.pathname);
+    let r = pathToRoute(window.location.pathname);
+    // opening the bare address: back to the tab (Music / Video) used last
+    if ((window.location.pathname === "/" || window.location.pathname === "") && lastMode() === "video") {
+      r = "video";
+      window.history.replaceState(null, "", routeToPath(r));
+    }
     // a YouTube-style address (/watch?v=…, /shorts/…, youtu.be-style) → our own
     if (r.startsWith("watch:") && window.location.pathname !== routeToPath(r)) window.history.replaceState(null, "", routeToPath(r));
     return r;

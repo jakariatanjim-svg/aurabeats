@@ -27,12 +27,20 @@ export function rememberRoute(route: RouteKey) {
   const mode: AppMode = isVideoRoute(route) ? "video" : "music";
   storage.set(MODE, mode);
   if (route === "search" || route === "video-search") return;
+  // Never the watch page: switching to Video must land on a page, not reopen
+  // the last video (which, swiped down, went straight back to Music — a loop).
+  if (route.startsWith("watch:")) return;
   session.set(LAST[mode], route);
+}
+
+/** The tab (Music / Video) used last, across visits. */
+export function lastMode(): AppMode {
+  return storage.get<AppMode>(MODE, "music") === "video" ? "video" : "music";
 }
 
 export function lastRouteFor(mode: AppMode): RouteKey {
   const r = session.get<RouteKey | null>(LAST[mode], null);
-  if (r && !isSharedRoute(r) && isVideoRoute(r) === (mode === "video")) return r;
+  if (r && !r.startsWith("watch:") && !isSharedRoute(r) && isVideoRoute(r) === (mode === "video")) return r;
   return mode === "video" ? "video" : "home";
 }
 
