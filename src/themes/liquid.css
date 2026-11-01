@@ -68,9 +68,12 @@
 }
 
 [data-theme="liquid"][data-mode="light"] {
-  --c-base: #e9edf6;
-  --c-elev: rgb(255 255 255 / 0.28);
-  --c-elev2: rgb(255 255 255 / 0.4);
+  --c-base: #eef1f7;
+  /* Denser white lenses than dark mode: with thin ones the coloured light
+     behind showed through in patches, so cards and text sat on blotches. */
+  --c-elev: rgb(255 255 255 / 0.55);
+  --c-elev2: rgb(15 23 42 / 0.05);
+  --panel-backdrop: blur(22px) saturate(140%);
   --c-line: rgb(30 41 59 / 0.12);
   --c-ink: #0b0b0f;
   --c-ink2: #2f3340;
@@ -81,31 +84,35 @@
   --c-solid-strong: #ffffff;
   --lg-rim-a: 0.9;
 
-  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.45), rgb(255 255 255 / 0.08) 45%, rgb(255 255 255 / 0.25));
+  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0.05) 45%, rgb(255 255 255 / 0.18));
   --panel-shadow: 0 10px 28px -14px rgb(30 41 59 / 0.25), 0 1px 3px rgb(30 41 59 / 0.06);
 
-  --c-elev-strong: rgb(255 255 255 / 0.42);
-  --panel-backdrop-raised: blur(22px) saturate(200%) brightness(1.04);
+  --c-elev-strong: rgb(255 255 255 / 0.7);
+  --panel-backdrop-raised: blur(26px) saturate(150%);
   --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0.35));
   --raised-shadow: 0 14px 34px -14px rgb(30 41 59 / 0.3), 0 1px 4px rgb(30 41 59 / 0.08);
   --bar-shadow: var(--raised-shadow);
 
-  --shell-bg: rgb(255 255 255 / 0.12);
+  --shell-bg: rgb(255 255 255 / 0.22);
   --shell-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5), inset 1px 1px 0 rgb(255 255 255 / 0.8);
 
-  /* soft pastel light behind the glass */
+  /* soft pastel light behind the glass: wide and faint, so it reads as a
+     tint of the whole background rather than coloured spots */
   --app-bg-image:
-    radial-gradient(60% 55% at 8% 4%, color-mix(in oklab, var(--c-accent) 38%, transparent), transparent 70%),
-    radial-gradient(55% 50% at 96% 12%, color-mix(in oklab, var(--c-accent2) 32%, transparent), transparent 70%),
-    radial-gradient(60% 60% at 80% 96%, color-mix(in oklab, #fb923c 32%, transparent), transparent 70%),
-    radial-gradient(50% 50% at 12% 92%, color-mix(in oklab, #34d399 26%, transparent), transparent 70%),
-    linear-gradient(160deg, #eef2fb, #e7ebf5 60%, #f3eef8);
+    radial-gradient(75% 65% at 0% 0%, color-mix(in oklab, var(--c-accent) 22%, transparent), transparent 75%),
+    radial-gradient(70% 60% at 100% 10%, color-mix(in oklab, var(--c-accent2) 18%, transparent), transparent 75%),
+    radial-gradient(75% 70% at 90% 100%, color-mix(in oklab, #fb923c 16%, transparent), transparent 75%),
+    radial-gradient(65% 60% at 5% 100%, color-mix(in oklab, #34d399 14%, transparent), transparent 75%),
+    linear-gradient(160deg, #f2f4fa, #eceff6 60%, #f4f1f8);
 }
 
 [data-blur="off"][data-theme="liquid"] {
   --c-elev: var(--c-solid);
   --c-elev-strong: var(--c-solid-strong);
   --shell-bg: color-mix(in oklab, var(--c-solid) 70%, transparent);
+}
+[data-blur="off"][data-theme="liquid"] .ab-topbar {
+  --panel-fill: color-mix(in oklab, var(--c-base) 94%, transparent);
 }
 
 /* ==========================================================================
@@ -129,10 +136,13 @@
   translate: none;
 }
 
-/* Navigation bar area: large-title style, sits on the background. */
+/* Navigation bar: it is sticky, so the page scrolls UNDER it. A see-through
+   bar showed the scrolled text on top of its own buttons (worst in light
+   mode); now it frosts what passes beneath, like the iOS bar on scroll. */
 [data-theme="liquid"] .ab-topbar {
-  --panel-fill: transparent;
-  --panel-backdrop: none;
+  --panel-fill: color-mix(in oklab, var(--c-base) 62%, transparent);
+  --panel-backdrop: blur(20px) saturate(160%);
+  --panel-sheen: none;
   --panel-highlight: 0 0 #0000;
   --panel-shadow: 0 0 #0000;
   --panel-border: 0 solid transparent;
