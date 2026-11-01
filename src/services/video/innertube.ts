@@ -282,3 +282,23 @@ export function toDetails(data: PlayerResponse): VideoDetails {
     streams,
   };
 }
+
+/* --------------------------- WEB client (no sign-in) --------------------- */
+
+const WEB_ANON = { clientName: "WEB", clientVersion: "2.20261020.01.00", hl: "en" };
+
+/**
+ * A WEB InnerTube call without an account (watch-page extras, comments,
+ * Shorts): the app asks directly, the website goes through the extension.
+ */
+export async function webAnon<T = unknown>(endpoint: string, body: Record<string, unknown>): Promise<T> {
+  if (!deviceExtractionAvailable()) throw new Error("needs the app or the AuraBeats extension");
+  const vd = await visitorData();
+  const full = { context: { client: { ...WEB_ANON, gl: guessRegion(), visitorData: vd } }, ...body };
+  const url = `https://www.youtube.com/youtubei/v1/${endpoint}?prettyPrint=false`;
+  const headers = { "X-YouTube-Client-Name": "1", "X-YouTube-Client-Version": WEB_ANON.clientVersion, "X-Goog-Visitor-Id": vd };
+  if (isNative) {
+    return http<T>(url, { method: "POST", timeout: 12000, headers: { ...headers, Origin: "https://www.youtube.com" }, body: full });
+  }
+  return JSON.parse(await viaExtension(url, "POST", full, headers)) as T;
+}
