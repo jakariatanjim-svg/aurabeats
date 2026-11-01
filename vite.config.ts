@@ -66,6 +66,7 @@ function chunkGroup(id: string): string | undefined {
     if (id.includes("/any-ascii/")) return "romanize";
     if (id.includes("/qrcode-generator/")) return "settings";
     if (id.includes("/jsqr/")) return "scanner"; // only while scanning a QR
+    if (id.includes("/hls.js/")) return "hls"; // only while a live video plays
     return "vendor";
   }
   const f = id.replace(/\\/g, "/");

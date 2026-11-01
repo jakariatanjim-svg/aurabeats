@@ -47,6 +47,7 @@ import { storage } from "@/utils/storage";
 import type { VideoDetails } from "@/services/video/types";
 import { getVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
+import { attachHls } from "./hls";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
 
@@ -158,7 +159,23 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const quality = plan?.qualities[qIndex];
   const qIndexRef = useRef(qIndex);
   qIndexRef.current = qIndex;
-  const videoSrc = plan?.mode === "hls" ? plan.hls : dual ? (audioOnly ? undefined : quality?.video?.url) : quality?.muxed?.url;
+  const hlsUrl = plan?.mode === "hls" ? plan.hls : undefined;
+  const videoSrc = hlsUrl ? undefined : dual ? (audioOnly ? undefined : quality?.video?.url) : quality?.muxed?.url;
+
+  // live streams: hls.js (or the browser's own HLS) feeds the <video>
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !hlsUrl) return;
+    let alive = true;
+    let stop = () => {};
+    attachHls(v, hlsUrl, (why) => alive && cbs.current.onFatal(why, 0))
+      .then((s) => (alive ? (stop = s) : s()))
+      .catch((e) => alive && cbs.current.onFatal(`live stream failed${e instanceof Error ? `: ${e.message}` : ""}`, 0));
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [hlsUrl]);
 
   /* ----------------------------- transport ------------------------------ */
 
@@ -519,7 +536,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   }, []);
 
   // Leaving the app while the video plays → floating window (Android 8+).
-  const hasPicture = Boolean(videoSrc) && !audioOnly;
+  const hasPicture = Boolean(videoSrc || hlsUrl) && !audioOnly;
   useEffect(() => {
     if (!isNative) return;
     pip.configure({
