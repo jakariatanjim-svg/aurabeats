@@ -126,6 +126,8 @@ Your sign-in never leaves your device or browser, and it is never part of a back
 2. Sign in on Google's own page. You're back in AuraBeats with your channel (or your Google name if you have no channel) when it's done.
 3. Add more accounts with **Add account**; pick a channel or tap **Switch** to change.
 
+**Using microG RE?** If microG RE is installed, Settings also shows **Sign in with microG**. Pick an account you've already added in microG RE and allow access once; AuraBeats signs in to YouTube with it.
+
 </details>
 
 <details>
