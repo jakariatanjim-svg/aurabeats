@@ -71,11 +71,18 @@
       }
     </script>
     <title>AuraBeats</title>
-    <link rel="manifest" href="/manifest.json" />
-    <!-- PWA Install — mobile (Android + iOS) -->
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Installable (PWA) on computers only: phones use the Android app. -->
+    <script>
+      (function () {
+        var ua = navigator.userAgent;
+        var phone = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+        if (phone) return;
+        var l = document.createElement("link");
+        l.rel = "manifest";
+        l.href = "/manifest.json";
+        document.head.appendChild(l);
+      })();
+    </script>
     <meta name="apple-mobile-web-app-title" content="AuraBeats" />
     <meta name="application-name" content="AuraBeats" />
     <meta name="msapplication-TileImage" content="/icon-512.png" />
@@ -84,7 +91,6 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icon-512.png" />
     <link rel="apple-touch-icon" sizes="152x152" href="/icon-512.png" />
     <link rel="apple-touch-icon" sizes="120x120" href="/icon-512.png" />
-    <link rel="apple-touch-startup-image" href="/icon-512.png" />
     <!-- Main content = YouTube / YouTube Music: connect to those first.
          i.ytimg.com serves every thumbnail; the two Piped servers answer
          search / related / trending. -->
