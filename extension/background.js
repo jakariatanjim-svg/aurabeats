@@ -66,12 +66,72 @@ async function request({ url, method = "POST", body, headers = {}, pageId, authU
   return { status: res.status, body: await res.text(), signedIn: !!auth };
 }
 
+/* ---------------- accounts (for the popup) ---------------- */
+
+const WEB_CLIENT = { clientName: "WEB", clientVersion: "2.20261020.01.00", hl: "en", gl: "US" };
+
+function findFirst(root, key) {
+  const stack = [root];
+  while (stack.length) {
+    const v = stack.pop();
+    if (Array.isArray(v)) stack.push(...v);
+    else if (v && typeof v === "object") {
+      if (v[key] && typeof v[key] === "object") return v[key];
+      stack.push(...Object.values(v));
+    }
+  }
+  return null;
+}
+const textOf = (t) => (!t ? "" : typeof t === "string" ? t : t.simpleText || (t.runs || []).map((r) => r.text).join(""));
+function photoOf(t) {
+  const list = (t && t.thumbnails) || [];
+  const url = list.length ? list[list.length - 1].url : "";
+  return url && url.startsWith("//") ? `https:${url}` : url;
+}
+
+let cache = null; // { at, accounts }
+
+/** Google accounts signed in to YouTube in this browser (name, email, picture). */
+async function listAccounts() {
+  if (cache && Date.now() - cache.at < 60000) return cache.accounts;
+  const out = [];
+  for (let i = 0; i < 6; i++) {
+    const res = await request({
+      url: "https://www.youtube.com/youtubei/v1/account/accounts_list?prettyPrint=false",
+      body: JSON.stringify({ context: { client: WEB_CLIENT } }),
+      headers: { "X-Youtube-Client-Name": "1", "X-Youtube-Client-Version": WEB_CLIENT.clientVersion },
+      authUser: String(i),
+    });
+    if (res.status !== 200) break;
+    let data;
+    try {
+      data = JSON.parse(res.body);
+    } catch {
+      break;
+    }
+    if (/"key":"logged_in","value":"0"/.test(JSON.stringify(data.responseContext || {}))) break;
+    const header = findFirst(data, "googleAccountHeaderRenderer");
+    const item = findFirst(data, "accountItem");
+    if (!header && !item) break;
+    const email = textOf(header && header.email);
+    if (out.some((a) => a.email && a.email === email)) break; // past the last one
+    out.push({ name: textOf(item && item.accountName) || textOf(header && header.name), email, photo: photoOf(item && item.accountPhoto) });
+  }
+  cache = { at: Date.now(), accounts: out };
+  return out;
+}
+
 const SITES = [/^https:\/\/([a-z0-9-]+\.)?aurabeats\.pages\.dev\//, /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//];
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (!msg || sender.id !== chrome.runtime.id) return false;
   if (msg.kind === "status") {
     authHeader("https://www.youtube.com").then((a) => reply({ signedIn: !!a }), () => reply({ signedIn: false }));
+    return true;
+  }
+  // only the extension's own popup (not a website) may list the accounts
+  if (msg.kind === "accounts" && !sender.tab) {
+    listAccounts().then((accounts) => reply({ accounts }), () => reply({ accounts: [] }));
     return true;
   }
   if (msg.kind !== "yt-request" || !SITES.some((re) => re.test(sender.url || ""))) return false;
