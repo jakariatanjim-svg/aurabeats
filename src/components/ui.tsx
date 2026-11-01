@@ -66,7 +66,7 @@ export function Artwork({
           fetchPriority={eager ? "high" : "auto"}
           decoding={eager ? "sync" : "async"}
           onError={() => setStage((s) => s + 1)}
-          className="h-full w-full object-cover"
+          className="ab-fade h-full w-full object-cover"
           draggable={false}
         />
       ) : (

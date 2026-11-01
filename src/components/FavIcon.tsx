@@ -7,11 +7,13 @@ import { cn } from "@/utils/cn";
 import type { Track } from "@/types";
 import { useYtSession } from "@/services/yt/session";
 import { likeApplies } from "@/services/yt/music";
+import { useBump } from "@/hooks/useBump";
 
 export function FavIcon({ track, on, className }: { track?: Pick<Track, "id" | "source"> | null; on: boolean; className?: string }) {
   useYtSession(); // re-render on sign-in / account changes
   const Icon = track && likeApplies(track) ? ThumbsUp : Heart;
-  return <Icon className={cn(className, on && "fill-current")} />;
+  const bump = useBump(on);
+  return <Icon key={bump} className={cn(className, on && "fill-current", bump > 0 && on && "animate-like")} />;
 }
 
 /** Label for the button: "Like" / "Favourite". */

@@ -231,7 +231,9 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     }
   }, [pauseMusic, details, id]);
 
+  const [shareFx, setShareFx] = useState(0);
   const share = async () => {
+    setShareFx((n) => n + 1);
     const url = `https://www.youtube.com/watch?v=${id}`;
     try {
       if (navigator.share) await navigator.share({ title: info?.title, url });
@@ -350,7 +352,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 <LikeButton id={id} likes={info.likes} />
                 <SaveButton v={info} />
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
-                  <Share2 className="h-3.5 w-3.5" /> Share
+                  <Share2 key={shareFx} className={cn("h-3.5 w-3.5", shareFx > 0 && "animate-wiggle")} /> Share
                 </Button>
                 <Button
                   variant="outline"

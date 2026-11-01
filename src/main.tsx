@@ -45,6 +45,24 @@ window.addEventListener("vite:preloadError", (e) => {
   }
 });
 
+// Pictures marked "ab-fade" fade in (from a soft blur) once they've loaded —
+// or failed, so a broken one never stays invisible.
+const markLoaded = (e: Event) => {
+  const t = e.target;
+  if (t instanceof HTMLImageElement && t.classList.contains("ab-fade")) t.dataset.loaded = "1";
+};
+document.addEventListener("load", markLoaded, true);
+document.addEventListener("error", markLoaded, true);
+// already-complete pictures (from the cache, before React attached listeners)
+new MutationObserver((list) => {
+  for (const m of list)
+    for (const n of Array.from(m.addedNodes)) {
+      if (!(n instanceof HTMLElement)) continue;
+      const imgs = n instanceof HTMLImageElement ? [n] : Array.from(n.querySelectorAll("img.ab-fade"));
+      for (const img of imgs as HTMLImageElement[]) if (img.complete && img.naturalWidth) img.dataset.loaded = "1";
+    }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 if (!isNativeApp && "serviceWorker" in navigator && location.protocol === "https:") {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});

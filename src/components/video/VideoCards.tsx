@@ -1,5 +1,5 @@
 import { avatarFor, directImg, rememberAvatar } from "@/utils/img";
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Clock, Radio as LiveIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, formatTime, gradientFrom, initials, relativeTime } from "@/utils/format";
@@ -24,8 +24,20 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
   if (rawSrc) rememberAvatar(channelId, rawSrc);
   const direct = directImg(rawSrc);
   const saved = avatarFor(channelId);
-  const tries = [direct, otherHost(direct), saved, otherHost(saved)].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
+  const [looked, setLooked] = useState<string | undefined>();
+  const tries = [direct, otherHost(direct), saved, otherHost(saved), looked].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
   const src = tries.find((u) => !failed.includes(u));
+  // nothing (left) to show: look the channel's picture up once
+  useEffect(() => {
+    if (src || !channelId) return;
+    let alive = true;
+    void import("@/services/video/avatarLookup")
+      .then((m) => m.lookupAvatar(channelId))
+      .then((u) => alive && u && setLooked(u));
+    return () => {
+      alive = false;
+    };
+  }, [src, channelId]);
   if (src) {
     return (
       <img
@@ -35,7 +47,7 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
         loading="lazy"
         referrerPolicy="no-referrer"
         onError={() => setFailed((f) => [...f, src])}
-        className={cn("shrink-0 rounded-full bg-ink/10 object-cover", className)}
+        className={cn("ab-fade shrink-0 rounded-full bg-ink/10 object-cover", className)}
       />
     );
   }
@@ -61,7 +73,7 @@ function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; cl
         decoding="async"
         referrerPolicy="no-referrer"
         onError={() => src !== `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg` && setSrc(`https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`)}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        className="ab-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
       />
       {v.live ? (
         <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
