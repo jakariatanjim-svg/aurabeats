@@ -48,7 +48,7 @@ const isPwaInstalled =
 const THEME_CORES: { key: ThemeName; name: string; desc: string; icon: typeof Sparkles }[] = [
   { key: "glassmorphism", name: "Glassmorphism", desc: "Frosted glass", icon: Sparkles },
   { key: "material", name: "Material UI", desc: "Material 3", icon: Shapes },
-  { key: "liquid", name: "Liquid Glass", desc: "iOS 26 style", icon: Droplets },
+  { key: "liquid", name: "Liquid Glass", desc: "Clear glass", icon: Droplets },
 ];
 
 /**
@@ -57,7 +57,7 @@ const THEME_CORES: { key: ThemeName; name: string; desc: string; icon: typeof Sp
  */
 export function SettingsView() {
   const { volume, setVolume, toast, settings, updateSettings } = usePlayer();
-  const { theme, setTheme, mode, toggleMode, accent, setAccent } = useTheme();
+  const { theme, setTheme, mode, toggleMode, accent, setAccent, blur, setBlur } = useTheme();
   // Native builds update in-app (download + progress + installer).
   const update = useAppUpdate(isApp, toast);
 
@@ -111,6 +111,13 @@ export function SettingsView() {
               ))}
             </div>
           </div>
+
+          {theme !== "material" && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[13px] font-bold text-ink">Blur</p>
+              <Switch on={blur} label="Blur" onClick={() => setBlur(!blur)} />
+            </div>
+          )}
 
           <div>
             <p className="mb-2.5 text-[13px] font-bold text-ink">Accent colour</p>

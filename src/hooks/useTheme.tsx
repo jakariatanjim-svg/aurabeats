@@ -34,6 +34,9 @@ interface ThemeContextValue {
   setAccent: (hex: string) => void;
   toggleTheme: () => void;
   toggleMode: () => void;
+  /** glass blur on/off (off = solid surfaces, lighter for slow devices) */
+  blur: boolean;
+  setBlur: (on: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -111,6 +114,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(loadTheme);
   const [mode, setModeState] = useState<ThemeMode>(() => storage.get<ThemeMode>("mode", "dark"));
   // Default accent: Ocean (#3b82f6) — index 7 in ACCENTS
+  const [blur, setBlurState] = useState<boolean>(() => storage.get<boolean>("blur", true));
+  useEffect(() => {
+    document.documentElement.dataset.blur = blur ? "on" : "off";
+    storage.set("blur", blur);
+  }, [blur]);
+  const setBlur = useCallback((on: boolean) => setBlurState(on), []);
   const [accent, setAccentState] = useState<string>(() => storage.get<string>("accent", ACCENTS[7].value));
 
   useEffect(() => {
@@ -149,8 +158,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggleMode = useCallback(() => setModeState((m) => (m === "dark" ? "light" : "dark")), []);
 
   const value = useMemo(
-    () => ({ theme, mode, accent, setTheme, setMode, setAccent, toggleTheme, toggleMode }),
-    [theme, mode, accent, setTheme, setMode, setAccent, toggleTheme, toggleMode],
+    () => ({ theme, mode, accent, setTheme, setMode, setAccent, toggleTheme, toggleMode, blur, setBlur }),
+    [theme, mode, accent, setTheme, setMode, setAccent, toggleTheme, toggleMode, blur, setBlur],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

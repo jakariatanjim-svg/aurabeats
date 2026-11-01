@@ -249,92 +249,93 @@
 }
 
 /* ---------------------------- LIQUID GLASS ------------------------------
-   Apple's Liquid Glass (iOS 26 / iPadOS 26). Same rule Apple uses:
-   content sits on solid iOS system surfaces; Liquid Glass is reserved for
-   the navigation layer that floats above it (tab bar, mini player, sidebar,
-   menus, sheets). The glass is clear, highly saturated and lit by a
-   specular rim, so it reads as a lens over whatever scrolls underneath. */
+   One clear-glass look: cards, bars and menus are lenses over soft
+   background light, with a specular rim. Settings → Blur off swaps every
+   glass surface for a solid one. */
 [data-theme="liquid"] {
   --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
   --glow-strength: 0;
   --slider-fill: var(--c-accent);
 
-  /* content layer: solid grouped surfaces (no blur = smooth scrolling) */
-  --panel-backdrop: none;
-  --panel-sheen: none;
+  /* content layer: clear glass too — every card is a lens over the
+     background light (turn Blur off in Settings for solid cards) */
+  --panel-backdrop: blur(22px) saturate(180%);
   --panel-radius: 22px;
   --panel-hover-lift: 0px;
 
-  /* app frame (sidebar + content column): two floating Liquid Glass sheets,
-     the same floating layout as Glassmorphism. Phones go edge-to-edge
-     (see the media query below), like a native iOS app. */
-  --shell-backdrop: none;
+  /* app frame: two floating glass sheets; phones go edge-to-edge */
+  --shell-backdrop: blur(28px) saturate(170%);
   --shell-radius: 30px;
   --shell-border: 0 solid transparent;
   --bar-radius: 30px;
 
-  /* navigation layer: Liquid Glass. Rim drawn with inset shadows (not a
-     border) so it survives the border overrides on bars. */
+  /* rim drawn with inset shadows (not a border) so it survives the border
+     overrides on bars */
   --raised-border: 0 solid transparent;
+  --panel-border: 0 solid transparent;
 }
 
 [data-theme="liquid"][data-mode="dark"] {
-  --c-base: #000000; /* systemBackground */
-  --c-elev: #1c1c1e; /* secondarySystemBackground */
-  --c-elev2: rgb(118 118 128 / 0.24); /* tertiarySystemFill */
-  --c-line: rgb(84 84 88 / 0.55); /* separator */
-  --c-ink: #ffffff; /* label */
-  --c-ink2: #d1d1d6; /* secondaryLabel (opaque) */
-  --c-ink3: #8e8e93; /* systemGray */
+  --c-base: #07070b;
+  --c-elev: rgb(255 255 255 / 0.055);
+  --c-elev2: rgb(255 255 255 / 0.09);
+  --c-line: rgb(255 255 255 / 0.1);
+  --c-ink: #ffffff;
+  --c-ink2: #d6d6dc;
+  --c-ink3: #8e8e96;
   --glow: rgb(0 0 0 / 0.5);
+  /* solid stand-ins when Blur is off */
+  --c-solid: #16161b;
+  --c-solid-strong: #1d1d23;
 
-  --panel-border: 0 solid transparent;
-  --panel-shadow: 0 0 #0000;
-  --panel-highlight: inset 0 0.5px 0 rgb(255 255 255 / 0.06);
+  --panel-sheen: linear-gradient(160deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0) 42%, rgb(255 255 255 / 0.02));
+  --panel-shadow: 0 10px 30px -18px rgb(0 0 0 / 0.7);
+  --panel-highlight: inset 0 1px 0.5px rgb(255 255 255 / 0.14), inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
 
-  --c-elev-strong: rgb(28 28 32 / 0.42);
-  --panel-backdrop-raised: blur(18px) saturate(190%) brightness(1.1);
+  --c-elev-strong: rgb(30 30 36 / 0.5);
+  --panel-backdrop-raised: blur(26px) saturate(190%) brightness(1.08);
   --raised-sheen:
-    radial-gradient(120% 90% at 18% -10%, rgb(255 255 255 / 0.16), transparent 55%),
-    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 45%, rgb(255 255 255 / 0.03));
+    radial-gradient(120% 90% at 18% -10%, rgb(255 255 255 / 0.18), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0) 45%, rgb(255 255 255 / 0.04));
   --raised-highlight:
-    inset 0 1px 0.5px rgb(255 255 255 / 0.3),
-    inset 0 -1px 0.5px rgb(255 255 255 / 0.08),
-    inset 0 0 0 0.5px rgb(255 255 255 / 0.16),
-    inset 0 0 18px rgb(255 255 255 / 0.04);
-  --raised-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.35);
+    inset 0 1px 0.5px rgb(255 255 255 / 0.34),
+    inset 0 -1px 0.5px rgb(255 255 255 / 0.1),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.18),
+    inset 0 0 20px rgb(255 255 255 / 0.05);
+  --raised-shadow: 0 14px 36px -12px rgb(0 0 0 / 0.65), 0 2px 8px -2px rgb(0 0 0 / 0.35);
   --bar-shadow: var(--raised-shadow);
 
-  --shell-bg:
-    radial-gradient(140% 70% at 0% 0%, rgb(255 255 255 / 0.07), transparent 50%),
-    linear-gradient(180deg, rgb(24 24 27 / 0.72), rgb(14 14 16 / 0.66));
+  --shell-bg: linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0.02));
   --shell-shadow:
     inset 0 1px 0.5px rgb(255 255 255 / 0.16),
-    inset 0 -0.5px 0.5px rgb(255 255 255 / 0.05),
-    inset 0 0 0 0.5px rgb(255 255 255 / 0.1),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.09),
     0 24px 60px -28px rgb(0 0 0 / 0.8);
 
-  /* a faint accent light at the top gives the glass something to refract */
-  --app-bg-image: radial-gradient(1100px 560px at 50% -16%, color-mix(in oklab, var(--c-accent) 20%, transparent), transparent 70%);
+  /* soft light pools for the glass to bend */
+  --app-bg-image:
+    radial-gradient(900px 520px at 12% -10%, color-mix(in oklab, var(--c-accent) 26%, transparent), transparent 70%),
+    radial-gradient(800px 600px at 100% 110%, color-mix(in oklab, var(--c-accent2) 18%, transparent), transparent 70%);
 }
 
 [data-theme="liquid"][data-mode="light"] {
-  --c-base: #f2f2f7; /* systemGroupedBackground */
-  --c-elev: #ffffff; /* secondarySystemGroupedBackground */
-  --c-elev2: rgb(118 118 128 / 0.12); /* tertiarySystemFill */
-  --c-line: rgb(60 60 67 / 0.14); /* separator */
-  --c-ink: #000000; /* label */
-  --c-ink2: #3c3c43; /* secondaryLabel (opaque) */
-  --c-ink3: #8a8a8e; /* tertiaryLabel (opaque) */
+  --c-base: #eceef3;
+  --c-elev: rgb(255 255 255 / 0.62);
+  --c-elev2: rgb(118 118 128 / 0.12);
+  --c-line: rgb(60 60 67 / 0.13);
+  --c-ink: #000000;
+  --c-ink2: #3c3c43;
+  --c-ink3: #84848a;
   --glow: rgb(30 41 59 / 0.25);
   --shade: rgb(30 41 59);
+  --c-solid: #ffffff;
+  --c-solid-strong: #ffffff;
 
-  --panel-border: 0 solid transparent;
-  --panel-shadow: 0 1px 2px rgb(30 41 59 / 0.04), 0 8px 24px -14px rgb(30 41 59 / 0.12);
-  --panel-highlight: 0 0 #0000;
+  --panel-sheen: linear-gradient(160deg, rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.15) 45%, rgb(255 255 255 / 0.4));
+  --panel-shadow: 0 1px 2px rgb(30 41 59 / 0.05), 0 10px 26px -16px rgb(30 41 59 / 0.18);
+  --panel-highlight: inset 0 1px 0.5px rgb(255 255 255 / 0.95), inset 0 0 0 0.5px rgb(30 41 59 / 0.06);
 
-  --c-elev-strong: rgb(255 255 255 / 0.5);
-  --panel-backdrop-raised: blur(18px) saturate(200%) brightness(1.06);
+  --c-elev-strong: rgb(255 255 255 / 0.55);
+  --panel-backdrop-raised: blur(24px) saturate(200%) brightness(1.05);
   --raised-sheen:
     radial-gradient(120% 90% at 18% -10%, rgb(255 255 255 / 0.85), transparent 55%),
     linear-gradient(180deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0.08) 50%, rgb(255 255 255 / 0.3));
@@ -346,16 +347,41 @@
   --raised-shadow: 0 10px 30px -12px rgb(30 41 59 / 0.22), 0 1px 4px rgb(30 41 59 / 0.08);
   --bar-shadow: var(--raised-shadow);
 
-  --shell-bg:
-    radial-gradient(140% 70% at 0% 0%, rgb(255 255 255 / 0.7), transparent 55%),
-    linear-gradient(180deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.38));
+  --shell-bg: linear-gradient(180deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.32));
   --shell-shadow:
     inset 0 1px 0.5px rgb(255 255 255 / 1),
     inset 0 0 0 0.5px rgb(30 41 59 / 0.06),
-    0 1px 3px rgb(30 41 59 / 0.05),
     0 24px 56px -30px rgb(30 41 59 / 0.22);
 
-  --app-bg-image: radial-gradient(1100px 520px at 50% -18%, color-mix(in oklab, var(--c-accent) 9%, transparent), transparent 70%);
+  /* no coloured glows in light: neutral white light only */
+  --app-bg-image:
+    radial-gradient(900px 520px at 10% -12%, rgb(255 255 255 / 0.95), transparent 70%),
+    radial-gradient(800px 600px at 100% 110%, rgb(255 255 255 / 0.7), transparent 70%);
+}
+
+/* Blur off (Settings): no frosted glass anywhere — solid surfaces, lighter
+   on slow devices. */
+[data-blur="off"] {
+  --panel-backdrop: none;
+  --panel-backdrop-raised: none;
+  --shell-backdrop: none;
+}
+[data-blur="off"] *,
+[data-blur="off"] *::before,
+[data-blur="off"] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+[data-blur="off"][data-theme="liquid"] {
+  --c-elev: var(--c-solid);
+  --c-elev-strong: var(--c-solid-strong);
+  --shell-bg: color-mix(in oklab, var(--c-solid) 70%, transparent);
+}
+[data-blur="off"][data-theme="glassmorphism"][data-mode="dark"] {
+  --c-elev-strong: rgb(22 18 36 / 0.96);
+}
+[data-blur="off"][data-theme="glassmorphism"][data-mode="light"] {
+  --c-elev-strong: rgb(255 255 255 / 0.97);
 }
 
 * {
@@ -1066,8 +1092,10 @@ input[type="range"].ab-range::-moz-range-thumb {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  [data-theme="liquid"] {
-    --c-elev-strong: var(--c-elev);
+  [data-theme="liquid"][data-mode] {
+    --c-elev: var(--c-solid);
+    --c-elev-strong: var(--c-solid-strong);
+    --panel-backdrop: none;
     --panel-backdrop-raised: none;
   }
 }
