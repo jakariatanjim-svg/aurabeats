@@ -14,6 +14,7 @@ import { getVideo } from "@/services/video/api";
 import type { VideoDetails } from "@/services/video/types";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
+import { navMemory } from "@/utils/navMemory";
 import { VideoPlayer } from "./VideoPlayer";
 
 type Direct = { status: "off" } | { status: "loading" } | { status: "ok"; details: VideoDetails } | { status: "failed" };
@@ -163,6 +164,11 @@ export function DirectDock({
           onFatal={(_reason, at) => onFail(at || dockRefs.time)}
           mini={mini}
           onAspect={onAspect}
+          onTheater={() => dock.toggleTheater()}
+          onMini={() => {
+            if (navMemory.cameFromPage) window.history.back();
+            else navigate(navMemory.lastPage as RouteKey);
+          }}
         />
       ) : (
         <div className="relative h-full w-full">

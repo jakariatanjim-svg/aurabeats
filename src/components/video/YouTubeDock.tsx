@@ -141,6 +141,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     return () => clearTimeout(t);
   }, [volFx]);
   const [seekFx, setSeekFx] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
+  // keyboard seeking: repeated / held presses add up (5 → 10 → 15 s)
+  const keyTarget = useRef<{ t: number; at: number } | null>(null);
   const [flash, setFlash] = useState<{ icon: "play" | "pause"; key: number } | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
@@ -1121,6 +1123,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   };
 
   /* ----------------------------- keyboard ------------------------------- */
+  const keySeek = (step: number) => {
+    const now = Date.now();
+    const kt = keyTarget.current;
+    const from = kt && now - kt.at < 1000 ? kt.t : Number(call("getCurrentTime")) || time;
+    const t = Math.max(0, duration ? Math.min(duration - 0.5, from + step) : from + step);
+    seek(t);
+    keyTarget.current = { t, at: now };
+    const side = step < 0 ? "l" : "r";
+    setSeekFx((f) => ({ side, secs: f && f.side === side && now - f.key < 1000 ? f.secs + Math.abs(step) : Math.abs(step), key: now }));
+  };
   useEffect(() => {
     if (mode === "mini") return;
     const onKey = (e: KeyboardEvent) => {
@@ -1129,10 +1141,19 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === " " || k === "k") togglePlay();
-      else if (k === "arrowleft") seekBy(-5);
-      else if (k === "arrowright") seekBy(5);
-      else if (k === "j") seekBy(-10);
-      else if (k === "l") seekBy(10);
+      else if (k === "arrowleft") keySeek(-5);
+      else if (k === "arrowright") keySeek(5);
+      else if (k === "j") keySeek(-10);
+      else if (k === "l") keySeek(10);
+      else if (k === "c") {
+        if (cc) pickCc(null);
+        else {
+          const want = (navigator.language || "en").slice(0, 2);
+          const tr = tracks.find((x) => x.languageCode.startsWith(want)) ?? tracks.find((x) => x.languageCode.startsWith("en")) ?? tracks[0];
+          if (tr) pickCc(tr.languageCode);
+          else call("loadModule", "captions");
+        }
+      }
       else if (k === "f") toggleFs();
       else if (k === "t" && fs === "off") dock.toggleTheater();
       else if (k === "i") toMini();

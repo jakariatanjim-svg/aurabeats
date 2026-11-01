@@ -177,7 +177,7 @@ export const Sidebar = memo(function Sidebar({
         onNavigate={onNavigate}
         compact={collapsed}
         vertical={collapsed}
-        className={cn("mb-4", collapsed ? "mx-auto w-12" : "mx-3")}
+        className={cn("mb-4", collapsed ? "mx-auto" : "mx-3")}
       />
 
       <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>

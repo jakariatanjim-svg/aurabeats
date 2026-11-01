@@ -64,12 +64,39 @@ export function AppModeSwitch({
     { mode: "music" as const, label: "Music", icon: Music2, active: !video },
     { mode: "video" as const, label: "Video", icon: Tv, active: video },
   ];
+  const go = (mode: AppMode, active: boolean) => (active && !shared ? undefined : onNavigate(lastRouteFor(mode)));
+  // collapsed sidebar: two full-size buttons, one above the other (like
+  // YouTube's narrow side menu), the current one highlighted
+  if (vertical) {
+    return (
+      <div role="tablist" aria-label="Music or video" data-tour="mode" className={cn("flex flex-col items-center gap-1.5", className)}>
+        {opts.map(({ mode, label, icon: Icon, active }) => (
+          <button
+            key={mode}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            title={label}
+            data-active={active ? "true" : undefined}
+            onClick={() => go(mode, active)}
+            className={cn(
+              "focus-ring flex h-14 w-14 flex-col items-center justify-center gap-1 rounded-2xl text-[10px] font-bold transition-all",
+              active ? "bg-accent text-white shadow-[0_8px_22px_-12px_var(--glow)]" : "text-ink3 hover:bg-ink/[0.06] hover:text-ink",
+            )}
+          >
+            <Icon className="h-5 w-5 shrink-0" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
   return (
     <div
       role="tablist"
       aria-label="Music or video"
       data-tour="mode"
-      className={cn("ab-seg blur-panel flex gap-0.5 p-1", vertical ? "flex-col" : "items-center", className)}
+      className={cn("ab-seg blur-panel flex items-center gap-0.5 p-1", className)}
     >
       {opts.map(({ mode, label, icon: Icon, active }) => (
         <button
@@ -80,10 +107,9 @@ export function AppModeSwitch({
           title={label}
           aria-label={label}
           data-active={active ? "true" : undefined}
-          onClick={() => (active && !shared ? undefined : onNavigate(lastRouteFor(mode)))}
+          onClick={() => go(mode, active)}
           className={cn(
-            "focus-ring flex flex-1 items-center justify-center gap-1.5 text-xs font-bold transition-all",
-            vertical ? "rounded-xl" : "rounded-full",
+            "focus-ring flex flex-1 items-center justify-center gap-1.5 rounded-full text-xs font-bold transition-all",
             compact ? "h-8 w-9" : "h-9 px-3",
             active ? "bg-accent text-white shadow-[0_8px_22px_-12px_var(--glow)]" : "text-ink3 hover:bg-ink/[0.06] hover:text-ink",
           )}

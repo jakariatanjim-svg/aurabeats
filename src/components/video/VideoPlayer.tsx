@@ -63,6 +63,9 @@ export interface VideoPlayerProps {
   onFatal: (reason: string, at: number) => void;
   /** shown small in the miniplayer bar: no controls, the bar takes the touches */
   mini?: boolean;
+  /** website (real player): T = theatre, I = mini player */
+  onTheater?: () => void;
+  onMini?: () => void;
   /** dragging the video down (the watch layer turns it into the miniplayer) */
   onDrag?: (phase: "move" | "end", dy: number, velocity: number) => void;
   /** the picture's real shape (width / height), once known — sizes the player */
@@ -78,7 +81,7 @@ const mediaErr = (el: HTMLMediaElement) => {
   return e ? ` (code ${e.code}${e.message ? `: ${e.message.slice(0, 80)}` : ""})` : "";
 };
 
-export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag, onAspect }: VideoPlayerProps) {
+export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag, onAspect, onTheater, onMini }: VideoPlayerProps) {
   const plan: Plan | null = useMemo(() => makePlan(details.streams), [details.streams]);
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -145,7 +148,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   }, [menu]);
   const [controls, setControls] = useState(true);
   const [fs, setFs] = useState<"off" | "native" | "css">("off");
-  const [flash, setFlash] = useState<{ side: "l" | "r"; key: number } | null>(null);
+  const [flash, setFlash] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
+  // repeated taps / key presses add up (5 → 10 → 15 s), like YouTube
+  const seekTarget = useRef<{ t: number; at: number } | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
 
   const wantPlay = useRef(true);
@@ -710,6 +715,16 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   };
 
   /* ----------------------------- keyboard ------------------------------- */
+  const stepSeek = (step: number) => {
+    const now = Date.now();
+    const st = seekTarget.current;
+    const from = st && now - st.at < 1000 ? st.t : (master()?.currentTime ?? 0);
+    const t = Math.max(0, duration ? Math.min(duration - 0.5, from + step) : from + step);
+    seek(t);
+    seekTarget.current = { t, at: now };
+    const side = step < 0 ? "l" : "r";
+    setFlash((f) => ({ side, secs: f && f.side === side && now - f.key < 1000 ? f.secs + Math.abs(step) : Math.abs(step), key: now }));
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -717,11 +732,16 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === " " || k === "k") togglePlay();
-      else if (k === "arrowleft") seekBy(-5);
-      else if (k === "arrowright") seekBy(5);
-      else if (k === "j") seekBy(-10);
-      else if (k === "l") seekBy(10);
+      else if (k === "arrowleft") stepSeek(-5);
+      else if (k === "arrowright") stepSeek(5);
+      else if (k === "j") stepSeek(-10);
+      else if (k === "l") stepSeek(10);
       else if (k === "f") toggleFs();
+      else if (k === "t" && onTheater && fs === "off") onTheater();
+      else if (k === "i" && onMini && !mini) {
+        if (fs !== "off") void exitFs();
+        onMini();
+      }
       else if (k === "m") setMuted((m) => !m);
       else if (k === "arrowup") setVolume((v: number) => Math.min(1, v + 0.05));
       else if (k === "arrowdown") setVolume((v: number) => Math.max(0, v - 0.05));
@@ -938,10 +958,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     const x = (e.clientX - rect.left) / rect.width;
     const isTouch = e.pointerType !== "mouse";
     if (now - lastTap.current < 300 && (x < 0.35 || x > 0.65)) {
-      // double tap on the sides = ±10 s
-      seekBy(x < 0.5 ? -10 : 10);
-      setFlash({ side: x < 0.5 ? "l" : "r", key: now });
-      lastTap.current = 0;
+      // double tap on the sides = ±10 s (more taps keep adding)
+      stepSeek(x < 0.5 ? -10 : 10);
+      lastTap.current = now;
       return;
     }
     lastTap.current = now;
@@ -1054,7 +1073,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             flash.side === "l" ? "left-[12%]" : "right-[12%]",
           )}
         >
-          {flash.side === "l" ? <RotateCcw className="h-4 w-4" /> : <RotateCw className="h-4 w-4" />} 10s
+          {flash.side === "l" ? <RotateCcw className="h-4 w-4" /> : <RotateCw className="h-4 w-4" />} {flash.secs} seconds
         </span>
       )}
 
