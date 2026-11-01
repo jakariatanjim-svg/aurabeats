@@ -16,6 +16,7 @@ export type RouteKey =
   | "video-search"
   | "video-subs"
   | "video-library"
+  | "video-shorts"
   | `watch:${string}`
   | `channel:${string}`;
 
@@ -74,7 +75,7 @@ export function pathToRoute(pathname: string): RouteKey {
   if (clean === "/video") return "video";
   if (clean.startsWith("/video/")) {
     const sub = clean.slice("/video/".length);
-    return (["search", "subs", "library"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
+    return (["search", "subs", "library", "shorts"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
   }
   const key = clean.slice(1);
   const valid: RouteKey[] = ["home", "search", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device"];
@@ -94,6 +95,8 @@ export function routeLabel(route: RouteKey): string {
       return "Following";
     case "video-library":
       return "Video library";
+    case "video-shorts":
+      return "Shorts";
     case "home":
       return "Discover";
     case "search":

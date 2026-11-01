@@ -17,7 +17,7 @@ import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { useYtSession } from "@/services/yt/session";
 import { useSavedSongs } from "@/hooks/useSavedSongs";
-import { ThumbsUp } from "lucide-react";
+import { Clapperboard, ThumbsUp } from "lucide-react";
 import { useYtSubscriptions } from "@/services/yt/library";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -38,6 +38,7 @@ const MAIN: NavItem[] = [
 
 const VIDEO_MAIN: NavItem[] = [
   { key: "video", label: "Home", icon: Home },
+  { key: "video-shorts", label: "Shorts", icon: Clapperboard },
   { key: "video-subs", label: "Following", icon: Rss },
   { key: "video-library", label: "Library", icon: Library },
 ];

@@ -16,6 +16,9 @@ function next<T = unknown>(body: Record<string, unknown>): Promise<T> {
 }
 
 export interface WatchExtras {
+  title?: string;
+  author?: string;
+  authorId?: string;
   description?: string;
   viewsText?: string;
   dateText?: string;
@@ -70,6 +73,9 @@ function readWatch(r: Obj): WatchExtras {
 
   const secondaryResults = findAll(r, "secondaryResults")[0];
   return {
+    title: text(primary.title) || undefined,
+    author: text(owner.title) || undefined,
+    authorId: (findAll(owner.navigationEndpoint, "browseEndpoint")[0]?.browseId as string | undefined) || undefined,
     description: description || undefined,
     viewsText: text(viewsBox?.viewCount) || undefined,
     dateText: text(primary.dateText) || undefined,

@@ -11,6 +11,7 @@ import { routeToPath, type RouteKey } from "@/routes";
 import { openSearch } from "@/utils/searchNav";
 import { useYtSession } from "@/services/yt/session";
 import { YtFollowing, YtHome, YtLibrary } from "./YtViews";
+import { ShortsRow } from "./ShortsRow";
 
 function useProgress() {
   const lib = useVideoLibrary();
@@ -72,6 +73,8 @@ function LocalHome({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
           </VideoGrid>
         </section>
       )}
+
+      {(seeds.length > 0 || ids.length > 0) && <ShortsRow />}
 
       {ids.length > 0 ? (
         <section>

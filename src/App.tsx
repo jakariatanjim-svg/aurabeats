@@ -46,6 +46,7 @@ const VideoHomeView = lazy(() => import("@/views/video/VideoViews").then((m) => 
 const VideoSubsView = lazy(() => import("@/views/video/VideoViews").then((m) => ({ default: m.VideoSubsView })));
 const VideoLibraryView = lazy(() => import("@/views/video/VideoViews").then((m) => ({ default: m.VideoLibraryView })));
 const VideoSearchView = lazy(() => import("@/views/video/VideoSearchView").then((m) => ({ default: m.VideoSearchView })));
+const ShortsView = lazy(() => import("@/views/video/ShortsView").then((m) => ({ default: m.ShortsView })));
 const WatchView = lazy(() => import("@/views/video/WatchView").then((m) => ({ default: m.WatchView })));
 const ChannelView = lazy(() => import("@/views/video/ChannelView").then((m) => ({ default: m.ChannelView })));
 const FullScreenPlayer = lazy(() => import("@/components/FullScreenPlayer").then((m) => ({ default: m.FullScreenPlayer })));
@@ -381,6 +382,7 @@ function Shell() {
                 {shownRoute === "video-search" && <VideoSearchView />}
                 {shownRoute === "video-subs" && <VideoSubsView onNavigate={navigate} />}
                 {shownRoute === "video-library" && <VideoLibraryView />}
+                {shownRoute === "video-shorts" && <ShortsView />}
                 {!isNative && shownRoute.startsWith("watch:") && <WatchView key={route} id={shownRoute.slice("watch:".length)} onNavigate={navigate} />}
                 {shownRoute.startsWith("channel:") && <ChannelView id={shownRoute.slice("channel:".length)} />}
                 </>
@@ -390,7 +392,7 @@ function Shell() {
         </main>
       </div>
 
-      {!watching && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
+      {!watching && shownRoute !== "video-shorts" && <PlayerBar onOpenQueue={() => setQueueOpen(!queueOpen)} />}
       <MobileNav route={shownRoute} onNavigate={navigate} favoritesCount={saved.tracks.length} likeMode={saved.signedIn} />
       <Tutorial route={shownRoute} onNavigate={navigate} />
       <ConfirmHost />
@@ -421,7 +423,7 @@ function Shell() {
 
 /** Pages that can't show anything without the internet (the offline page replaces them). */
 const needsInternet = (r: RouteKey) =>
-  r === "home" || r === "search" || r === "video" || r === "video-search" || r === "video-subs" || r.startsWith("watch:") || r.startsWith("channel:");
+  r === "home" || r === "search" || r === "video" || r === "video-search" || r === "video-subs" || r === "video-shorts" || r.startsWith("watch:") || r.startsWith("channel:");
 
 export default function App() {
   return (

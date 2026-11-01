@@ -25,7 +25,6 @@ interface Props {
 
 export function Comments({ token, count, teaser, sheet }: Props) {
   const [open, setOpen] = useState(false);
-  useBackHandler(open, () => setOpen(false));
   if (!token) return null;
   if (!sheet) return <CommentList token={token} count={count} />;
   return (
@@ -41,27 +40,38 @@ export function Comments({ token, count, teaser, sheet }: Props) {
           </span>
         )}
       </button>
-      {open &&
-        createPortal(
-          <>
-          <div className="fixed inset-0 z-[79] bg-black/40" onClick={() => setOpen(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-[80] flex h-[68dvh] flex-col rounded-t-3xl border-t border-line bg-bg shadow-2xl">
-            <div className="flex items-center justify-between px-4 pt-3 pb-2">
-              <span className="text-base font-black text-ink">
-                Comments <span className="text-sm font-medium text-ink3">{count}</span>
-              </span>
-              <button type="button" aria-label="Close" onClick={() => setOpen(false)} className="rounded-full p-2 text-ink2 hover:bg-ink/5">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+var(--sa-bottom))]">
-              <CommentList token={token} bare />
-            </div>
-          </div>
-          </>,
-          document.body,
-        )}
+      <CommentsSheet token={token} count={count} open={open} onClose={() => setOpen(false)} />
     </>
+  );
+}
+
+/** Comments in a sheet from the bottom (phones, Shorts). */
+export function CommentsSheet({ token, count, open, onClose, side }: { token: string; count?: string; open: boolean; onClose: () => void; side?: boolean }) {
+  useBackHandler(open, onClose);
+  if (!open) return null;
+  return createPortal(
+    <>
+      <div className={cn("fixed inset-0 z-[79]", side ? "bg-transparent" : "bg-black/40")} onClick={onClose} />
+      <div
+        className={cn(
+          "fixed z-[80] flex flex-col border-line bg-bg shadow-2xl",
+          side ? "top-20 right-6 bottom-6 w-[420px] rounded-3xl border" : "inset-x-0 bottom-0 h-[68dvh] rounded-t-3xl border-t",
+        )}
+      >
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <span className="text-base font-black text-ink">
+            Comments <span className="text-sm font-medium text-ink3">{count}</span>
+          </span>
+          <button type="button" aria-label="Close" onClick={onClose} className="rounded-full p-2 text-ink2 hover:bg-ink/5">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+var(--sa-bottom))]">
+          <CommentList token={token} bare />
+        </div>
+      </div>
+    </>,
+    document.body,
   );
 }
 

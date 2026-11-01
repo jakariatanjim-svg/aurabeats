@@ -12,6 +12,7 @@ import { NewPlaylistForm } from "@/components/video/YtActions";
 import { Button, Chip, Modal } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { LoadMore } from "@/components/LoadMore";
+import { ShortsRow } from "./ShortsRow";
 export { LoadMore };
 import { routeToPath } from "@/routes";
 import { storage } from "@/utils/storage";
@@ -91,7 +92,12 @@ function VideoList({
 /* --------------------------------- Home ---------------------------------- */
 
 export function YtHome() {
-  return <VideoList name="home" load={ytHome} empty="No recommendations yet" />;
+  return (
+    <div className="space-y-8">
+      <ShortsRow />
+      <VideoList name="home" load={ytHome} empty="No recommendations yet" />
+    </div>
+  );
 }
 
 /* ------------------------------- Following ------------------------------- */
