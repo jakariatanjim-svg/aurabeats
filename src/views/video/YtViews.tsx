@@ -2,15 +2,17 @@
  * Video pages for a signed-in YouTube account: YouTube's recommendations on
  * Home, subscriptions on Following, and the account's library.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Bookmark, Clock, ListVideo, Plus, RefreshCw, ThumbsUp, UserRound, X } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowLeft, Bookmark, Clock, ListVideo, Plus, ThumbsUp, UserRound, X } from "lucide-react";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
-import { dropYtLists, useYtPaged, type PagedState } from "@/hooks/useYtPaged";
+import { dropYtLists, useYtPaged } from "@/hooks/useYtPaged";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Avatar, VideoCard, VideoGrid, VideoGridSkeleton, VideoRow, VideoRowSkeleton } from "@/components/video/VideoCards";
 import { NewPlaylistForm } from "@/components/video/YtActions";
-import { Button, Chip, Modal, Spinner } from "@/components/ui";
+import { Button, Chip, Modal } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
+import { LoadMore } from "@/components/LoadMore";
+export { LoadMore };
 import { routeToPath } from "@/routes";
 import { storage } from "@/utils/storage";
 import { useBackHandler } from "@/utils/backStack";
@@ -43,31 +45,6 @@ export function useProgressMap() {
 }
 
 /** Loads the next page when it scrolls into view (endless lists). */
-export function LoadMore({ st, onMore }: { st: PagedState<unknown>; onMore: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const more = useRef(onMore);
-  more.current = onMore;
-  const can = !!st.next && !st.loading && !st.error;
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !can) return;
-    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && more.current(), { rootMargin: "900px 0px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [can, st.items.length]);
-  if (!st.next && !st.error) return null;
-  return (
-    <div ref={ref} className="flex justify-center py-6">
-      {st.error ? (
-        <Button variant="outline" onClick={onMore}>
-          <RefreshCw className="h-4 w-4" /> Try again
-        </Button>
-      ) : (
-        <Spinner />
-      )}
-    </div>
-  );
-}
 
 /** One endless list of videos (cards or rows). */
 function VideoList({

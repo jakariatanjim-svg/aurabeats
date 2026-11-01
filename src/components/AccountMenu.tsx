@@ -10,7 +10,7 @@ import { storage } from "@/utils/storage";
 import { usePlayer } from "@/hooks/usePlayer";
 import { confirmAction } from "@/components/Confirm";
 import { undoable } from "@/components/UndoToast";
-import { Photo } from "@/components/YtAccountSection";
+import { Photo } from "@/components/AccountPhoto";
 import { BrowserAccountsPicker } from "@/components/BrowserAccountsPicker";
 import { isNative } from "@/services/video/net";
 import { addAccount, hideAccount, switchAccount, switchChannel, useYtAccounts, ytAccountsSupported, type YtAccount } from "@/services/yt/accounts";

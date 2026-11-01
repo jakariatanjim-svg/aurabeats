@@ -7,7 +7,7 @@ import { Button, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { TrackRow } from "@/components/TrackList";
 import { useBackHandler } from "@/utils/backStack";
-import { LoadMore } from "@/views/video/YtViews";
+import { LoadMore } from "@/components/LoadMore";
 import { ytmPlaylists, ytmPlaylistSongs, type YtmPage, type YtmPlaylist } from "@/services/yt/music";
 
 function Cover({ src, className }: { src?: string; className: string }) {

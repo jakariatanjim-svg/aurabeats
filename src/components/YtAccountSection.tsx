@@ -5,7 +5,7 @@
  * browser's own Google accounts.
  */
 import { useEffect, useState } from "react";
-import { Check, CircleUserRound, RefreshCw, Trash2, TriangleAlert, UserRound } from "lucide-react";
+import { Check, CircleUserRound, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { Button, SectionHeader, Spinner } from "@/components/ui";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -16,6 +16,7 @@ import { useYtPrefs, ytPrefs } from "@/services/yt/session";
 import { useExtension } from "@/services/yt/extension";
 import { isNative } from "@/services/video/net";
 import { ExtensionCard } from "@/components/ExtensionCard";
+import { Photo } from "@/components/AccountPhoto";
 import { BrowserAccountsPicker } from "@/components/BrowserAccountsPicker";
 import {
   addAccount,
@@ -41,16 +42,6 @@ function GoogleG({ className }: { className?: string }) {
   );
 }
 
-export function Photo({ src, className }: { src?: string; className?: string }) {
-  const [bad, setBad] = useState<string | null>(null);
-  return src && bad !== src ? (
-    <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setBad(src)} className={cn("shrink-0 rounded-full object-cover", className)} />
-  ) : (
-    <span className={cn("flex shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent", className)}>
-      <UserRound className="h-1/2 w-1/2" />
-    </span>
-  );
-}
 
 export function YtAccountSection() {
   const { accounts, active, busy } = useYtAccounts();
