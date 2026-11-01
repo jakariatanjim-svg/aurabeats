@@ -1,3 +1,4 @@
+import { AccountMenu } from "@/components/AccountMenu";
 import { Floating } from "@/components/Floating";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Droplets, Moon, Palette, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
@@ -189,6 +190,7 @@ export function TopBar({
           <ModeSwitch />
           <AccentPicker />
         </div>
+        <AccountMenu onNavigate={onNavigate} />
       </div>
     </header>
   );

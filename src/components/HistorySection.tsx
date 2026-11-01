@@ -56,7 +56,7 @@ export function HistorySection() {
 
   return (
     <section>
-      <SectionHeader title="History" subtitle="Stored only on this device" icon={<History className="h-4 w-4 text-accent" />} />
+      <SectionHeader title="History on this device" subtitle="Stored only on this device" icon={<History className="h-4 w-4 text-accent" />} />
       <div className="blur-panel space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
           {tabs.map(({ key, label, icon: Icon, count: n }) => (

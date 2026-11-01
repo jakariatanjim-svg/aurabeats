@@ -41,7 +41,7 @@ function GoogleG({ className }: { className?: string }) {
   );
 }
 
-function Photo({ src, className }: { src?: string; className?: string }) {
+export function Photo({ src, className }: { src?: string; className?: string }) {
   const [bad, setBad] = useState<string | null>(null);
   return src && bad !== src ? (
     <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setBad(src)} className={cn("shrink-0 rounded-full object-cover", className)} />

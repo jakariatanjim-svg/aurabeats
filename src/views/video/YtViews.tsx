@@ -280,9 +280,9 @@ export function YtLibrary() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
-        {chip("history", <Clock className="h-3.5 w-3.5" />, "History")}
+        {chip("history", <Clock className="h-3.5 w-3.5" />, "YouTube history")}
         {chip("later", <Bookmark className="h-3.5 w-3.5" />, "Watch later")}
-        {chip("liked", <ThumbsUp className="h-3.5 w-3.5" />, "Liked")}
+        {chip("liked", <ThumbsUp className="h-3.5 w-3.5" />, "Liked on YouTube")}
         {chip("playlists", <ListVideo className="h-3.5 w-3.5" />, "Playlists")}
         {session?.channelId && (
           <a

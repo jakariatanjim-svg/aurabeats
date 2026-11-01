@@ -49,7 +49,7 @@ function FollowLocal({ ch, className }: { ch: { id: string; name: string; avatar
   const following = videoLibrary.isFollowing(ch.id);
   const bump = useBump(following);
   return (
-    <Button variant={following ? "outline" : "solid"} className={className} onClick={() => videoLibrary.toggleFollow(ch)}>
+    <Button variant={following ? "outline" : "solid"} className={className} title="Follow on this device (no account)" onClick={() => videoLibrary.toggleFollow(ch)}>
       <span key={bump} className={cn("inline-flex items-center gap-1.5", bump > 0 && following && "animate-pop")}>
         {following && <Check className="h-3.5 w-3.5" />}
         {following ? "Following" : "Follow"}
@@ -75,7 +75,7 @@ function SubscribeYt({ ch, className, loading }: { ch: { id: string; name: strin
     }
   };
   return (
-    <Button variant={on ? "outline" : "solid"} className={className} disabled={busy || loading} onClick={() => void toggle()}>
+    <Button variant={on ? "outline" : "solid"} className={className} title="Subscribe on your YouTube account" disabled={busy || loading} onClick={() => void toggle()}>
       {busy && <Spinner className="h-3.5 w-3.5" />}
       <span key={bump} className={cn("inline-flex items-center gap-1.5", bump > 0 && on && "animate-pop")}>
         {on && !busy && <Bell className={cn("h-3.5 w-3.5", bump > 0 && "animate-wiggle")} />}
