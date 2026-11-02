@@ -7,7 +7,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronLeft, ChevronRight, Gauge, Settings2, Subtitles } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { useBackHandler } from "@/utils/backStack";
+import { useBackHandler, useEscape } from "@/utils/backStack";
 import type { ShortHandle, ShortOptions } from "@/components/video/ShortPlayers";
 
 type Page = "main" | "quality" | "captions" | "speed";
@@ -16,6 +16,7 @@ export function ShortMenu({ handle, anchor, sheet, onClose }: { handle: ShortHan
   const [page, setPage] = useState<Page>("main");
   const [o, setO] = useState<ShortOptions | null>(() => handle?.options() ?? null);
   useBackHandler(true, onClose);
+  useEscape(true, onClose);
   const refresh = () => setO(handle?.options() ?? null);
 
   const rateLabel = (r: number) => (r === 1 ? "Normal" : `${r}x`);

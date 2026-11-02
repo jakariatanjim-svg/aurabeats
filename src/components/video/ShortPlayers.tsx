@@ -28,6 +28,7 @@ export interface ShortOptions {
 
 export interface ShortHandle {
   toggle: () => void;
+  pause: () => void;
   seekBy: (s: number) => void;
   options: () => ShortOptions;
   setQuality: (id: string) => void;
@@ -179,6 +180,7 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
       if (pl.getPlayerState() === 1) pl.pauseVideo();
       else pl.playVideo();
     },
+    pause: () => p.current?.pauseVideo(),
     seekBy: (s) => {
       const pl = p.current;
       if (!pl) return;
@@ -379,6 +381,10 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
         m.pause();
         if (dual) el.pause();
       }
+    },
+    pause: () => {
+      a.current?.pause();
+      v.current?.pause();
     },
     seekBy: (s) => {
       const el = v.current;

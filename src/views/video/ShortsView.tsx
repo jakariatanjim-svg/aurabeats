@@ -124,6 +124,8 @@ export function ShortsView() {
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // a video page on top (app) or an open dialog / sheet owns the keys
+      if (watchLayer.get().mode === "full" || document.querySelector("[role=dialog]")) return;
       const k = e.key.toLowerCase();
       if (["arrowleft", "arrowright", "j", "l"].includes(k) && heldTooSoon(e)) {
         e.preventDefault();
@@ -294,6 +296,16 @@ function Slide({
   useEffect(() => {
     if (!active) setSt({ playing: false, time: 0, duration: 0, failed: undefined });
   }, [active]);
+
+  // never music and a Short at once: whichever started last keeps playing
+  const { isPlaying: musicOn, pause: pauseMusic } = usePlayer();
+  const was = useRef({ music: musicOn, short: false });
+  useEffect(() => {
+    const w = was.current;
+    if (active && musicOn && !w.music && st.playing) handle?.current?.pause();
+    else if (active && st.playing && !w.short && musicOn) pauseMusic();
+    was.current = { music: musicOn, short: active && st.playing };
+  }, [active, musicOn, st.playing, handle, pauseMusic]);
 
   // remember it in the watch history once it really played
   useEffect(() => {

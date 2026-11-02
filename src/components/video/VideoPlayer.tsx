@@ -897,8 +897,13 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       }
       else if (k === "m") setMuted((m) => !m);
       else if (k === "c") toggleCc();
+      else if ((k === "arrowup" || k === "arrowdown") && fs === "off" && !boxRef.current?.matches(":hover") && !boxRef.current?.contains(document.activeElement)) return; // the page scrolls
       else if (k === "arrowup") setVolume((v: number) => Math.min(1, v + 0.05));
       else if (k === "arrowdown") setVolume((v: number) => Math.max(0, v - 0.05));
+      else if (e.key === ">" || e.key === "<") {
+        const i = SPEEDS.indexOf(rate);
+        setRate(SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i === -1 ? 3 : i) + (e.key === ">" ? 1 : -1)))]);
+      }
       else if (k === "escape" && fs === "css") void exitFs();
       else if (/^[0-9]$/.test(k) && duration) seek((Number(k) / 10) * duration);
       else return;
@@ -1220,6 +1225,17 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       />
       {cues.length > 0 && !inPip && <CaptionText cues={cues} time={time} raised={showUi} />}
       {!mini && !inPip && <PlayerOverlays id={details.id} time={time} controlsShown={showUi} />}
+      {/* phones: the autoplay switch sits top right, like the YouTube app */}
+      {touchUi && showUi && !details.live && (
+        <div
+          className={cn("absolute right-11 z-[6] sm:right-12", fs !== "off" ? "top-[calc(var(--sa-top)+0.4rem)]" : "top-1")}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <AutoplaySwitch />
+        </div>
+      )}
       {zoomPill && fs !== "off" && (
         <span className="pointer-events-none absolute top-[calc(var(--sa-top)+1rem)] left-1/2 -translate-x-1/2 animate-fade-in rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
           {zoomPill}
@@ -1345,7 +1361,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             <span className="hidden min-w-0 truncate text-xs font-semibold text-white/80 sm:inline">• {curChapter.title}</span>
           )}
           <span className="flex-1" />
-          {!details.live && !mini && <AutoplaySwitch />}
+          {!details.live && !mini && !touchUi && <AutoplaySwitch />}
           {!details.live && (
             <CtlBtn label={loop ? "Loop on" : "Loop"} active={loop} onClick={() => setLoop((l) => !l)}>
               {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}

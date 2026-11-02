@@ -13,7 +13,7 @@ import { getComments, likeComment, postComment, type CommentsPage, type YtCommen
 import { routeToPath } from "@/routes";
 import { Avatar } from "./VideoCards";
 import { Spinner } from "@/components/ui";
-import { useBackHandler } from "@/utils/backStack";
+import { useBackHandler, useEscape } from "@/utils/backStack";
 
 interface Props {
   token?: string;
@@ -48,6 +48,7 @@ export function Comments({ token, count, teaser, sheet }: Props) {
 /** Comments in a sheet from the bottom (phones, Shorts). */
 export function CommentsSheet({ token, count, open, onClose, side }: { token: string; count?: string; open: boolean; onClose: () => void; side?: boolean }) {
   useBackHandler(open, onClose);
+  useEscape(open, onClose);
   if (!open) return null;
   return createPortal(
     <>

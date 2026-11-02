@@ -148,6 +148,11 @@ function Shell() {
       const anchor = (e.target as HTMLElement | null)?.closest?.("a[data-nav='true']") as HTMLAnchorElement | null;
       if (!anchor) return;
       e.preventDefault();
+      // the page you are on: back to its top, no duplicate history step
+      if (anchor.pathname + anchor.search === lastLoc.current) {
+        jumpTop();
+        return;
+      }
       saveScroll();
       window.history.pushState(null, "", anchor.pathname + anchor.search);
       lastLoc.current = anchor.pathname + anchor.search;

@@ -7,6 +7,7 @@
 import materialCss from "@/themes/material.css?inline";
 import liquidCss from "@/themes/liquid.css?inline";
 import type { ThemeName } from "@/types";
+import { startLens, stopLens } from "./liquidRefraction";
 
 const CSS: Record<ThemeName, string> = { material: materialCss, liquid: liquidCss };
 const sheets: Partial<Record<ThemeName, HTMLStyleElement>> = {};
@@ -32,6 +33,7 @@ export function applyThemeSheet(name: ThemeName): void {
   if (active) sheet(active).media = "not all"; // the previous look sleeps
   active = name;
   glassLight(name === "liquid");
+  syncLens();
   if (idleQueued) return;
   idleQueued = true;
   const prepare = () => (Object.keys(CSS) as ThemeName[]).forEach(sheet);
@@ -88,4 +90,19 @@ function glassLight(on: boolean) {
     frame = 0;
     onLeave();
   }
+}
+
+/* Liquid Glass lensing (utils/liquidRefraction): only in Liquid Glass with
+   Blur on; follows the Blur switch. */
+let lensWatch: MutationObserver | null = null;
+function syncLens() {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const want = () => active === "liquid" && root.dataset.blur !== "off";
+  const go = () => (want() ? (document.body ? startLens() : addEventListener("DOMContentLoaded", startLens, { once: true })) : stopLens());
+  if (!lensWatch) {
+    lensWatch = new MutationObserver(go);
+    lensWatch.observe(root, { attributes: true, attributeFilter: ["data-blur"] });
+  }
+  go();
 }

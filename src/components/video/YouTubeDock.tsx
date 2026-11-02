@@ -1215,10 +1215,15 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       else if (k === "i") toMini();
       else if (k === "m") toggleMute();
       else if (k === "arrowup" || k === "arrowdown") {
+        // like YouTube: volume only with the pointer / focus on the player
+        // (or full screen); otherwise the arrows scroll the page
+        const box = boxRef.current;
+        if (fs === "off" && !box?.matches(":hover") && !box?.contains(document.activeElement)) return;
         const n = Math.max(0, Math.min(100, (muted || needsUnmute ? 0 : volume) + (k === "arrowup" ? 5 : -5)));
         setVolume(n);
         setVolFx({ v: n, key: Date.now() });
       }
+      else if (e.key === "N" && e.shiftKey) playNext(); // next video, like YouTube
       else if (e.key === ">") setSpeed(SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(rate) + 1)] ?? 2);
       else if (e.key === "<") setSpeed(SPEEDS[Math.max(0, SPEEDS.indexOf(rate) - 1)] ?? 0.25);
       else if (k === "escape" && fs === "css") void exitFs();
@@ -1579,6 +1584,17 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
             )}
 
             {!error && !ad && d.id && <PlayerOverlays id={d.id} time={time} controlsShown={showUi} />}
+            {/* phones: the autoplay switch sits top right, like the YouTube app */}
+            {touch && showUi && !error && !ad && (
+              <div
+                className={cn("absolute right-11 z-[6] sm:right-12", mode === "full" ? "top-[calc(var(--sa-top)+0.4rem)]" : "top-1")}
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <AutoplaySwitch />
+              </div>
+            )}
 
             {/* ended */}
             {ended && !error && (
@@ -1665,7 +1681,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 <span className="flex-1" />
 
                 {rate !== 1 && <span className="mr-1 rounded bg-white/15 px-1.5 py-0.5 text-[11px] font-bold">{rate}x</span>}
-                <AutoplaySwitch />
+                {!touch && <AutoplaySwitch />}
                 <CtrlBtn label={loop ? "Loop on" : "Loop"} onClick={() => setLoop((l) => !l)} className={cn(loop && "text-accent")}>
                   {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
                 </CtrlBtn>
