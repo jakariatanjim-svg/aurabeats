@@ -19,6 +19,7 @@
 import { useBackHandler } from "@/utils/backStack";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
 import { isNative } from "@/services/video/net";
+import { playerScreen } from "@/services/playerScreen";
 import { baseOrientation } from "@/utils/orientation";
 import { showVolumeUi } from "@/utils/device";
 import { layerControls, watchLayer } from "./watchLayer";
@@ -41,6 +42,7 @@ import {
   RotateCw,
   Settings2,
   Subtitles,
+  Sun,
   Languages,
   Volume2,
   VolumeX,
@@ -54,7 +56,10 @@ import { AutoplaySwitch } from "./AutoplaySwitch";
 import { CaptionText, pickTrack, saveCcLang, savedCcLang, useCaptionCues } from "./captions";
 import { PlayerOverlays } from "./PlayerOverlays";
 import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
-import { getRepeat, getVideoSettings, setRepeat, subscribeVideoSettings, useRepeat } from "@/services/video/settings";
+import { getRepeat, getVideoSettings, setRepeat, subscribeVideoSettings, useAutoplay, useRepeat } from "@/services/video/settings";
+import type { VideoItem } from "@/services/video/types";
+import { EndScreen } from "./EndScreen";
+import { ChapterMarks, SeekPreview } from "./SeekPreview";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 import { attachHls } from "./hls";
 import { heldTooSoon } from "@/utils/keyRepeat";
@@ -80,6 +85,9 @@ export interface VideoPlayerProps {
   onDrag?: (phase: "move" | "end", dy: number, velocity: number) => void;
   /** the picture's real shape (width / height), once known — sizes the player */
   onAspect?: (ratio: number) => void;
+  /** the video that comes next (end screen: Next / autoplay countdown) */
+  next?: VideoItem | null;
+  onNext?: () => void;
 }
 
 type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
@@ -99,7 +107,7 @@ const mediaErr = (el: HTMLMediaElement) => {
   return e ? ` (code ${e.code}${e.message ? `: ${e.message.slice(0, 80)}` : ""})` : "";
 };
 
-export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag, onAspect, onTheater, onMini }: VideoPlayerProps) {
+export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag, onAspect, onTheater, onMini, next, onNext }: VideoPlayerProps) {
   // dubbed videos: which language track plays (null = the original)
   const [audioTrack, setAudioTrack] = useState<string | null>(null);
   const plan: Plan | null = useMemo(() => makePlan(details.streams, audioTrack), [details.streams, audioTrack]);
@@ -178,6 +186,16 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   // repeated taps / key presses add up (5 → 10 → 15 s), like YouTube
   const seekTarget = useRef<{ t: number; at: number } | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
+  const [ended, setEnded] = useState(false);
+  const [seekHover, setSeekHover] = useState<{ x: number; t: number; w: number } | null>(null);
+  const autoplay = useAutoplay();
+  // app: the miniplayer goes on to the next video by itself (no end screen there)
+  const nextCb = useRef(onNext);
+  nextCb.current = onNext;
+  useEffect(() => {
+    if (isNative && mini && ended && autoplay && !getRepeat() && next) nextCb.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mini, ended]);
 
   const wantPlay = useRef(true);
   const started = useRef(false);
@@ -199,7 +217,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   // separate players with plain file addresses when that isn't possible.
   const [comboOff, setComboOff] = useState(false);
   const comboTracks = planDual && !audioOnly && !comboOff ? [quality?.video, plan?.audio] : [];
-  const combo = comboTracks.length === 2 && chunkedOk(comboTracks);
+  // (website only: in the app the sound plays in its own player so it goes
+  // on in the background — Android stops a hidden app's video player)
+  const combo = !isNative && comboTracks.length === 2 && chunkedOk(comboTracks);
   const dual = planDual && !combo;
   const master = useCallback(() => (dual ? audioRef.current : videoRef.current), [dual]);
   // where to continue after the player was rebuilt (see onLoaded)
@@ -349,6 +369,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     };
     const onPlay = () => {
       setPlaying(true);
+      setEnded(false);
       cbs.current.onPlayStart?.();
     };
     const onPause = () => setPlaying(false);
@@ -366,8 +387,12 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     };
     const onEnd = () => {
       setPlaying(false);
+      setEnded(true);
       videoRef.current?.pause();
       cbs.current.onEnded?.();
+    };
+    const onSeekingEnd = () => {
+      if (m.currentTime < (m.duration || Infinity) - 0.5) setEnded(false);
     };
     const onError = () => {
       // one shared player failed: the two separate players with plain files
@@ -395,6 +420,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     m.addEventListener("canplay", onPlaying);
     m.addEventListener("timeupdate", onTimeUpdate);
     m.addEventListener("ended", onEnd);
+    m.addEventListener("seeking", onSeekingEnd);
     m.addEventListener("error", onError);
     if (m.readyState >= 1) onLoaded();
     return () => {
@@ -406,6 +432,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       m.removeEventListener("canplay", onPlaying);
       m.removeEventListener("timeupdate", onTimeUpdate);
       m.removeEventListener("ended", onEnd);
+      m.removeEventListener("seeking", onSeekingEnd);
       m.removeEventListener("error", onError);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -420,6 +447,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   }, [startAt]);
 
   // Dual mode: keep the muted video glued to the audio clock.
+  const resync = useRef(0);
   useEffect(() => {
     if (!dual) return;
     const a = audioRef.current;
@@ -427,6 +455,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     if (!a || !v) return;
 
     const onVideoWaiting = () => {
+      // just re-synced (back from another tab / a catch-up jump): the picture
+      // freezes for a moment while the sound goes on, like YouTube — no stop
+      if (Date.now() - resync.current < 5000) return;
       if (!a.paused && wantPlay.current) {
         a.pause();
         wantPlay.current = true; // resume once video catches up
@@ -476,7 +507,12 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       if (a.paused || !v.getAttribute("src") || v.readyState < 2 || (document.hidden && !pip.active)) return;
       const diff = v.currentTime - a.currentTime;
       if (Math.abs(diff) > 0.8) {
-        v.currentTime = a.currentTime + 0.1;
+        // a jump: land a little ahead so the picture is ready when the sound
+        // gets there (and don't jump again while it is still catching up)
+        if (Date.now() - resync.current > 2500) {
+          resync.current = Date.now();
+          v.currentTime = a.currentTime + (diff < 0 ? 0.5 : 0.1);
+        }
         v.playbackRate = a.playbackRate;
       } else if (Math.abs(diff) > 0.06) {
         v.playbackRate = a.playbackRate * (diff > 0 ? 0.92 : 1.08);
@@ -603,22 +639,38 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     return () => ro.disconnect();
   }, [auto, plan]);
 
-  // Background: in dual mode stop decoding video while hidden (keeps the
-  // audio going — background listening), resync on return.
+  // Background: in dual mode stop decoding video while hidden for a while
+  // (keeps the audio going — background listening). A quick look at another
+  // tab keeps the picture running, so coming back needs no reload; after a
+  // longer time the picture catches up without stopping the sound.
   useEffect(() => {
     if (!dual) return;
+    let pauseTimer: ReturnType<typeof setTimeout> | undefined;
     const onVis = () => {
       const v = videoRef.current;
       const a = audioRef.current;
       if (!v || !a || !v.getAttribute("src")) return;
-      if (document.hidden && document.pictureInPictureElement !== v && !pip.active) v.pause();
-      else if (!a.paused) {
-        v.currentTime = a.currentTime;
+      clearTimeout(pauseTimer);
+      if (document.hidden) {
+        if (document.pictureInPictureElement === v || pip.active) return;
+        pauseTimer = setTimeout(() => {
+          if (document.hidden && !pip.active) v.pause();
+        }, 10000);
+        return;
+      }
+      if (a.paused) return;
+      v.playbackRate = a.playbackRate;
+      if (v.paused || Math.abs(v.currentTime - a.currentTime) > 0.8) {
+        resync.current = Date.now();
+        if (Math.abs(v.currentTime - a.currentTime) > 0.3) v.currentTime = a.currentTime + 0.25;
         void v.play().catch(() => {});
       }
     };
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    return () => {
+      clearTimeout(pauseTimer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [dual]);
 
   // Lock-screen / notification controls.
@@ -906,6 +958,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       }
       else if (k === "escape" && fs === "css") void exitFs();
       else if (/^[0-9]$/.test(k) && duration) seek((Number(k) / 10) * duration);
+      else if (k === "home" && !details.live) seek(0);
+      else if (k === "end" && duration) seek(Math.max(0, duration - 0.25));
+      // YouTube: , and . step one frame while paused
+      else if ((e.key === "," || e.key === ".") && !playing && !details.live) seek(Math.max(0, (master()?.currentTime ?? 0) + (e.key === "." ? 1 / 30 : -1 / 30)));
+      else if (e.key === "N" && e.shiftKey && onNext && next) onNext(); // next video
       else return;
       e.preventDefault();
       poke();
@@ -992,7 +1049,41 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     vy: 0,
     pinch: null as null | { d0: number; z0: number },
     pts: new Map<number, { x: number; y: number }>(),
+    // full screen swipes (phones): brightness (left side), sound (right side), seek (sideways)
+    adj: null as null | { kind: "bright" | "vol"; v0: number; h: number },
+    slide: null as null | { t0: number; w: number; to: number },
   });
+  // Full screen on a phone: up / down on the left = brightness, on the right
+  // = sound, sideways = seek. The middle keeps drag down = leave full screen;
+  // taps, double taps, hold for 2x and pinch zoom work as before.
+  const [level, setLevel] = useState<{ kind: "bright" | "vol"; v: number } | null>(null);
+  const [slideTo, setSlideTo] = useState<{ to: number; d: number } | null>(null);
+  const [webBright, setWebBright] = useState(1);
+  const levels = useRef({ bright: 1, vol: 1, brightSet: false });
+  const levelHide = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const showLevel = (kind: "bright" | "vol", v: number) => {
+    clearTimeout(levelHide.current);
+    setLevel({ kind, v });
+  };
+  const hideLevel = () => {
+    clearTimeout(levelHide.current);
+    levelHide.current = setTimeout(() => setLevel(null), 700);
+  };
+  useEffect(() => {
+    if (fs !== "off") return;
+    // back from full screen: the phone's own brightness again
+    if (levels.current.brightSet) {
+      levels.current.brightSet = false;
+      playerScreen.reset();
+    }
+    setWebBright(1);
+  }, [fs]);
+  useEffect(
+    () => () => {
+      if (levels.current.brightSet) playerScreen.reset();
+    },
+    [],
+  );
   const [held, setHeld] = useState(false);
   const dist = () => {
     const [a, b] = [...hold.current.pts.values()];
@@ -1017,6 +1108,15 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       return;
     }
     if (h.pts.size > 2) return;
+    if (playerScreen.native && fs !== "off" && e.pointerType !== "mouse") {
+      void playerScreen.get().then((r) => {
+        if (!r) return;
+        levels.current.vol = r.volume;
+        if (!levels.current.brightSet) levels.current.bright = r.brightness;
+      });
+    }
+    h.adj = null;
+    h.slide = null;
     h.x = e.clientX;
     h.y = e.clientY;
     h.lastY = e.clientY;
@@ -1058,11 +1158,55 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     if (!h.moved && Math.hypot(dx, dy) > 10) {
       h.moved = true;
       clearTimeout(h.timer);
+      if (fs !== "off" && e.pointerType !== "mouse" && !h.on) {
+        const r = e.currentTarget.getBoundingClientRect();
+        const rx = (h.x - r.left) / r.width;
+        const ry = (h.y - r.top) / r.height;
+        // not from the very edges: those belong to Android's own swipes
+        const inside = ry > 0.08 && ry < 0.92 && rx > 0.04 && rx < 0.96;
+        if (inside && Math.abs(dy) > Math.abs(dx) * 1.3 && (rx < 0.35 || rx > 0.65)) {
+          const kind = rx < 0.35 ? "bright" : "vol";
+          const v0 = kind === "bright" ? (playerScreen.native ? levels.current.bright : webBright) : playerScreen.native ? levels.current.vol : muted ? 0 : volume;
+          h.adj = { kind, v0, h: r.height };
+          h.y = e.clientY; // starts from here: no jump
+          showLevel(kind, v0);
+        } else if (inside && !details.live && duration > 0 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+          h.slide = { t0: timeRef.current, w: r.width, to: timeRef.current };
+          h.x = e.clientX;
+        }
+      }
       // a downward drag on the page-sized player → it follows the finger
       if (onDrag && fs === "off" && e.pointerType !== "mouse" && !h.on && dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.2) {
         h.dragging = true;
         setMenu(false);
       }
+    }
+    if (h.adj) {
+      const a = h.adj;
+      const v = Math.max(0, Math.min(1, a.v0 - (e.clientY - h.y) / (a.h * 0.7)));
+      if (a.kind === "bright") {
+        if (playerScreen.native) {
+          levels.current.bright = v;
+          levels.current.brightSet = true;
+          playerScreen.setBrightness(v);
+        } else setWebBright(Math.max(0.25, v));
+      } else if (playerScreen.native) {
+        levels.current.vol = v;
+        playerScreen.setVolume(v);
+      } else {
+        setVolume(v);
+        setMuted(v === 0);
+      }
+      showLevel(a.kind, v);
+      return;
+    }
+    if (h.slide) {
+      const sl = h.slide;
+      // the whole width = 1.5 minutes (less on short videos)
+      const span = Math.min(90, duration);
+      sl.to = Math.max(0, Math.min(duration - 0.5, sl.t0 + ((e.clientX - h.x) / sl.w) * span));
+      setSlideTo({ to: sl.to, d: sl.to - sl.t0 });
+      return;
     }
     if (h.dragging) onDrag?.("move", Math.max(0, dy), h.vy);
   };
@@ -1088,6 +1232,19 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       return;
     }
     clearTimeout(h.timer);
+    if (h.adj) {
+      h.adj = null;
+      hideLevel();
+      return;
+    }
+    if (h.slide) {
+      const to = h.slide.to;
+      h.slide = null;
+      setSlideTo(null);
+      seek(to);
+      poke();
+      return;
+    }
     if (h.on) {
       h.on = false;
       setRate(h.prev);
@@ -1146,6 +1303,14 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     h.pts.delete(e.pointerId);
     endPinch();
     clearTimeout(h.timer);
+    if (h.adj) {
+      h.adj = null;
+      hideLevel();
+    }
+    if (h.slide) {
+      h.slide = null;
+      setSlideTo(null);
+    }
     if (h.on) {
       h.on = false;
       setRate(h.prev);
@@ -1170,7 +1335,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const shown = scrub ?? time;
   const pct = duration ? (shown / duration) * 100 : 0;
   const bufPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
-  const showUi = !mini && !inPip && (controls || !playing);
+  // (phones: the end screen stands alone until tapped, like the YouTube app)
+  const showUi = !mini && !inPip && (controls || (!playing && !(ended && touchUi)));
   const curChapter = chapterAt(extras.chapters, scrub ?? time);
 
   return (
@@ -1197,11 +1363,12 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         preload="auto"
         muted={dual}
         className={cn("absolute inset-0 h-full w-full object-contain", audioOnly && "opacity-0")}
-        style={
-          zoom !== 1 || !zoomSnap
+        style={{
+          ...(zoom !== 1 || !zoomSnap
             ? { transform: `scale(${Math.max(1, zoom)})`, transition: zoomSnap ? "transform 220ms cubic-bezier(.2,.8,.2,1)" : "none" }
-            : { transition: "transform 220ms cubic-bezier(.2,.8,.2,1)" }
-        }
+            : { transition: "transform 220ms cubic-bezier(.2,.8,.2,1)" }),
+          ...(webBright < 1 ? { filter: `brightness(${webBright})` } : {}),
+        }}
       />
       {dual && <audio ref={audioRef} src={audioSrc} preload="auto" />}
 
@@ -1224,7 +1391,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         onContextMenu={(e) => e.preventDefault()}
       />
       {cues.length > 0 && !inPip && <CaptionText cues={cues} time={time} raised={showUi} />}
-      {!mini && !inPip && <PlayerOverlays id={details.id} time={time} controlsShown={showUi} />}
+      {!mini && !inPip && <PlayerOverlays id={details.id} time={time} controlsShown={showUi} aspect={dims ? dims.w / dims.h : undefined} scale={zoom} />}
       {/* phones: the autoplay switch sits top right, like the YouTube app */}
       {touchUi && showUi && !details.live && (
         <div
@@ -1239,6 +1406,29 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       {zoomPill && fs !== "off" && (
         <span className="pointer-events-none absolute top-[calc(var(--sa-top)+1rem)] left-1/2 -translate-x-1/2 animate-fade-in rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
           {zoomPill}
+        </span>
+      )}
+      {level && (
+        <div
+          className={cn(
+            "pointer-events-none absolute top-1/2 z-[7] flex -translate-y-1/2 animate-fade-in flex-col items-center gap-2 rounded-full bg-black/60 px-2 py-3 backdrop-blur-sm",
+            level.kind === "bright" ? "left-[8%]" : "right-[8%]",
+          )}
+        >
+          {level.kind === "bright" ? <Sun className="h-4 w-4" /> : level.v === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          <div className="relative h-28 w-1.5 overflow-hidden rounded-full bg-white/25">
+            <div className="absolute inset-x-0 bottom-0 rounded-full bg-white" style={{ height: `${Math.round(level.v * 100)}%` }} />
+          </div>
+          <span className="text-[11px] font-bold tabular-nums">{Math.round(level.v * 100)}</span>
+        </div>
+      )}
+      {slideTo && (
+        <span className="pointer-events-none absolute top-1/2 left-1/2 z-[7] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-black/65 px-4 py-2 text-center text-sm font-bold tabular-nums backdrop-blur-sm">
+          <span className="block text-lg">{formatTime(slideTo.to)}</span>
+          <span className="text-white/70">
+            {slideTo.d >= 0 ? "+" : "−"}
+            {formatTime(Math.abs(slideTo.d))}
+          </span>
         </span>
       )}
       {held && (
@@ -1261,7 +1451,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
 
       {/* center */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        {buffering && wantPlay.current ? (
+        {ended && !mini && !inPip ? null : buffering && wantPlay.current ? (
           <Loader2 className={cn("animate-spin text-white/90 drop-shadow", inPip ? "h-8 w-8" : mini ? "h-16 w-16" : "h-12 w-12")} />
         ) : (
           showUi && touchUi && (
@@ -1276,6 +1466,20 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
           )
         )}
       </div>
+
+      {ended && !mini && !inPip && !details.live && (
+        <EndScreen
+          next={next}
+          autoplay={autoplay && !loop && !!onNext}
+          touch={touchUi}
+          onReplay={() => {
+            setEnded(false);
+            seek(0);
+            void playBoth();
+          }}
+          onNext={() => onNext?.()}
+        />
+      )}
 
       {/* top title in fullscreen */}
       {fs !== "off" && showUi && (
@@ -1293,9 +1497,28 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         )}
       >
         {!details.live && (
-          <div className="group/seek relative flex h-5 items-center">
+          <div
+            className="group/seek relative flex h-5 items-center"
+            onPointerMove={(e) => {
+              if (e.pointerType !== "mouse" || !duration) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+              setSeekHover({ x, t: (x / r.width) * duration, w: r.width });
+            }}
+            onPointerLeave={() => setSeekHover(null)}
+          >
+            {(seekHover || scrub !== null) && duration > 0 && (
+              <SeekPreview
+                id={details.id}
+                t={scrub ?? seekHover!.t}
+                duration={duration}
+                left={scrub !== null ? `${pct}%` : seekHover!.x}
+                barWidth={seekHover?.w}
+              />
+            )}
             <div className="absolute inset-x-0 h-1 rounded-full bg-white/25 transition-all group-hover/seek:h-1.5">
               <div className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${bufPct}%` }} />
+              <ChapterMarks id={details.id} duration={duration} />
               <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${pct}%` }} />
             </div>
             <span

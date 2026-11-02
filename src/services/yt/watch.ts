@@ -132,6 +132,7 @@ function linkOf(root: unknown): { kind: LinkKind; target: string; playlist?: str
 export interface PlayerExtras {
   ends: EndItem[];
   cards: InfoCard[];
+  storyboard?: string;
 }
 
 const pcache = new Map<string, Promise<PlayerExtras>>();
@@ -186,7 +187,8 @@ export function readPlayerExtras(r: Obj): PlayerExtras {
       at: (startMs || 0) / 1000,
     });
   }
-  return { ends, cards };
+  const sb = isObj(r.storyboards) && isObj(r.storyboards.playerStoryboardSpecRenderer) ? r.storyboards.playerStoryboardSpecRenderer.spec : undefined;
+  return { ends, cards, storyboard: typeof sb === "string" && sb.includes("|") ? sb : undefined };
 }
 
 /* -------------------------------- comments -------------------------------- */

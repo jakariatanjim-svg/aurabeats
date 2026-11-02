@@ -23,6 +23,9 @@ interface Seg {
 }
 
 const AHEAD = 60; // seconds kept loaded in front of the playhead
+// a separate sound player keeps more: it is small, and it carries on
+// playing in the background (app minimised) with fewer requests
+const AHEAD_SOUND = 300;
 const BEHIND = 30; // seconds kept behind it
 const MAX_REQ = 8 * 1024 * 1024; // YouTube slows single requests past ~10 MB
 
@@ -344,7 +347,7 @@ export async function attachChunked(
           break;
         }
         l.done = false;
-        if (end - t > AHEAD || bytesAhead(l, t) > aheadBytes(l)) break;
+        if (end - t > (lanes.length === 1 && !l.video ? AHEAD_SOUND : AHEAD) || bytesAhead(l, t) > aheadBytes(l)) break;
         // one request: this piece plus the following ones up to MAX_REQ
         let last = l.next;
         while (last + 1 < l.segs.length && l.segs[last + 1].e - l.segs[l.next].s < MAX_REQ) last++;

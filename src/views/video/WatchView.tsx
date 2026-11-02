@@ -13,7 +13,6 @@ import { videoHint } from "@/services/video/hints";
 import { takeHandoffStart } from "@/utils/watchVideo";
 import { isNative } from "@/services/video/net";
 import { providerLabel, reportPlayback } from "@/services/video/providers";
-import { getRepeat, getVideoSettings } from "@/services/video/settings";
 import type { VideoDetails, VideoItem } from "@/services/video/types";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { dock, dockRefs, useDock } from "@/components/video/dock";
@@ -24,6 +23,7 @@ import { ErrorState } from "@/components/states";
 import { Comments } from "@/components/video/Comments";
 import { getPlayerExtras, getWatchExtras, watchExtrasAvailable, type WatchExtras } from "@/services/yt/watch";
 import { deviceExtractionAvailable } from "@/services/video/innertube";
+import { useExtension } from "@/services/yt/extension";
 import { chaptersFromDescription, requestSeek, setVideoExtras, type Chapter } from "@/components/video/videoExtras";
 import { routeToPath, type RouteKey } from "@/routes";
 
@@ -192,8 +192,10 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   const chapters = useMemo(() => extras?.chapters ?? chaptersFromDescription(info?.description ?? ""), [extras, info?.description]);
   useEffect(() => setVideoExtras(id, { chapters }), [id, chapters]);
   // the creator's end screen and info cards
+  // (the extension connects a moment after the page opens: wait for it)
+  const canExtract = useExtension().connected && deviceExtractionAvailable();
   useEffect(() => {
-    if (!deviceExtractionAvailable()) return;
+    if (!isNative && !canExtract) return;
     let alive = true;
     getPlayerExtras(id)
       .then((x) => alive && setVideoExtras(id, x))
@@ -201,7 +203,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, canExtract]);
   const onTime = useCallback(
     (t: number, dur: number) => {
       lastT.current = t;
@@ -227,14 +229,16 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     return (related ?? []).find((v) => !recent.has(v.id) && !v.live) ?? related?.[0];
   }, [related, lib.history]);
 
+  // Over: the players show the end screen (Replay / Next, or the autoplay
+  // countdown) and call playNext; repeat on → the player starts again.
   const onEnded = useCallback(() => {
     if (info?.title) videoLibrary.recordProgress(info, info.duration);
-    // repeat on → the same video again (the player does it); autoplay off → stop
-    if (getVideoSettings().autoplay && !getRepeat() && upNext) {
-      watchLayer.autoplayNext(); // a miniplayer stays a miniplayer
-      onNavigate(`watch:${upNext.id}`);
-    }
-  }, [info, upNext, onNavigate]);
+  }, [info]);
+  const playNext = useCallback(() => {
+    if (!upNext) return;
+    watchLayer.autoplayNext(); // a miniplayer stays a miniplayer
+    onNavigate(`watch:${upNext.id}`);
+  }, [upNext, onNavigate]);
 
   // App: the miniplayer bar shows what is playing.
   useEffect(() => {
@@ -344,6 +348,8 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
               onTime={onTime}
               onEnded={onEnded}
               onFatal={onFatal}
+              next={upNext}
+              onNext={playNext}
               mini={mini}
               onDrag={(ph, dy, v) => layerRefs.drag?.(ph, dy, v)}
               onAspect={onAspect}

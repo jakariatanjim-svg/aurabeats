@@ -51,7 +51,35 @@ function Link({
   );
 }
 
-export function PlayerOverlays({ id, time, hidden, controlsShown }: { id: string; time: number; hidden?: boolean; controlsShown?: boolean }) {
+/** The picture's own rectangle inside the player (a vertical video sits in
+ *  the middle of a wide player with black bars on its sides). */
+function pictureBox(aspect?: number, scale = 1): React.CSSProperties {
+  if (!aspect || !Number.isFinite(aspect)) return { width: "100%", height: "100%" };
+  const a = Math.round(aspect * 10000) / 10000;
+  return {
+    width: `min(100cqw, ${a * 100}cqh)`,
+    height: `min(100cqh, ${Math.round((100 / a) * 100) / 100}cqw)`,
+    transform: scale !== 1 ? `scale(${scale})` : undefined,
+  };
+}
+
+export function PlayerOverlays({
+  id,
+  time,
+  hidden,
+  controlsShown,
+  aspect,
+  scale,
+}: {
+  id: string;
+  time: number;
+  hidden?: boolean;
+  controlsShown?: boolean;
+  /** the picture's width / height */
+  aspect?: number;
+  /** pinch zoom (full screen) */
+  scale?: number;
+}) {
   const { ends, cards } = useVideoExtras(id);
   const [open, setOpen] = useState(false);
   const [teaser, setTeaser] = useState<InfoCard | null>(null);
@@ -82,7 +110,8 @@ export function PlayerOverlays({ id, time, hidden, controlsShown }: { id: string
   return (
     <>
       {live.length > 0 && (
-        <div className="pointer-events-none absolute inset-0">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden [container-type:size]">
+          <div className="relative" style={pictureBox(aspect, scale)}>
           {live.map((e, i) => (
             <Link
               key={i}
@@ -102,6 +131,7 @@ export function PlayerOverlays({ id, time, hidden, controlsShown }: { id: string
               )}
             </Link>
           ))}
+          </div>
         </div>
       )}
 

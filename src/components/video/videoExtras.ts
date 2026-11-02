@@ -45,6 +45,8 @@ export interface VideoExtras {
   chapters: Chapter[];
   ends: EndItem[];
   cards: InfoCard[];
+  /** YouTube's preview-picture sheets (seek bar hover / drag) */
+  storyboard?: string;
 }
 
 const EMPTY: VideoExtras = { chapters: [], ends: [], cards: [] };
@@ -57,6 +59,7 @@ export function setVideoExtras(id: string, part: Partial<VideoExtras>): void {
     chapters: part.chapters ?? cur.chapters,
     ends: part.ends ?? cur.ends,
     cards: part.cards ?? cur.cards,
+    storyboard: part.storyboard ?? cur.storyboard,
   };
   store.set(id, nx);
   if (store.size > 20) store.delete(store.keys().next().value!);
@@ -118,4 +121,75 @@ export function chaptersFromDescription(desc: string): Chapter[] {
   }
   // YouTube's rule: starts at 0:00 and has at least three
   return out.length >= 3 && out[0].t === 0 ? out : [];
+}
+
+/* ------------------------------ preview pictures --------------------------- */
+
+export interface StoryFrame {
+  url: string;
+  w: number;
+  h: number;
+  /** position of the frame in its sheet */
+  x: number;
+  y: number;
+  /** sheet width (px) */
+  sheetW: number;
+}
+
+interface StoryLevel {
+  w: number;
+  h: number;
+  count: number;
+  cols: number;
+  rows: number;
+  interval: number; // ms, 0 = spread over the whole video
+  name: string;
+  sigh: string;
+  url: string;
+}
+
+const levelCache = new Map<string, StoryLevel | null>();
+
+/** The preview sheets level closest to a small thumbnail (about 160 px wide). */
+function storyLevel(spec: string): StoryLevel | null {
+  if (levelCache.has(spec)) return levelCache.get(spec)!;
+  let best: StoryLevel | null = null;
+  try {
+    const [base, ...levels] = spec.split("|");
+    levels.forEach((raw, i) => {
+      const [w, h, count, cols, rows, interval, name, sigh] = raw.split("#");
+      const l: StoryLevel = {
+        w: Number(w),
+        h: Number(h),
+        count: Number(count),
+        cols: Number(cols),
+        rows: Number(rows),
+        interval: Number(interval),
+        name: name ?? "",
+        sigh: sigh ?? "",
+        url: base.replace("$L", String(i)),
+      };
+      if (!l.w || !l.h || !l.count || !l.cols || !l.rows) return;
+      if (!best || (l.w <= 200 && l.w > best.w) || (best.w > 200 && l.w < best.w)) best = l;
+    });
+  } catch {
+    best = null;
+  }
+  levelCache.set(spec, best);
+  if (levelCache.size > 20) levelCache.delete(levelCache.keys().next().value!);
+  return best;
+}
+
+/** The preview picture for moment `t` of a video `dur` seconds long. */
+export function storyFrame(spec: string | undefined, t: number, dur: number): StoryFrame | null {
+  if (!spec || !dur) return null;
+  const l = storyLevel(spec);
+  if (!l) return null;
+  const per = l.cols * l.rows;
+  const idx = Math.max(0, Math.min(l.count - 1, l.interval > 0 ? Math.floor((t * 1000) / l.interval) : Math.floor((t / dur) * l.count)));
+  const sheet = Math.floor(idx / per);
+  const k = idx % per;
+  const name = l.name.replace("$M", String(sheet));
+  const url = `${l.url.replace("$N", name)}${l.sigh ? `${l.url.includes("?") ? "&" : "?"}sigh=${encodeURIComponent(l.sigh)}` : ""}`;
+  return { url, w: l.w, h: l.h, x: (k % l.cols) * l.w, y: Math.floor(k / l.cols) * l.h, sheetW: l.cols * l.w };
 }

@@ -10,6 +10,15 @@
  * colours bend by slightly different amounts — the faint rainbow fringe of
  * real glass.
  *
+ * On top of the bent picture the filter paints the glass's own light: a
+ * bright specular edge where the curved rim faces the light (top-left) and a
+ * fainter one where light leaves it (bottom-right), shaped by the rim's
+ * curve — the thick, wet edge that makes it read as Liquid Glass.
+ *
+ * Strong computers (mouse + 6 cores or more) also lens the content cards
+ * (clear glass, little frost), but only those on screen; phones keep it to
+ * the floating surfaces.
+ *
  * Browsers: only Chromium draws SVG filters behind an element (Chrome, Edge,
  * Android app). Elsewhere, with Blur off or "reduce transparency", nothing
  * runs and the normal frosted glass stays.
@@ -17,7 +26,11 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const TARGETS = ".surface-raised, .ab-topbar :is(button.border, .ab-seg), .ab-glass-lens";
+/** strong computers: the content cards too */
+const CARDS = ".blur-panel";
+const MAX_LENSED = 48; // never more lensed surfaces than this at once
 const MAX_AREA = 900_000; // px² — bigger surfaces keep the plain frost
+const MAX_CARD_AREA = 260_000; // content cards: smaller ones only (many on screen)
 const MAX_DPR = 2;
 
 interface Entry {
@@ -33,6 +46,10 @@ let running = false;
 let host: SVGSVGElement | null = null;
 let uid = 0;
 let fringe = false;
+let rich = false;
+let io: IntersectionObserver | null = null;
+const onScreen = new Set<HTMLElement>();
+const targets = () => (rich ? `${TARGETS}, ${CARDS}` : TARGETS);
 const cache = new Map<string, Entry>();
 const applied = new Map<HTMLElement, Applied>();
 let ro: ResizeObserver | null = null;
@@ -71,18 +88,33 @@ function bendProfile(bezel: number, thickness: number, ior = 1.5, n = 96): { p: 
   return { p, max };
 }
 
-/** The bend map as an image: red = sideways, green = up/down, 128 = none. */
-function bendMap(w: number, h: number, radius: number, bezel: number, prof: Float32Array, max: number, dpr: number): string {
+// light comes from the top-left, a little more from above
+const LX = -0.55;
+const LY = -0.835;
+
+/** The bend map as an image (red = sideways, green = up/down, 128 = none)
+ *  and the matching edge-light image (white, strength in alpha). */
+function bendMap(w: number, h: number, radius: number, bezel: number, prof: Float32Array, max: number, dpr: number): { bend: string; spec: string } | null {
   const W = Math.max(1, Math.round(w * dpr));
   const H = Math.max(1, Math.round(h * dpr));
   const cv = document.createElement("canvas");
   cv.width = W;
   cv.height = H;
   const ctx = cv.getContext("2d");
-  if (!ctx) return "";
+  if (!ctx) return null;
   const img = ctx.createImageData(W, H);
   const px = new Uint32Array(img.data.buffer);
   px.fill(0xff008080); // little-endian RGBA (128,128,0,255): no bend
+  const lit = ctx.createImageData(W, H);
+  const ld = lit.data;
+  // rim steepness along the bezel, outer → inner (where light reflects most)
+  const steep = new Float32Array(prof.length);
+  for (let i = 0; i < prof.length; i++) {
+    const x = i / prof.length;
+    const a = Math.max(0, x - 0.01);
+    const b = Math.min(1, x + 0.01);
+    steep[i] = Math.min(1, ((rimShape(b) - rimShape(a)) / (b - a)) * 0.35);
+  }
   const r = Math.min(Math.round(radius * dpr), W >> 1, H >> 1);
   const bz = Math.min(Math.max(1, Math.round(bezel * dpr)), r);
   if (r > 0 && max > 0) {
@@ -109,16 +141,29 @@ function bendMap(w: number, h: number, radius: number, bezel: number, prof: Floa
         const dist = Math.sqrt(d2);
         const idx = Math.min(n - 1, Math.max(0, (((r - dist) / bz) * n) | 0));
         const v = prof[idx];
-        if (!v) continue;
         const fade = dist <= r ? 1 : Math.max(0, 1 - (dist - r));
         const i = (y * W + x) * 4;
+        // edge light: facing the light → bright, the far side → a softer
+        // glint (light leaving the glass), both hugging the outer rim
+        const nx = cx / dist;
+        const ny = cy / dist;
+        const facing = nx * LX + ny * LY;
+        const depth = (r - dist) / dpr; // css px in from the edge
+        const hug = Math.exp(-Math.max(0, depth) / 2.2) * 0.85 + steep[idx] * 0.35;
+        const glint = (facing > 0 ? facing ** 1.6 : 0.5 * (-facing) ** 2.2) * hug + 0.12 * Math.exp(-Math.max(0, depth) / 0.9);
+        ld[i] = ld[i + 1] = ld[i + 2] = 255;
+        ld[i + 3] = Math.min(255, glint * 255 * fade);
+        if (!v) continue;
         d[i] = 128 + ((-cx / dist) * v * 127 * fade) / max;
         d[i + 1] = 128 + ((-cy / dist) * v * 127 * fade) / max;
       }
     }
   }
   ctx.putImageData(img, 0, 0);
-  return cv.toDataURL("image/png");
+  const bend = cv.toDataURL("image/png");
+  ctx.clearRect(0, 0, W, H);
+  ctx.putImageData(lit, 0, 0);
+  return { bend, spec: cv.toDataURL("image/png") };
 }
 
 const svgEl = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string | number>) => {
@@ -127,12 +172,13 @@ const svgEl = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<stri
   return e;
 };
 
-function buildFilter(w: number, h: number, radius: number, blur: number): SVGFilterElement | null {
+function buildFilter(w: number, h: number, radius: number, blur: number, spec: number, sat: number): SVGFilterElement | null {
   const dpr = Math.min(MAX_DPR, window.devicePixelRatio || 1);
-  const bezel = Math.max(6, Math.min(radius, 22, Math.min(w, h) * 0.32));
-  const { p, max } = bendProfile(bezel, Math.min(48, bezel * 2.4));
-  const url = bendMap(w, h, Math.max(radius, bezel), bezel, p, max, dpr);
-  if (!url) return null;
+  const bezel = Math.max(6, Math.min(radius, 24, Math.min(w, h) * 0.34));
+  const { p, max } = bendProfile(bezel, Math.min(52, bezel * 2.6));
+  const maps = bendMap(w, h, Math.max(radius, bezel), bezel, p, max, dpr);
+  if (!maps) return null;
+  const url = maps.bend;
   const f = svgEl("filter", {
     id: `ab-lens-${++uid}`,
     "color-interpolation-filters": "sRGB",
@@ -160,10 +206,18 @@ function buildFilter(w: number, h: number, radius: number, blur: number): SVGFil
   } else {
     bend(scale, "bent");
   }
-  f.appendChild(svgEl("feColorMatrix", { in: "bent", type: "saturate", values: 1.9, result: "sat" }));
-  const light = svgEl("feComponentTransfer", { in: "sat" });
+  f.appendChild(svgEl("feColorMatrix", { in: "bent", type: "saturate", values: sat, result: "sat" }));
+  const light = svgEl("feComponentTransfer", { in: "sat", result: "lit" });
   for (const fn of ["feFuncR", "feFuncG", "feFuncB"] as const) light.appendChild(svgEl(fn, { type: "linear", slope: 1.05, intercept: 0.01 }));
   f.appendChild(light);
+  if (spec > 0) {
+    // the glass's own edge light, screened over the bent picture
+    f.appendChild(svgEl("feImage", { href: maps.spec, x: 0, y: 0, width: w, height: h, preserveAspectRatio: "none", result: "specRaw" }));
+    const amt = svgEl("feComponentTransfer", { in: "specRaw", result: "spec" });
+    amt.appendChild(svgEl("feFuncA", { type: "linear", slope: spec, intercept: 0 }));
+    f.appendChild(amt);
+    f.appendChild(svgEl("feBlend", { in: "spec", in2: "lit", mode: "screen" }));
+  }
   return f;
 }
 
@@ -185,6 +239,7 @@ function release(el: HTMLElement) {
   ro?.unobserve(el);
   el.style.removeProperty("backdrop-filter");
   el.style.removeProperty("-webkit-backdrop-filter");
+  el.removeAttribute("data-lg-lens");
   const e = cache.get(a.key);
   if (e && --e.refs <= 0) {
     e.node.remove();
@@ -193,22 +248,30 @@ function release(el: HTMLElement) {
 }
 
 function apply(el: HTMLElement) {
-  if (!running || !el.isConnected) return release(el);
+  if (!running || !el.isConnected || !onScreen.has(el)) return release(el);
+  if (!applied.has(el) && applied.size >= MAX_LENSED) return;
   const w = Math.round(el.offsetWidth);
   const h = Math.round(el.offsetHeight);
   const cs = getComputedStyle(el);
   // hidden, tiny, huge or square-cornered surfaces keep the plain frost
-  if (w < 24 || h < 20 || w * h > MAX_AREA || cs.display === "none" || cs.visibility === "hidden") return release(el);
+  const card = !el.matches(TARGETS);
+  if (w < 24 || h < 20 || w * h > (card ? MAX_CARD_AREA : MAX_AREA) || cs.display === "none" || cs.visibility === "hidden") return release(el);
   const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, w / 2, h / 2);
   if (radius < 6) return release(el);
-  // frost strength follows the theme: dense for menus/sheets, lighter for bars
-  const blur = Number(cs.getPropertyValue("--lg-lens-blur")) || (w * h > 60_000 ? 14 : 9);
-  const key = `${w}x${h}r${Math.round(radius)}b${blur}${fringe ? "f" : ""}`;
+  // frost strength follows the theme: dense for menus/sheets, lighter for
+  // bars, clear for content cards (strong computers only)
+
+  const blur = card
+    ? Number(cs.getPropertyValue("--lg-card-blur")) || 4
+    : Number(cs.getPropertyValue("--lg-lens-blur")) || (w * h > 60_000 ? 14 : 9);
+  const spec = Math.round((Number(cs.getPropertyValue("--lg-spec")) || 0.7) * 100) / 100;
+  const sat = card ? 1.6 : 1.9;
+  const key = `${w}x${h}r${Math.round(radius)}b${blur}s${spec}${card ? "c" : ""}${fringe ? "f" : ""}`;
   const prev = applied.get(el);
   if (prev?.key === key) return;
   let e = cache.get(key);
   if (!e) {
-    const node = buildFilter(w, h, radius, blur);
+    const node = buildFilter(w, h, radius, blur, spec, sat);
     if (!node) return;
     svgHost().appendChild(node);
     e = { id: node.id, refs: 0, node };
@@ -219,6 +282,7 @@ function apply(el: HTMLElement) {
   applied.set(el, { key });
   ro?.observe(el);
   el.style.setProperty("backdrop-filter", `url("#${e.id}")`);
+  el.setAttribute("data-lg-lens", "");
 }
 
 function schedule(el: HTMLElement) {
@@ -232,9 +296,20 @@ function schedule(el: HTMLElement) {
   }, 120);
 }
 
+/** Watch a surface: it is lensed while (nearly) on screen. */
+function watch(el: HTMLElement) {
+  io?.observe(el);
+}
+function unwatch(el: HTMLElement) {
+  io?.unobserve(el);
+  onScreen.delete(el);
+  release(el);
+}
+
 function scan(root: ParentNode) {
-  if (root instanceof HTMLElement && root.matches(TARGETS)) schedule(root);
-  root.querySelectorAll?.<HTMLElement>(TARGETS).forEach(schedule);
+  const sel = targets();
+  if (root instanceof HTMLElement && root.matches(sel)) watch(root);
+  root.querySelectorAll?.<HTMLElement>(sel).forEach(watch);
 }
 
 export function lensSupported(): boolean {
@@ -255,18 +330,37 @@ export function startLens() {
   if (running || !lensSupported()) return;
   running = true;
   fringe = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  rich = fringe && (navigator.hardwareConcurrency || 4) >= 6;
   ro = new ResizeObserver((entries) => entries.forEach((en) => schedule(en.target as HTMLElement)));
+  io = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries) {
+        const el = en.target as HTMLElement;
+        if (en.isIntersecting) {
+          onScreen.add(el);
+          schedule(el);
+        } else {
+          onScreen.delete(el);
+          release(el);
+        }
+      }
+    },
+    { rootMargin: "160px" },
+  );
   mo = new MutationObserver((recs) => {
     for (const r of recs) {
       if (r.type === "attributes") {
         const t = r.target as HTMLElement;
-        if (t.matches(TARGETS)) schedule(t);
-        else if (applied.has(t)) release(t);
+        if (t.matches(targets())) {
+          watch(t);
+          schedule(t);
+        } else unwatch(t);
         continue;
       }
       r.addedNodes.forEach((n) => n instanceof HTMLElement && scan(n));
       r.removedNodes.forEach((n) => {
         if (!(n instanceof HTMLElement)) return;
+        for (const el of [...onScreen]) if (!el.isConnected) unwatch(el);
         for (const el of [...applied.keys()]) if (!el.isConnected) release(el);
       });
     }
@@ -280,7 +374,10 @@ export function stopLens() {
   running = false;
   ro?.disconnect();
   mo?.disconnect();
+  io?.disconnect();
   ro = mo = null;
+  io = null;
+  onScreen.clear();
   clearTimeout(flushTimer);
   queue.clear();
   for (const el of [...applied.keys()]) release(el);

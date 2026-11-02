@@ -66,8 +66,10 @@ const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
 import { extensionPossible } from "./AdBlockTip";
 import { PlayerOverlays } from "./PlayerOverlays";
+import { EndScreen } from "./EndScreen";
+import { ChapterMarks, SeekPreview } from "./SeekPreview";
 import { AutoplaySwitch } from "./AutoplaySwitch";
-import { getRepeat, setRepeat, useRepeat } from "@/services/video/settings";
+import { getRepeat, setRepeat, useAutoplay, useRepeat } from "@/services/video/settings";
 import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -171,6 +173,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const playing = state === YTState.PLAYING || state === YTState.BUFFERING;
   const ended = state === YTState.ENDED;
   const touch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  const autoplay = useAutoplay();
 
   // Did WE (the user, music starting…) pause it? Anything else that stops
   // the video is a stall the player recovers from by itself.
@@ -628,7 +631,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       return;
     }
     dockRefs.ended = true;
-    setControls(true);
+    if (!touch) setControls(true);
     const meta = dock.get().meta;
     if (meta) videoLibrary.recordProgress(meta, meta.duration || duration);
     dockRefs.onEnded?.();
@@ -1228,6 +1231,10 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       else if (e.key === "<") setSpeed(SPEEDS[Math.max(0, SPEEDS.indexOf(rate) - 1)] ?? 0.25);
       else if (k === "escape" && fs === "css") void exitFs();
       else if (/^[0-9]$/.test(k) && duration) seek((Number(k) / 10) * duration);
+      else if (k === "home") seek(0);
+      else if (k === "end" && duration) seek(Math.max(0, duration - 0.25));
+      // YouTube: , and . step one frame while paused
+      else if ((e.key === "," || e.key === ".") && !playing) seek(Math.max(0, time + (e.key === "." ? 1 / 30 : -1 / 30)));
       else return;
       e.preventDefault();
       poke();
@@ -1297,7 +1304,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   /* ------------------------------- layout ------------------------------- */
   const shownTime = scrub ?? time;
   const pct = duration ? (shownTime / duration) * 100 : 0;
-  const showUi = !ad && (controls || !playing || ended);
+  // (phones: the end screen stands alone until tapped, like the YouTube app)
+  const showUi = !ad && (controls || ((!playing || ended) && !(ended && touch)));
   const curChapter = chapterAt(extras.chapters, shownTime);
   // Fixed quality: lay the iframe out at that level's width, scale to fit.
   const fw = frame.w || 1;
@@ -1583,7 +1591,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               </div>
             )}
 
-            {!error && !ad && d.id && <PlayerOverlays id={d.id} time={time} controlsShown={showUi} />}
+            {!error && !ad && d.id && <PlayerOverlays id={d.id} time={time} controlsShown={showUi} aspect={aspect} />}
             {/* phones: the autoplay switch sits top right, like the YouTube app */}
             {touch && showUi && !error && !ad && (
               <div
@@ -1598,11 +1606,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
             {/* ended */}
             {ended && !error && (
-              <div className="absolute inset-0 flex items-center justify-center gap-4">
-                <CtrlBtn label="Replay" onClick={play} className="bg-black/50 p-4">
-                  <RotateCcw className="h-8 w-8" />
-                </CtrlBtn>
-              </div>
+              <EndScreen next={d.next} autoplay={autoplay && !loop} touch={touch} onReplay={play} onNext={playNext} />
             )}
 
             {/* bottom bar */}
@@ -1628,16 +1632,18 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 onPointerUp={barUp}
                 onPointerLeave={() => setHover(null)}
               >
-                {(hover || scrub !== null) && duration > 0 && (
-                  <span
-                    className="pointer-events-none absolute bottom-5 -translate-x-1/2 rounded-md bg-black/80 px-1.5 py-0.5 text-[11px] font-bold tabular-nums"
-                    style={{ left: scrub !== null ? `${pct}%` : hover!.x }}
-                  >
-                    {formatTime(scrub ?? hover!.t)}
-                  </span>
+                {(hover || scrub !== null) && duration > 0 && d.id && (
+                  <SeekPreview
+                    id={d.id}
+                    t={scrub ?? hover!.t}
+                    duration={duration}
+                    left={scrub !== null ? ((barRef.current?.clientWidth ?? 0) * pct) / 100 : hover!.x}
+                    barWidth={barRef.current?.clientWidth}
+                  />
                 )}
                 <div className={cn("relative h-[3px] w-full rounded-full bg-white/25 transition-[height] group-hover/bar:h-[5px]", scrub !== null && "h-[5px]")}>
                   <div className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${loaded * 100}%` }} />
+                  {d.id && <ChapterMarks id={d.id} duration={duration} />}
                   <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${pct}%` }} />
                   <span
                     className={cn(

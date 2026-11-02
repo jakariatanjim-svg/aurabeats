@@ -55,6 +55,9 @@
   --c-solid: #171a26;
   --c-solid-strong: #1e2230;
   --lg-rim-a: 0.5;
+  /* lensed glass (utils/liquidRefraction): edge light strength, card frost */
+  --lg-spec: 0.62;
+  --lg-card-blur: 3;
 
   /* light falling on the slab: a broad glare from the top-left, a fainter
      bounce at the bottom-right, a gentle top-to-bottom falloff */
@@ -78,8 +81,15 @@
   --shell-bg: rgb(255 255 255 / 0.025);
   --shell-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 1px 1px 0 rgb(255 255 255 / 0.1);
 
-  /* colourful light behind the glass (from the accent colour) */
+  /* colourful light behind the glass (from the accent colour): broad glows
+     plus a few soft-edged discs of light — shapes with edges are what the
+     glass visibly bends, a smooth wash shows no lensing at all */
   --app-bg-image:
+    radial-gradient(circle 17vmax at 22% 30%, color-mix(in oklab, var(--c-accent) 34%, transparent) 0 62%, transparent 74%),
+    radial-gradient(circle 12vmax at 78% 64%, color-mix(in oklab, var(--c-accent2) 32%, transparent) 0 60%, transparent 73%),
+    radial-gradient(circle 9vmax at 58% 14%, color-mix(in oklab, #f472b6 26%, transparent) 0 58%, transparent 72%),
+    radial-gradient(circle 7vmax at 10% 78%, color-mix(in oklab, #38bdf8 26%, transparent) 0 58%, transparent 72%),
+    linear-gradient(122deg, transparent 38%, rgb(255 255 255 / 0.035) 46%, transparent 47.5%, transparent 53%, rgb(255 255 255 / 0.025) 58%, transparent 60%),
     radial-gradient(60% 55% at 8% 4%, color-mix(in oklab, var(--c-accent) 60%, transparent), transparent 70%),
     radial-gradient(55% 50% at 96% 12%, color-mix(in oklab, var(--c-accent2) 50%, transparent), transparent 70%),
     radial-gradient(60% 60% at 80% 96%, color-mix(in oklab, var(--c-accent) 45%, #f59e0b 20%), transparent 70%),
@@ -114,6 +124,8 @@
   /* lensed surfaces (utils/liquidRefraction): more frost on white, so text
      never sits on colour blotches */
   --lg-lens-blur: 16;
+  --lg-spec: 0.8;
+  --lg-card-blur: 5;
 
   --c-elev-strong: rgb(255 255 255 / 0.7);
   --panel-backdrop-raised: blur(30px) saturate(170%) brightness(1.03);
@@ -130,6 +142,10 @@
   /* soft pastel light behind the glass: wide and faint, so it reads as a
      tint of the whole background rather than coloured spots */
   --app-bg-image:
+    radial-gradient(circle 17vmax at 22% 30%, color-mix(in oklab, var(--c-accent) 15%, transparent) 0 62%, transparent 74%),
+    radial-gradient(circle 12vmax at 78% 64%, color-mix(in oklab, var(--c-accent2) 14%, transparent) 0 60%, transparent 73%),
+    radial-gradient(circle 9vmax at 58% 14%, color-mix(in oklab, #f472b6 12%, transparent) 0 58%, transparent 72%),
+    radial-gradient(circle 7vmax at 10% 78%, color-mix(in oklab, #38bdf8 13%, transparent) 0 58%, transparent 72%),
     radial-gradient(75% 65% at 0% 0%, color-mix(in oklab, var(--c-accent) 22%, transparent), transparent 75%),
     radial-gradient(70% 60% at 100% 10%, color-mix(in oklab, var(--c-accent2) 18%, transparent), transparent 75%),
     radial-gradient(75% 70% at 90% 100%, color-mix(in oklab, #fb923c 16%, transparent), transparent 75%),
@@ -391,5 +407,38 @@
 @media (prefers-reduced-motion: reduce) {
   [data-theme="liquid"] .surface-raised.animate-scale-in {
     animation: none;
+  }
+}
+
+/* ------------------------- lensed glass (Chromium) ------------------------
+   utils/liquidRefraction marks the surfaces it lenses with data-lg-lens; the
+   filter paints their curved edge light itself, so the CSS rim steps back to
+   a hairline and a soft inner glow (no doubled edges). */
+[data-theme="liquid"] .blur-panel[data-lg-lens] {
+  --ab-inset:
+    inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.3)),
+    inset 0 1px 0 -0.25px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55)),
+    inset 0 0 22px -8px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.4));
+}
+/* clear cards on strong computers: thinner tint, so the bent light shows */
+[data-theme="liquid"][data-mode="dark"] .blur-panel[data-lg-lens]:not(.surface-raised) {
+  --panel-fill: rgb(255 255 255 / 0.045);
+}
+
+/* Interactive glass (iOS 26): a tapped card or capsule swells a touch with a
+   spring and lights up from inside, instead of sinking. */
+[data-theme="liquid"] :is(a.blur-panel, button.blur-panel, .blur-panel.cursor-pointer) {
+  transition:
+    scale 0.34s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+[data-theme="liquid"] :is(a.blur-panel, button.blur-panel, .blur-panel.cursor-pointer):active {
+  scale: 1.025;
+  background-color: color-mix(in oklab, var(--panel-fill, var(--c-elev)) 70%, rgb(255 255 255 / 0.22));
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="liquid"] :is(a.blur-panel, button.blur-panel, .blur-panel.cursor-pointer):active {
+    scale: none;
   }
 }

@@ -292,7 +292,9 @@ function Shell() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
+      // browser shortcuts (Ctrl+F, Ctrl+Space…) stay the browser's
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       // The video player owns the keyboard while a video is open.
       if (watching && !expanded) return;
       if (e.code === "Space") {

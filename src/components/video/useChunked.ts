@@ -6,12 +6,11 @@
  * If the loader fails mid-way, `onPlain` lets the player switch over.
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { isNative } from "@/services/video/net";
 import { attachChunked, chunkedPossible, type ChunkTrack } from "./chunked";
 
-/** Can these files be played piece by piece here? (the app keeps its own path) */
+/** Can these files be played piece by piece here? (website and app) */
 export const chunkedOk = (tracks: (ChunkTrack | undefined)[]): boolean =>
-  !isNative && tracks.length > 0 && tracks.every((t) => !!t && chunkedPossible(t.mime, t.layout));
+  tracks.length > 0 && tracks.every((t) => !!t && chunkedPossible(t.mime, t.layout));
 
 export function useChunkedSrc(
   el: RefObject<HTMLMediaElement | null>,
