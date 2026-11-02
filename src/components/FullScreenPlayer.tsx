@@ -1,5 +1,5 @@
 import { showVolumeUi } from "@/utils/device";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Loader2,
@@ -18,6 +18,8 @@ import {
   Trash2,
   Moon,
   AlignLeft,
+  ChevronUp,
+  ListPlus,
   MonitorPlay, Film } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { FavIcon } from "@/components/FavIcon";
@@ -30,7 +32,9 @@ import { Visualizer } from "@/components/Visualizer";
 import { TrackRow } from "@/components/TrackList";
 import { LyricsViewer } from "@/components/LyricsViewer";
 import { storage } from "@/utils/storage";
-import { useBackHandler } from "@/utils/backStack";
+import { useBackHandler, useEscape } from "@/utils/backStack";
+import { songsLike } from "@/services/upNext";
+import type { Track } from "@/types";
 
 export function FullScreenPlayer() {
   const { currentTime, duration, bufferedAhead } = usePlaybackClock();
@@ -110,6 +114,120 @@ export function FullScreenPlayer() {
     storage.set("lyricsRomanized", v);
   };
 
+  // Phones: lyrics is a page beside the artwork. Swipe right opens it (it
+  // comes in from the left); on lyrics, a swipe either way goes back.
+  // Swiping left on the artwork only rubber-bands. Imperative transforms.
+  const isPhone = !useMinWidth(768);
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const artPaneRef = useRef<HTMLDivElement>(null);
+  const lyricsPaneRef = useRef<HTMLDivElement>(null);
+  const swipe = useRef<{ x0: number; y0: number; dx: number; lock: boolean; lastX: number; lastT: number; v: number } | null>(null);
+  const paneBusy = useRef(false);
+  const resetPanes = useRef(false);
+  const [peek, setPeek] = useState(false); // lyrics pane drawn while swiping
+
+  const placePane = (el: HTMLElement | null, x: number, animate: boolean) => {
+    if (!el) return;
+    el.style.transition = animate ? "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)" : "none";
+    el.style.transform = `translate3d(${x}px, 0, 0)`;
+    el.style.visibility = "visible";
+  };
+  const clearPanes = () => {
+    for (const el of [artPaneRef.current, lyricsPaneRef.current]) {
+      if (!el) continue;
+      el.style.transition = "";
+      el.style.transform = "";
+      el.style.visibility = "";
+    }
+  };
+  useLayoutEffect(() => {
+    if (!resetPanes.current) return;
+    resetPanes.current = false;
+    clearPanes();
+    setPeek(false);
+  }, [showLyrics]);
+
+  /** Lay both pages out for a finger offset `dx` (current page moves by dx). */
+  const layoutPanes = (dx: number, animate: boolean) => {
+    const w = pagerRef.current?.clientWidth || window.innerWidth;
+    const art = artPaneRef.current;
+    const lyr = lyricsPaneRef.current;
+    if (!showLyrics) {
+      placePane(art, dx, animate);
+      if (dx > 0) placePane(lyr, dx - w, animate);
+      else if (lyr) lyr.style.visibility = "hidden";
+    } else {
+      placePane(lyr, dx, animate);
+      placePane(art, dx > 0 ? dx - w : w + dx, animate);
+    }
+  };
+
+  const onPagerTouchStart = (e: React.TouchEvent) => {
+    if (!isPhone || paneBusy.current || closing.current) return;
+    if ((e.target as HTMLElement).closest('[role="slider"], input[type="range"], [data-upnext]')) return;
+    const t = e.touches[0];
+    swipe.current = { x0: t.clientX, y0: t.clientY, dx: 0, lock: false, lastX: t.clientX, lastT: performance.now(), v: 0 };
+  };
+  const onPagerTouchMove = (e: React.TouchEvent) => {
+    const s = swipe.current;
+    if (!s) return;
+    const t = e.touches[0];
+    const dx = t.clientX - s.x0;
+    const dy = t.clientY - s.y0;
+    if (!s.lock) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+        s.lock = true;
+        setPeek(true);
+      } else {
+        swipe.current = null;
+        return;
+      }
+    }
+    const now = performance.now();
+    s.v = 0.7 * ((t.clientX - s.lastX) / Math.max(1, now - s.lastT)) + 0.3 * s.v;
+    s.lastX = t.clientX;
+    s.lastT = now;
+    s.dx = !showLyrics && dx < 0 ? dx * 0.2 : dx; // nothing to the right of the artwork
+    layoutPanes(s.dx, false);
+  };
+  const onPagerTouchEnd = () => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || !s.lock) return;
+    const w = pagerRef.current?.clientWidth || window.innerWidth;
+    const dir = Math.sign(s.dx);
+    const allowed = showLyrics || dir > 0;
+    const far = Math.abs(s.dx) > w * 0.25;
+    const flick = Math.abs(s.v) > 0.45 && Math.abs(s.dx) > 30 && Math.sign(s.v) === dir;
+    paneBusy.current = true;
+    if (allowed && dir !== 0 && (far || flick)) {
+      const leaving = showLyrics ? lyricsPaneRef.current : artPaneRef.current;
+      const coming = showLyrics ? artPaneRef.current : lyricsPaneRef.current;
+      placePane(leaving, dir * w, true);
+      placePane(coming, 0, true);
+      window.setTimeout(() => {
+        paneBusy.current = false;
+        resetPanes.current = true;
+        setShowLyrics((v) => !v);
+      }, 280);
+    } else {
+      // spring back
+      if (!showLyrics) {
+        placePane(artPaneRef.current, 0, true);
+        if (s.dx > 0) placePane(lyricsPaneRef.current, -w, true);
+      } else {
+        placePane(lyricsPaneRef.current, 0, true);
+        placePane(artPaneRef.current, s.dx > 0 ? -w : w, true);
+      }
+      window.setTimeout(() => {
+        paneBusy.current = false;
+        clearPanes();
+        setPeek(false);
+      }, 290);
+    }
+  };
+
   useEffect(() => {
     if (!expanded) return;
     const onKey = (e: KeyboardEvent) => {
@@ -129,7 +247,7 @@ export function FullScreenPlayer() {
     // Lists / lyrics scrolled down scroll first; sliders keep their drag.
     const scrollEl = target.closest(".scroll-area");
     if (scrollEl && scrollEl.scrollTop > 0) return;
-    if (target.closest('[role="slider"], input[type="range"]')) return;
+    if (target.closest('[role="slider"], input[type="range"], [data-upnext]')) return;
     const t = e.touches[0];
     drag.current = { x0: t.clientX, y0: t.clientY, dy: 0, locked: false, lastY: t.clientY, lastT: performance.now(), v: 0 };
   };
@@ -243,7 +361,7 @@ export function FullScreenPlayer() {
             <IconButton
               onClick={() => setShowLyrics((v) => !v)}
               aria-label="Show lyrics"
-              className={cn(chip, showLyrics && "glow-ring text-accent hover:text-accent")}
+              className={cn(chip, "max-md:hidden", showLyrics && "glow-ring text-accent hover:text-accent")}
             >
               <AlignLeft className="h-4 w-4" />
             </IconButton>
@@ -311,41 +429,60 @@ export function FullScreenPlayer() {
         <div className="flex min-h-0 flex-1 flex-col px-4 sm:px-8 lg:flex-row lg:items-stretch lg:gap-8">
           {/* Main area — artwork / lyrics on top, glass control card below */}
           <div className="flex min-w-0 flex-1 flex-col items-center">
-            <div className={cn(
-              "flex min-h-0 w-full flex-1 items-center justify-center transition-all duration-300",
-              showLyrics ? "overflow-hidden pt-3" : "flex-col gap-5 pt-3",
-            )}>
-              {showLyrics ? (
-                <div className="blur-panel glass-inset h-full w-full max-w-2xl overflow-hidden rounded-[2rem]! p-2">
-                  <LyricsViewer track={current} romanized={romanized} onRomanizable={setCanRomanize} />
-                </div>
-              ) : (
-                <>
-                  {/* artwork in a frosted glass frame */}
-                  <div className="relative w-[min(72vw,18rem)] sm:w-[min(42vh,22rem)]">
-                    <div
-                      className={cn("absolute -inset-6 -z-10 rounded-[3rem] blur-[50px] transition-opacity duration-1000", isPlaying ? "opacity-70" : "opacity-30")}
-                      style={art ? { backgroundImage: `url("${art}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: gradientFrom(current.title) }}
+            {/* artwork and lyrics: two pages side by side (phones swipe between them) */}
+            <div
+              ref={pagerRef}
+              className="relative min-h-0 w-full flex-1 overflow-x-clip"
+              onTouchStart={onPagerTouchStart}
+              onTouchMove={onPagerTouchMove}
+              onTouchEnd={onPagerTouchEnd}
+              onTouchCancel={onPagerTouchEnd}
+            >
+              <div
+                ref={artPaneRef}
+                aria-hidden={showLyrics}
+                className={cn("absolute inset-0 flex flex-col items-center justify-center gap-5 pt-3", showLyrics && "invisible")}
+              >
+                {/* artwork in a frosted glass frame */}
+                <div className="relative w-[min(72vw,18rem,40dvh)] sm:w-[min(42vh,22rem)]">
+                  <div
+                    className={cn("absolute -inset-6 -z-10 rounded-[3rem] blur-[50px] transition-opacity duration-1000", isPlaying ? "opacity-70" : "opacity-30")}
+                    style={art ? { backgroundImage: `url("${art}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: gradientFrom(current.title) }}
+                  />
+                  <div className={cn(
+                    "blur-panel glass-inset rounded-[2rem]! p-2 transition-transform duration-500 ease-out",
+                    isPlaying ? "scale-100" : "scale-[0.94]",
+                  )}>
+                    <Artwork
+                      src={art || undefined}
+                      fallbackSrc={current.artworkFallback}
+                      alt={current.title}
+                      className="aspect-square w-full shadow-(--art-shadow)"
+                      rounded="rounded-[1.5rem]"
                     />
-                    <div className={cn(
-                      "blur-panel glass-inset rounded-[2rem]! p-2 transition-transform duration-500 ease-out",
-                      isPlaying ? "scale-100" : "scale-[0.94]",
-                    )}>
-                      <Artwork
-                        src={art || undefined}
-                        fallbackSrc={current.artworkFallback}
-                        alt={current.title}
-                        className="aspect-square w-full shadow-(--art-shadow)"
-                        rounded="rounded-[1.5rem]"
-                      />
-                    </div>
                   </div>
-                  <div className="w-full max-w-xl px-2 text-center">
-                    <h2 className="truncate text-2xl font-black tracking-tight text-ink sm:text-3xl">{current.title}</h2>
-                    <p className="mt-1 truncate text-sm text-ink2 sm:text-[1rem]">{current.artist}{current.genre ? ` • ${current.genre}` : ""}</p>
+                </div>
+                <div className="w-full max-w-xl px-2 text-center">
+                  <h2 className="truncate text-2xl font-black tracking-tight text-ink sm:text-3xl">{current.title}</h2>
+                  <p className="mt-1 truncate text-sm text-ink2 sm:text-[1rem]">{current.artist}{current.genre ? ` • ${current.genre}` : ""}</p>
+                </div>
+              </div>
+              <div
+                ref={lyricsPaneRef}
+                aria-hidden={!showLyrics}
+                className={cn("absolute inset-0 flex justify-center pt-3", !showLyrics && "invisible")}
+              >
+                {(showLyrics || peek) && (
+                  <div className="blur-panel glass-inset h-full w-full max-w-2xl overflow-hidden rounded-[2rem]! p-2">
+                    <LyricsViewer track={current} romanized={romanized} onRomanizable={setCanRomanize} />
                   </div>
-                </>
-              )}
+                )}
+              </div>
+            </div>
+            {/* phones: which page is showing (lyrics sits to the left) */}
+            <div className="mt-2 flex items-center justify-center gap-1.5 md:hidden" aria-hidden>
+              <span className={cn("h-1.5 rounded-full transition-all duration-300", showLyrics ? "w-4 bg-ink/70" : "w-1.5 bg-ink/25")} />
+              <span className={cn("h-1.5 rounded-full transition-all duration-300", showLyrics ? "w-1.5 bg-ink/25" : "w-4 bg-ink/70")} />
             </div>
 
             {/* Controls — ALWAYS visible, on a raised glass card */}
@@ -404,7 +541,7 @@ export function FullScreenPlayer() {
 
           {/* right: up next */}
           {settings.queueEnabled && (
-            <div className="blur-panel surface-raised glass-inset mb-4 w-full shrink-0 self-start p-3 lg:mt-3 lg:w-[23rem]">
+            <div className="blur-panel surface-raised glass-inset mb-4 w-full shrink-0 self-start p-3 max-md:hidden lg:mt-3 lg:w-[23rem]">
               <p className="mb-2 px-1 text-[10px] font-bold tracking-[0.18em] text-ink3 uppercase">
                 Up next · {Math.max(0, queue.length - index - 1)} queued
               </p>
@@ -451,6 +588,9 @@ export function FullScreenPlayer() {
             </div>
           )}
         </div>
+
+        {/* phones: pull-up "Up next" drawer (queue + songs like this one) */}
+        <UpNextDrawer />
       </div>
     </div>
   );
@@ -536,5 +676,223 @@ export function QueuePanel() {
         )}
       </aside>
     </>
+  );
+}
+
+function useMinWidth(px: number) {
+  const q = `(min-width: ${px}px)`;
+  const [ok, setOk] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setOk(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [q]);
+  return ok;
+}
+
+/**
+ * Phones: a glass handle under the controls; tap it or swipe it up for the
+ * "Up next" sheet — the queue, then songs like the one playing (YouTube Music
+ * style). Tap a song to play it now (it goes right after the current one, the
+ * rest of the queue stays); + keeps it for later.
+ */
+function UpNextDrawer() {
+  const { current, queue, index, jumpTo, playNextNow, addToQueue } = usePlayer();
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<Track | null>(null);
+  const [songs, setSongs] = useState<Track[] | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const pull = useRef<{ y0: number; dy: number; lock: boolean; fromList: boolean; lastY: number; lastT: number; v: number } | null>(null);
+  const handleY = useRef<number | null>(null);
+
+  const hide = useCallback(() => setOpen(false), []);
+  useBackHandler(open, hide);
+  useEscape(open, hide);
+
+  const show = () => {
+    if (current && anchor?.id !== current.id) setAnchor(current);
+    listRef.current?.scrollTo({ top: 0 });
+    setOpen(true);
+  };
+
+  // Fetch ahead so the sheet opens with songs ready.
+  useEffect(() => {
+    if (!current) return;
+    const t = window.setTimeout(() => {
+      if (window.matchMedia("(max-width: 767px)").matches) songsLike(current).catch(() => {});
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [current]);
+
+  useEffect(() => {
+    if (!anchor) return;
+    let alive = true;
+    setSongs(null);
+    songsLike(anchor).then(
+      (r) => alive && setSongs(r),
+      () => alive && setSongs([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [anchor]);
+
+  const setY = (y: number, animate: boolean) => {
+    const el = sheetRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "translate 280ms cubic-bezier(0.22, 1, 0.36, 1)" : "none";
+    el.style.translate = y > 0 ? `0 ${y}px` : "";
+  };
+
+  const onSheetTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    const fromList = !!(e.target as HTMLElement).closest(".scroll-area");
+    pull.current = { y0: t.clientY, dy: 0, lock: false, fromList, lastY: t.clientY, lastT: performance.now(), v: 0 };
+  };
+  const onSheetTouchMove = (e: React.TouchEvent) => {
+    const p = pull.current;
+    if (!p) return;
+    const t = e.touches[0];
+    const dy = t.clientY - p.y0;
+    if (!p.lock) {
+      if (Math.abs(dy) < 8) return;
+      // the list scrolls first; at its top a pull down drags the sheet
+      if (dy > 0 && (!p.fromList || (listRef.current?.scrollTop ?? 0) <= 0)) p.lock = true;
+      else {
+        pull.current = null;
+        return;
+      }
+    }
+    const now = performance.now();
+    p.v = 0.7 * ((t.clientY - p.lastY) / Math.max(1, now - p.lastT)) + 0.3 * p.v;
+    p.lastY = t.clientY;
+    p.lastT = now;
+    p.dy = Math.max(0, dy);
+    setY(p.dy, false);
+  };
+  const onSheetTouchEnd = () => {
+    const p = pull.current;
+    pull.current = null;
+    if (!p || !p.lock) return;
+    const h = sheetRef.current?.clientHeight || 400;
+    if (p.dy > h * 0.25 || (p.v > 0.5 && p.dy > 30)) {
+      setY(h, true);
+      window.setTimeout(() => {
+        setOpen(false);
+        const el = sheetRef.current;
+        if (el) {
+          el.style.transition = "none";
+          el.style.translate = "";
+          void el.offsetHeight;
+          el.style.transition = "";
+        }
+      }, 280);
+    } else setY(0, true);
+  };
+
+  if (!current) return null;
+
+  const upcoming = queue.slice(index + 1, index + 51);
+  const inQueue = new Set(queue.map((t) => t.id));
+  const suggested = (songs ?? []).filter((t) => !inQueue.has(t.id) && t.id !== current.id);
+
+  return (
+    <div className="md:hidden" data-upnext>
+      {/* handle */}
+      <button
+        type="button"
+        onClick={show}
+        onTouchStart={(e) => (handleY.current = e.touches[0].clientY)}
+        onTouchMove={(e) => {
+          if (handleY.current !== null && handleY.current - e.touches[0].clientY > 24) {
+            handleY.current = null;
+            show();
+          }
+        }}
+        onTouchEnd={() => (handleY.current = null)}
+        aria-label="Up next"
+        aria-expanded={open}
+        className="blur-panel surface-raised glass-inset mx-4 flex w-[calc(100%-2rem)] items-center justify-center gap-1.5 rounded-b-none! rounded-t-[1.75rem]! border-b-0! pt-2.5 pb-3 text-[11px] font-bold tracking-[0.2em] text-ink2 uppercase transition active:scale-[0.98]"
+      >
+        <ChevronUp className="h-4 w-4" />
+        Up next
+      </button>
+
+      {/* sheet */}
+      {open && <div className="animate-fade-in absolute inset-0 z-30 bg-black/45" onClick={hide} />}
+      <div
+        ref={sheetRef}
+        aria-label="Up next"
+        aria-hidden={!open}
+        inert={!open}
+        onTouchStart={onSheetTouchStart}
+        onTouchMove={onSheetTouchMove}
+        onTouchEnd={onSheetTouchEnd}
+        onTouchCancel={onSheetTouchEnd}
+        className={cn(
+          "blur-panel surface-raised absolute inset-x-0 bottom-0 z-[31] flex h-[min(80%,42rem)] flex-col rounded-b-none! border-b-0! pb-[var(--sa-bottom)] shadow-2xl transition-[translate,visibility] duration-300 ease-out",
+          open ? "translate-y-0" : "pointer-events-none invisible translate-y-full",
+        )}
+      >
+        <div className="shrink-0 px-4 pt-2.5 pb-1">
+          <div className="mx-auto h-1.5 w-10 rounded-full bg-ink/25" />
+          <div className="mt-2 flex items-center justify-between">
+            <p className="px-1 text-[11px] font-bold tracking-[0.2em] text-ink2 uppercase">Up next</p>
+            <IconButton onClick={hide} aria-label="Close up next">
+              <ChevronDown className="h-5 w-5" />
+            </IconButton>
+          </div>
+        </div>
+        <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+          {open && (
+            <>
+              {upcoming.length > 0 && (
+                <>
+                  <p className="px-2 pt-1 pb-1.5 text-[10px] font-bold tracking-[0.18em] text-ink3 uppercase">Queue</p>
+                  {upcoming.map((t, i) => (
+                    <UpNextRow key={`${t.id}-${i}`} track={t} onPlay={() => jumpTo(index + 1 + i)} />
+                  ))}
+                </>
+              )}
+              <p className="px-2 pt-3 pb-1.5 text-[10px] font-bold tracking-[0.18em] text-ink3 uppercase">Suggested</p>
+              {songs === null ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-ink3" />
+                </div>
+              ) : suggested.length ? (
+                suggested.map((t) => (
+                  <UpNextRow key={t.id} track={t} onPlay={() => playNextNow(t)} onAdd={() => addToQueue(t)} />
+                ))
+              ) : (
+                <p className="py-8 text-center text-xs text-ink3">No suggestions right now</p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpNextRow({ track: t, onPlay, onAdd }: { track: Track; onPlay: () => void; onAdd?: () => void }) {
+  return (
+    <div className="flex items-center gap-1 rounded-xl pr-1 transition active:bg-ink/[0.07]">
+      <button type="button" onClick={onPlay} className="flex min-w-0 flex-1 items-center gap-3 p-1.5 text-left">
+        <Artwork src={t.artwork || undefined} fallbackSrc={t.artworkFallback} alt={t.title} className="h-11 w-11 shrink-0" rounded="rounded-lg" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-ink">{t.title}</span>
+          <span className="block truncate text-[11px] text-ink3">{t.artist}</span>
+        </span>
+        <span className="shrink-0 text-[11px] tabular-nums text-ink3">{t.isLive ? "∞" : formatTime(t.duration)}</span>
+      </button>
+      {onAdd && (
+        <button type="button" onClick={onAdd} aria-label="Add to queue" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink2 transition active:bg-ink/10">
+          <ListPlus className="h-[18px] w-[18px]" />
+        </button>
+      )}
+    </div>
   );
 }

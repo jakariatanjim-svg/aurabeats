@@ -102,6 +102,8 @@ interface PlayerContextValue {
   playAll: (tracks: Track[], startIndex?: number) => void;
   addToQueue: (track: Track | Track[]) => void;
   playNext: (track: Track) => void;
+  /** Put a track right after the current one and play it now (the rest of the queue stays). */
+  playNextNow: (track: Track) => void;
   removeFromQueue: (queueIndex: number) => void;
   clearQueue: () => void;
   /** Stop and close the player (empties the queue). */
@@ -702,6 +704,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const playNextNow = useCallback((track: Track) => {
+    const prev = queueRef.current;
+    const at = indexRef.current;
+    if (prev[at]?.id === track.id) return;
+    const before = prev.slice(0, at + 1);
+    const after = prev.slice(at + 1).filter((t) => t.id !== track.id);
+    const merged = [...before, track, ...after];
+    queueRef.current = merged;
+    setQueue(merged);
+    const to = Math.min(at + 1, merged.length - 1);
+    indexRef.current = to;
+    setIndex(to);
+    setAttempt(0);
+  }, []);
+
   const removeFromQueue = useCallback((queueIndex: number) => {
     setQueue((prev) => {
       if (queueIndex === indexRef.current) return prev;
@@ -927,6 +944,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playAll,
       addToQueue,
       playNext,
+      playNextNow,
       removeFromQueue,
       clearQueue,
       stop,
@@ -986,6 +1004,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playAll,
       addToQueue,
       playNext,
+      playNextNow,
       removeFromQueue,
       clearQueue,
       stop,
