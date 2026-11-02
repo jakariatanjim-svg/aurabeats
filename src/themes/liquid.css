@@ -9,7 +9,7 @@
 
   /* Every surface is a clear lens: little fill, the colours behind it
      blurred and saturated, and a bright rim of light around the edge. */
-  --panel-backdrop: blur(16px) saturate(200%) brightness(1.06);
+  --panel-backdrop: blur(18px) saturate(220%) brightness(1.07) contrast(1.04);
   --panel-radius: 26px;
   --panel-hover-lift: 0px;
   --panel-border: 0 solid transparent;
@@ -23,12 +23,22 @@
   --bar-radius: 32px;
   --raised-border: 0 solid transparent;
 
-  /* the luminous rim (top-left brightest, like light through a lens) */
+  /* The lens edge, built like real glass:
+     - a crisp specular line where the light hits (top-left brightest) and a
+       weaker one on the opposite edge, where light leaves the glass
+     - a hair-thin clear outline holding the shape
+     - a faint prism split at the sides (blue one way, warm the other)
+     - light gathering inside the bottom edge (the refraction caustic)
+     - a soft inner glow giving the slab thickness */
   --lg-rim:
+    inset 0 1px 0 -0.25px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.95)),
     inset 1.5px 1.5px 1px -0.5px rgb(255 255 255 / var(--lg-rim-a, 0.7)),
-    inset -1px -1px 1px -0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.6)),
-    inset 0 0 0 1px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.22)),
-    inset 0 0 20px -6px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55));
+    inset -1px -1px 1px -0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55)),
+    inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.32)),
+    inset 2px 0 2px -1.5px rgb(140 200 255 / calc(var(--lg-rim-a, 0.7) * 0.35)),
+    inset -2px 0 2px -1.5px rgb(255 170 210 / calc(var(--lg-rim-a, 0.7) * 0.3)),
+    inset 0 -12px 18px -14px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.5)),
+    inset 0 0 24px -8px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.42));
   --panel-highlight: var(--lg-rim);
   --raised-highlight: var(--lg-rim);
 }
@@ -46,13 +56,23 @@
   --c-solid-strong: #1e2230;
   --lg-rim-a: 0.5;
 
-  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.02) 45%, rgb(255 255 255 / 0.07));
-  --panel-shadow: 0 10px 30px -14px rgb(0 0 0 / 0.55);
+  /* light falling on the slab: a broad glare from the top-left, a fainter
+     bounce at the bottom-right, a gentle top-to-bottom falloff */
+  --panel-sheen:
+    radial-gradient(130% 85% at 0% 0%, rgb(255 255 255 / 0.15), transparent 52%),
+    radial-gradient(110% 75% at 100% 100%, rgb(255 255 255 / 0.06), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.01) 45%, rgb(255 255 255 / 0.035));
+  /* contact shadow + soft lift */
+  --panel-shadow: 0 1px 1.5px rgb(0 0 0 / 0.16), 0 12px 32px -14px rgb(0 0 0 / 0.6);
+  --lg-lit-a: 0.1;
 
   --c-elev-strong: rgb(40 44 60 / 0.38);
-  --panel-backdrop-raised: blur(22px) saturate(210%) brightness(1.05);
-  --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.03) 50%, rgb(255 255 255 / 0.08));
-  --raised-shadow: 0 16px 40px -14px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.3);
+  --panel-backdrop-raised: blur(28px) saturate(230%) brightness(1.06) contrast(1.05);
+  --raised-sheen:
+    radial-gradient(130% 90% at 0% 0%, rgb(255 255 255 / 0.2), transparent 55%),
+    radial-gradient(110% 80% at 100% 100%, rgb(255 255 255 / 0.08), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02) 50%, rgb(255 255 255 / 0.05));
+  --raised-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 18px 44px -14px rgb(0 0 0 / 0.65), 0 4px 12px -4px rgb(0 0 0 / 0.3);
   --bar-shadow: var(--raised-shadow);
 
   --shell-bg: rgb(255 255 255 / 0.025);
@@ -73,7 +93,7 @@
      behind showed through in patches, so cards and text sat on blotches. */
   --c-elev: rgb(255 255 255 / 0.55);
   --c-elev2: rgb(15 23 42 / 0.05);
-  --panel-backdrop: blur(22px) saturate(140%);
+  --panel-backdrop: blur(24px) saturate(160%) brightness(1.02);
   --c-line: rgb(30 41 59 / 0.12);
   --c-ink: #0b0b0f;
   --c-ink2: #2f3340;
@@ -84,13 +104,21 @@
   --c-solid-strong: #ffffff;
   --lg-rim-a: 0.9;
 
-  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0.05) 45%, rgb(255 255 255 / 0.18));
-  --panel-shadow: 0 10px 28px -14px rgb(30 41 59 / 0.25), 0 1px 3px rgb(30 41 59 / 0.06);
+  --panel-sheen:
+    radial-gradient(130% 85% at 0% 0%, rgb(255 255 255 / 0.45), transparent 55%),
+    radial-gradient(110% 75% at 100% 100%, rgb(255 255 255 / 0.2), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.04) 50%, rgb(255 255 255 / 0.12));
+  /* a hair-thin dark edge so white glass still reads on a white page */
+  --panel-shadow: 0 0 0 0.5px rgb(30 41 59 / 0.07), 0 1px 2px rgb(30 41 59 / 0.08), 0 12px 30px -14px rgb(30 41 59 / 0.28);
+  --lg-lit-a: 0.45;
 
   --c-elev-strong: rgb(255 255 255 / 0.7);
-  --panel-backdrop-raised: blur(26px) saturate(150%);
-  --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0.35));
-  --raised-shadow: 0 14px 34px -14px rgb(30 41 59 / 0.3), 0 1px 4px rgb(30 41 59 / 0.08);
+  --panel-backdrop-raised: blur(30px) saturate(170%) brightness(1.03);
+  --raised-sheen:
+    radial-gradient(130% 90% at 0% 0%, rgb(255 255 255 / 0.7), transparent 55%),
+    radial-gradient(110% 80% at 100% 100%, rgb(255 255 255 / 0.3), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.08) 50%, rgb(255 255 255 / 0.2));
+  --raised-shadow: 0 0 0 0.5px rgb(30 41 59 / 0.08), 0 1px 3px rgb(30 41 59 / 0.1), 0 16px 38px -14px rgb(30 41 59 / 0.34);
   --bar-shadow: var(--raised-shadow);
 
   --shell-bg: rgb(255 255 255 / 0.22);
@@ -129,6 +157,14 @@
 }
 [data-theme="liquid"] :is(h1, h2) {
   letter-spacing: -0.025em;
+}
+
+/* Mouse: the glass catches the light where the pointer is (the position comes
+   from utils/themeSheets.ts), and brightens a touch under it. */
+[data-theme="liquid"] .blur-panel[data-lg-lit]:not([class*="bg-gradient"], [class*="bg-linear"], [class*="bg-radial"]) {
+  background-image:
+    radial-gradient(280px circle at var(--lg-x, 50%) var(--lg-y, 0%), rgb(255 255 255 / var(--lg-lit-a, 0.1)), transparent 70%),
+    var(--ab-r-sheen, var(--panel-sheen, none));
 }
 
 /* Hover lift is not an iOS idiom; press feedback is. */

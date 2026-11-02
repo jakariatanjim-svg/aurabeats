@@ -68,8 +68,8 @@ export function VideoSettingsSection() {
         <Toggle
           title="Autoplay next video"
           hint="When a video ends"
-          on={s.autoplayNext}
-          onChange={() => setVideoSettings({ autoplayNext: !s.autoplayNext })}
+          on={s.autoplay}
+          onChange={() => setVideoSettings({ autoplay: !s.autoplay })}
         />
 
         <form

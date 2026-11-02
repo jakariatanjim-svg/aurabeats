@@ -4,6 +4,8 @@
  *  - "dual":   separate video + audio files (how YouTube serves 480p…4K).
  *              A muted <video> follows an <audio> master clock; drift is
  *              corrected with tiny playback-rate nudges, big drift with a seek.
+ *              Website: both files instead go piece by piece into ONE <video>
+ *              ("combo", like YouTube); the two players are the fallback.
  *  - "single": one muxed file (360p and similar) in one <video>.
  *  - "hls":    live streams via the browser's native HLS support.
  *
@@ -20,7 +22,7 @@ import { isNative } from "@/services/video/net";
 import { baseOrientation } from "@/utils/orientation";
 import { showVolumeUi } from "@/utils/device";
 import { layerControls, watchLayer } from "./watchLayer";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as RPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as RPointerEvent } from "react";
 import { pip, usePipActive, usePipSupported } from "@/services/pip";
 import {
   Check,
@@ -47,11 +49,12 @@ import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
 import { storage } from "@/utils/storage";
 import { audioTracks, type VideoDetails } from "@/services/video/types";
-import { useChunkedSrc } from "./useChunked";
+import { chunkedOk, useChunkedSrc } from "./useChunked";
+import { AutoplaySwitch } from "./AutoplaySwitch";
 import { CaptionText, pickTrack, saveCcLang, savedCcLang, useCaptionCues } from "./captions";
 import { PlayerOverlays } from "./PlayerOverlays";
 import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
-import { getVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
+import { getRepeat, getVideoSettings, setRepeat, subscribeVideoSettings, useRepeat } from "@/services/video/settings";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 import { attachHls } from "./hls";
 import { heldTooSoon } from "@/utils/keyRepeat";
@@ -83,6 +86,14 @@ type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscree
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
 
 /** " (code 2: …)" from a failed media element, for the error screen. */
+/** End of the loaded stretch the playhead is in. */
+const loadedTo = (el: HTMLMediaElement) => {
+  const b = el.buffered;
+  const t = el.currentTime;
+  for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && b.end(i) >= t) return b.end(i);
+  return b.length ? Math.min(t, b.end(b.length - 1)) : 0;
+};
+
 const mediaErr = (el: HTMLMediaElement) => {
   const e = el.error;
   return e ? ` (code ${e.code}${e.message ? `: ${e.message.slice(0, 80)}` : ""})` : "";
@@ -101,8 +112,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const dual = plan?.mode === "dual";
-  const master = useCallback(() => (dual ? audioRef.current : videoRef.current), [dual]);
+  const planDual = plan?.mode === "dual";
 
   const settings = useSyncExternalStore(subscribeVideoSettings, getVideoSettings, getVideoSettings);
   const inPip = usePipActive();
@@ -121,7 +131,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const [rate, setRate] = useState(1);
   // phones: the phone's volume buttons, no in-player volume (always 100 %)
   const [volume, setVolume] = useState(() => (showVolumeUi ? storage.get("video:volume", 1) : 1));
-  const [loop, setLoop] = useState(false);
+  // repeat stays on across videos until the page is closed
+  const loop = useRepeat();
+  const setLoop = (f: (l: boolean) => boolean) => setRepeat(f(getRepeat()));
   // full-screen zoom: 1 = whole picture (Fit); `fill` = no black bars
   const [zoom, setZoom] = useState(1);
   const [zoomSnap, setZoomSnap] = useState(true);
@@ -181,11 +193,44 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const qIndexRef = useRef(qIndex);
   qIndexRef.current = qIndex;
   const hlsUrl = plan?.mode === "hls" ? plan.hls : undefined;
+  // Website: picture and sound files go piece by piece into ONE <video>, like
+  // YouTube's player — one clock, so loading never stops the picture to wait
+  // for a separate sound player (the old stop-and-go). Falls back to the two
+  // separate players with plain file addresses when that isn't possible.
+  const [comboOff, setComboOff] = useState(false);
+  const comboTracks = planDual && !audioOnly && !comboOff ? [quality?.video, plan?.audio] : [];
+  const combo = comboTracks.length === 2 && chunkedOk(comboTracks);
+  const dual = planDual && !combo;
+  const master = useCallback(() => (dual ? audioRef.current : videoRef.current), [dual]);
+  // where to continue after the player was rebuilt (see onLoaded)
+  const resumeFrom = useRef<number | null>(null);
+  const timeRef = useRef(startAt);
+  const restartAt = (at: number, playing: boolean) => {
+    if (!started.current) return;
+    resumeFrom.current = at;
+    started.current = false;
+    if (playing) wantPlay.current = true;
+  };
   const videoStream = hlsUrl ? undefined : dual ? (audioOnly ? undefined : quality?.video) : quality?.muxed;
   const trackResume = useRef<{ t: number; play: boolean } | null>(null);
-  // YouTube's files are loaded piece by piece (smooth like YouTube); plain address otherwise
-  const videoSrc = useChunkedSrc(videoRef, videoStream, () => (dual ? (audioRef.current?.currentTime ?? 0) : started.current ? 0 : startAt));
-  const audioSrc = useChunkedSrc(audioRef, dual ? plan?.audio : undefined, () => trackResume.current?.t ?? (started.current ? (audioRef.current?.currentTime ?? 0) : startAt));
+  const hintNow = () => resumeAt.current ?? resumeFrom.current ?? trackResume.current?.t ?? (started.current ? timeRef.current : startAt);
+  useChunkedSrc(videoRef, combo ? comboTracks : [], {
+    startHint: hintNow,
+    onPlain: (at, playing) => {
+      restartAt(at, playing);
+      setComboOff(true);
+    },
+  });
+  const videoSrc = useChunkedSrc(videoRef, combo ? [] : [videoStream], { startHint: () => (dual ? (audioRef.current?.currentTime ?? 0) : hintNow()) }).src;
+  const audioSrc = useChunkedSrc(audioRef, dual ? [plan?.audio] : [], { startHint: hintNow, onPlain: (at, playing) => restartAt(at, playing) }).src;
+  // switching between one player and two (audio-only, fallback): same moment
+  const comboWas = useRef(combo);
+  useLayoutEffect(() => {
+    if (comboWas.current === combo) return;
+    comboWas.current = combo;
+    restartAt(timeRef.current, wantPlay.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combo]);
 
   // live streams: hls.js (or the browser's own HLS) feeds the <video>
   useEffect(() => {
@@ -293,9 +338,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       if (Number.isFinite(m.duration) && m.duration > 0) setDuration(m.duration);
       if (!started.current) {
         started.current = true;
-        if (startAt > 1 && !details.live) {
-          m.currentTime = startAt;
-          if (dual && videoRef.current) videoRef.current.currentTime = startAt;
+        const from = resumeFrom.current ?? startAt;
+        resumeFrom.current = null;
+        if (from > 1 && !details.live) {
+          m.currentTime = from;
+          if (dual && videoRef.current) videoRef.current.currentTime = from;
         }
         if (wantPlay.current) void playBoth();
       }
@@ -309,7 +356,12 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     const onPlaying = () => setBuffering(false);
     const onTimeUpdate = () => {
       setTime(m.currentTime);
-      if (m.buffered.length) setBuffered(m.buffered.end(m.buffered.length - 1));
+      timeRef.current = m.currentTime;
+      // loaded part = what can really play: with two players, the shorter one
+      let b = loadedTo(m);
+      const v = videoRef.current;
+      if (dual && v?.getAttribute("src")) b = Math.min(b, loadedTo(v));
+      setBuffered(b);
       cbs.current.onTime?.(m.currentTime, Number.isFinite(m.duration) ? m.duration : 0);
     };
     const onEnd = () => {
@@ -318,6 +370,12 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       cbs.current.onEnded?.();
     };
     const onError = () => {
+      // one shared player failed: the two separate players with plain files
+      if (combo) {
+        restartAt(m.currentTime || timeRef.current, wantPlay.current);
+        setComboOff(true);
+        return;
+      }
       // Single (muxed) mode: try another quality before giving up on the server.
       if (!dual && plan?.mode === "single") {
         badQualities.current.add(qIndexRef.current);
@@ -375,8 +433,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         setBuffering(true);
       }
     };
+    // after a stall, go on only with a few seconds of picture ready — going
+    // on with a sliver of it gave the stop-and-go stutter
     const onVideoReady = () => {
-      if (wantPlay.current && a.paused && started.current) void a.play().catch(() => {});
+      if (!wantPlay.current || !a.paused || !started.current) return;
+      if (v.readyState >= 4 || loadedTo(v) - v.currentTime >= 4 || loadedTo(v) >= (v.duration || Infinity) - 0.5) void a.play().catch(() => {});
     };
     const onVideoLoaded = () => {
       v.currentTime = a.currentTime;
@@ -402,6 +463,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
 
     v.addEventListener("waiting", onVideoWaiting);
     v.addEventListener("canplay", onVideoReady);
+    v.addEventListener("canplaythrough", onVideoReady);
+    v.addEventListener("progress", onVideoReady);
     v.addEventListener("playing", onVideoReady);
     v.addEventListener("loadedmetadata", onVideoLoaded);
     v.addEventListener("error", onVideoError);
@@ -427,6 +490,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       clearInterval(loop);
       v.removeEventListener("waiting", onVideoWaiting);
       v.removeEventListener("canplay", onVideoReady);
+      v.removeEventListener("canplaythrough", onVideoReady);
+      v.removeEventListener("progress", onVideoReady);
       v.removeEventListener("playing", onVideoReady);
       v.removeEventListener("loadedmetadata", onVideoLoaded);
       v.removeEventListener("error", onVideoError);
@@ -440,6 +505,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const changeAudioTrack = (id: string | null) => {
     const a = audioRef.current;
     if (dual && a) trackResume.current = { t: a.currentTime, play: wantPlay.current };
+    else if (combo) resumeAt.current = videoRef.current?.currentTime ?? 0; // one player: rebuilt, same moment
     setAudioTrack(id);
     setMenu(false);
   };
@@ -521,7 +587,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     };
     v.addEventListener("loadedmetadata", onMeta, { once: true });
     return () => v.removeEventListener("loadedmetadata", onMeta);
-  }, [qIndex, dual]);
+  }, [qIndex, dual, plan?.audio?.url]);
 
   // Auto quality follows player size (e.g. entering fullscreen).
   useEffect(() => {
@@ -1279,12 +1345,13 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             <span className="hidden min-w-0 truncate text-xs font-semibold text-white/80 sm:inline">• {curChapter.title}</span>
           )}
           <span className="flex-1" />
+          {!details.live && !mini && <AutoplaySwitch />}
           {!details.live && (
             <CtlBtn label={loop ? "Loop on" : "Loop"} active={loop} onClick={() => setLoop((l) => !l)}>
               {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
             </CtlBtn>
           )}
-          {dual && (
+          {planDual && (
             <CtlBtn label={audioOnly ? "Show video" : "Audio only"} active={audioOnly} onClick={() => setAudioOnly((x) => !x)}>
               <Headphones className="h-5 w-5" />
             </CtlBtn>

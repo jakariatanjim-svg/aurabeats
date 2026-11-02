@@ -13,7 +13,7 @@ import { videoHint } from "@/services/video/hints";
 import { takeHandoffStart } from "@/utils/watchVideo";
 import { isNative } from "@/services/video/net";
 import { providerLabel, reportPlayback } from "@/services/video/providers";
-import { getVideoSettings } from "@/services/video/settings";
+import { getRepeat, getVideoSettings } from "@/services/video/settings";
 import type { VideoDetails, VideoItem } from "@/services/video/types";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { dock, dockRefs, useDock } from "@/components/video/dock";
@@ -229,7 +229,8 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
 
   const onEnded = useCallback(() => {
     if (info?.title) videoLibrary.recordProgress(info, info.duration);
-    if (getVideoSettings().autoplayNext && upNext) {
+    // repeat on → the same video again (the player does it); autoplay off → stop
+    if (getVideoSettings().autoplay && !getRepeat() && upNext) {
       watchLayer.autoplayNext(); // a miniplayer stays a miniplayer
       onNavigate(`watch:${upNext.id}`);
     }

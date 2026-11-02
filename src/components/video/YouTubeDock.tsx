@@ -66,6 +66,8 @@ const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
 import { extensionPossible } from "./AdBlockTip";
 import { PlayerOverlays } from "./PlayerOverlays";
+import { AutoplaySwitch } from "./AutoplaySwitch";
+import { getRepeat, setRepeat, useRepeat } from "@/services/video/settings";
 import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -610,11 +612,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     return () => clearInterval(iv);
   }, [ready, call]);
 
-  // Loop: plays the same video again and again (per video, like YouTube).
-  const [loop, setLoop] = useState(false);
+  // Repeat: the same video again and again; stays on across videos until
+  // the page is closed.
+  const loop = useRepeat();
+  const setLoop = (f: (l: boolean) => boolean) => setRepeat(f(getRepeat()));
   const loopRef = useRef(loop);
   loopRef.current = loop;
-  useEffect(() => setLoop(false), [d.id]);
 
   // Ended → history + autoplay next (handled by the watch page when inline).
   useEffect(() => {
@@ -1662,6 +1665,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 <span className="flex-1" />
 
                 {rate !== 1 && <span className="mr-1 rounded bg-white/15 px-1.5 py-0.5 text-[11px] font-bold">{rate}x</span>}
+                <AutoplaySwitch />
                 <CtrlBtn label={loop ? "Loop on" : "Loop"} onClick={() => setLoop((l) => !l)} className={cn(loop && "text-accent")}>
                   {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
                 </CtrlBtn>

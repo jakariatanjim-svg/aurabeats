@@ -1,63 +1,56 @@
 /**
- * The address to put on a media element for one stream file: nothing while
- * the piece-by-piece loader (./chunked) feeds the element itself, or the
- * plain file address when that way isn't possible (then the browser loads
- * the file as before). If the loader fails mid-way, it switches to the plain
- * address and carries on from the same moment.
+ * The address to put on a media element: nothing while the piece-by-piece
+ * loader (./chunked) feeds the element itself, or the plain file address
+ * when that way isn't possible (the browser then loads the file as before).
+ * Several files (picture + sound) go into the one element together.
+ * If the loader fails mid-way, `onPlain` lets the player switch over.
  */
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { StreamLayout } from "@/services/video/types";
 import { isNative } from "@/services/video/net";
-import { attachChunked, chunkedPossible } from "./chunked";
+import { attachChunked, chunkedPossible, type ChunkTrack } from "./chunked";
+
+/** Can these files be played piece by piece here? (the app keeps its own path) */
+export const chunkedOk = (tracks: (ChunkTrack | undefined)[]): boolean =>
+  !isNative && tracks.length > 0 && tracks.every((t) => !!t && chunkedPossible(t.mime, t.layout));
 
 export function useChunkedSrc(
   el: RefObject<HTMLMediaElement | null>,
-  stream: { url: string; mime: string; layout?: StreamLayout } | undefined,
-  startHint?: () => number,
-): string | undefined {
-  const [plain, setPlain] = useState<string | null>(null);
-  const resume = useRef<{ t: number; play: boolean } | null>(null);
-  const hint = useRef(startHint);
-  hint.current = startHint;
-  // the app keeps its proven playback path; the website gets the new loader
-  const can = !!stream && !isNative && plain !== stream.url && chunkedPossible(stream.mime, stream.layout);
-  const url = stream?.url;
+  tracks: (ChunkTrack | undefined)[],
+  opts: { startHint?: () => number; onPlain?: (at: number, playing: boolean) => void } = {},
+): { src: string | undefined; chunked: boolean } {
+  const key = tracks.map((t) => t?.url ?? "").join("|");
+  const [plainKey, setPlainKey] = useState<string | null>(null);
+  const o = useRef(opts);
+  o.current = opts;
+  const can = !!tracks[0] && plainKey !== key && chunkedOk(tracks);
 
   useEffect(() => {
     const m = el.current;
-    if (!m || !stream || !can) return;
+    if (!m || !can) return;
     let alive = true;
     let stop: (() => void) | null = null;
     const toPlain = () => {
       if (!alive) return;
-      resume.current = { t: m.currentTime, play: !m.paused };
+      const at = m.currentTime;
+      const playing = !m.paused;
       stop?.();
       stop = null;
-      setPlain(stream.url);
+      setPlainKey(key);
+      o.current.onPlain?.(at, playing);
     };
-    attachChunked(m, stream.url, stream.mime, stream.layout!, toPlain, () => hint.current?.() ?? 0)
+    attachChunked(m, tracks as ChunkTrack[], toPlain, () => o.current.startHint?.() ?? 0)
       .then((s) => (alive ? (stop = s) : s()))
-      .catch(() => alive && setPlain(stream.url));
+      .catch(() => {
+        if (!alive) return;
+        setPlainKey(key);
+        o.current.onPlain?.(m.currentTime, false);
+      });
     return () => {
       alive = false;
       stop?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, can]);
+  }, [key, can]);
 
-  // after a mid-way switch to the plain address: same moment, same state
-  useEffect(() => {
-    const m = el.current;
-    const r = resume.current;
-    if (!m || !r || plain !== url) return;
-    const go = () => {
-      resume.current = null;
-      if (r.t > 0) m.currentTime = r.t;
-      if (r.play) void m.play().catch(() => {});
-    };
-    m.addEventListener("loadedmetadata", go, { once: true });
-    return () => m.removeEventListener("loadedmetadata", go);
-  }, [plain, url, el]);
-
-  return !stream ? undefined : can ? undefined : stream.url;
+  return { src: can ? undefined : tracks.length === 1 ? tracks[0]?.url : undefined, chunked: can };
 }

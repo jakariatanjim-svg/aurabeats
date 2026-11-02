@@ -24,7 +24,7 @@ interface Seg {
 
 const AHEAD = 60; // seconds kept loaded in front of the playhead
 const BEHIND = 30; // seconds kept behind it
-const MAX_REQ = 4 * 1024 * 1024;
+const MAX_REQ = 8 * 1024 * 1024; // YouTube slows single requests past ~10 MB
 
 /** Set once the server has refused a piece request: don't try again this visit. */
 let refused = false;
@@ -185,162 +185,215 @@ function parseCues(buf: ArrayBuffer, head: { dataStart: number; scale: number },
 
 /* ---------------------------------- loader -------------------------------- */
 
+export interface ChunkTrack {
+  url: string;
+  mime: string;
+  layout?: StreamLayout;
+}
+
+/** Header + piece list of one file (also proves the server accepts piece requests). */
+async function prepare(t: ChunkTrack): Promise<{ init: ArrayBuffer; segs: Seg[] }> {
+  const layout = t.layout!;
+  const isMp4 = /mp4/.test(t.mime);
+  const durS = (layout.durMs ?? 0) / 1000;
+  const [i0, i1] = layout.init;
+  const [x0, x1] = layout.index;
+  let init: ArrayBuffer;
+  let idx: ArrayBuffer;
+  try {
+    if (x0 === i1 + 1) {
+      const both = await getRange(t.url, i0, x1);
+      init = both.slice(0, i1 - i0 + 1);
+      idx = both.slice(x0 - i0);
+    } else {
+      [init, idx] = await Promise.all([getRange(t.url, i0, i1), getRange(t.url, x0, x1)]);
+    }
+  } catch (e) {
+    if (e instanceof TypeError) refused = true; // the browser wasn't allowed to read it
+    throw e;
+  }
+  let segs: Seg[];
+  if (isMp4) segs = parseSidx(idx, x0);
+  else {
+    const head = webmHead(init);
+    segs = head && layout.size ? parseCues(idx, head, layout.size, durS) : [];
+  }
+  if (!segs.length) throw new Error("no index");
+  return { init, segs };
+}
+
 /**
- * Attaches a piece-by-piece source to `el`. Resolves with a stop function, or
- * rejects (before touching the element) if this file can't be played that way.
+ * Feeds `el` from one MediaSource with every given file (picture + sound
+ * together, like YouTube — one clock, nothing to keep in step). Resolves with
+ * a stop function, or rejects before touching the element if this can't work.
  */
 export async function attachChunked(
   el: HTMLMediaElement,
-  url: string,
-  mime: string,
-  layout: StreamLayout,
+  tracks: ChunkTrack[],
   onFail: (why: string) => void,
   /** where playback will start (saves loading the beginning first) */
   startHint: () => number = () => el.currentTime,
 ): Promise<() => void> {
-  const isMp4 = /mp4/.test(mime);
-  const durS = (layout.durMs ?? 0) / 1000;
-  // header + index first (also proves the server accepts piece requests)
-  let init: ArrayBuffer;
-  let segs: Seg[];
-  try {
-    const [i0, i1] = layout.init;
-    const [x0, x1] = layout.index;
-    if (x0 === i1 + 1) {
-      const both = await getRange(url, i0, x1);
-      init = both.slice(0, i1 - i0 + 1);
-      const idx = both.slice(x0 - i0);
-      segs = isMp4 ? parseSidx(idx, x0) : [];
-      if (!isMp4) {
-        const head = webmHead(init);
-        segs = head && layout.size ? parseCues(idx, head, layout.size, durS) : [];
-      }
-    } else {
-      const [a, b] = await Promise.all([getRange(url, i0, i1), getRange(url, x0, x1)]);
-      init = a;
-      if (isMp4) segs = parseSidx(b, x0);
-      else {
-        const head = webmHead(init);
-        segs = head && layout.size ? parseCues(b, head, layout.size, durS) : [];
-      }
-    }
-  } catch (e) {
-    if (e instanceof TypeError) refused = true; // blocked by the browser (no permission to read)
-    throw e;
-  }
-  if (!segs.length) throw new Error("no index");
+  const prepared = await Promise.all(tracks.map(prepare));
+  const durS = Math.max(0, ...tracks.map((t) => (t.layout?.durMs ?? 0) / 1000));
 
   const ms = new MediaSource();
   const objUrl = URL.createObjectURL(ms);
   let alive = true;
-  let sb: SourceBuffer | null = null;
-  let next = 0; // next piece to fetch
-  let ctrl: AbortController | null = null;
-  let busy = false;
-  let fails = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const waitIdle = () =>
+  interface Lane {
+    t: ChunkTrack;
+    segs: Seg[];
+    init: ArrayBuffer;
+    sb: SourceBuffer | null;
+    next: number;
+    ctrl: AbortController | null;
+    busy: boolean;
+    fails: number;
+    done: boolean;
+    video: boolean;
+  }
+  const lanes: Lane[] = tracks.map((t, i) => ({
+    t,
+    segs: prepared[i].segs,
+    init: prepared[i].init,
+    sb: null,
+    next: 0,
+    ctrl: null,
+    busy: false,
+    fails: 0,
+    done: false,
+    video: t.mime.startsWith("video/"),
+  }));
+
+  const waitIdle = (sb: SourceBuffer | null) =>
     new Promise<void>((res) => {
       if (!sb || !sb.updating) return res();
       sb.addEventListener("updateend", () => res(), { once: true });
     });
-  const append = async (data: ArrayBuffer) => {
-    await waitIdle();
-    if (!alive || !sb) return;
-    sb.appendBuffer(data);
-    await waitIdle();
+  const segAt = (l: Lane, t: number) => {
+    const i = l.segs.findIndex((g) => g.t1 > t + 0.05);
+    return i === -1 ? l.segs.length : i;
   };
-  const segAt = (t: number) => {
-    const i = segs.findIndex((g) => g.t1 > t + 0.05);
-    return i === -1 ? segs.length : i;
-  };
-  const bufferedEnd = (t: number) => {
-    const b = el.buffered;
-    for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i);
+  const bufEnd = (l: Lane, t: number) => {
+    const b = l.sb?.buffered;
+    if (b) for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.3 && b.end(i) >= t) return b.end(i);
     return t;
   };
-  const trim = async () => {
+  // how far ahead to keep loaded: a minute, but never more than the browser
+  // will hold (a 4K minute is far bigger than a 1080p one)
+  const aheadBytes = (l: Lane) => (l.video ? 90 : 12) * 1024 * 1024;
+  const bytesAhead = (l: Lane, t: number) => {
+    let n = 0;
+    for (let i = segAt(l, t); i < l.next && i < l.segs.length; i++) n += l.segs[i].e - l.segs[i].s + 1;
+    return n;
+  };
+  const trim = async (l: Lane, keep: number) => {
+    const sb = l.sb;
     if (!sb || !sb.buffered.length) return;
-    const cut = el.currentTime - BEHIND;
+    const cut = el.currentTime - keep;
     const start = sb.buffered.start(0);
-    if (cut - start > 5) {
-      await waitIdle();
-      if (alive && sb) {
+    if (cut - start > 2) {
+      await waitIdle(sb);
+      if (alive) {
         sb.remove(start, cut);
-        await waitIdle();
+        await waitIdle(sb);
+      }
+    }
+  };
+  const appendTo = async (l: Lane, data: ArrayBuffer) => {
+    for (let attempt = 0; alive; attempt++) {
+      await waitIdle(l.sb);
+      if (!alive || !l.sb) return;
+      try {
+        l.sb.appendBuffer(data);
+        await waitIdle(l.sb);
+        return;
+      } catch (e) {
+        // browser buffer full: drop more of what was already watched, retry
+        if ((e as DOMException)?.name !== "QuotaExceededError" || attempt > 20) throw e;
+        await trim(l, attempt < 3 ? 10 : 2);
+        await new Promise((r) => setTimeout(r, 700));
+      }
+    }
+  };
+  const maybeEnd = async () => {
+    if (!lanes.every((l) => l.done) || ms.readyState !== "open") return;
+    await Promise.all(lanes.map((l) => waitIdle(l.sb)));
+    if (alive && ms.readyState === "open" && lanes.every((l) => l.done)) {
+      try {
+        ms.endOfStream();
+      } catch {
+        /* still busy: next tick */
       }
     }
   };
 
-  const pump = async () => {
-    if (!alive || busy || !sb) return;
-    busy = true;
+  const pump = async (l: Lane) => {
+    if (!alive || l.busy || !l.sb) return;
+    l.busy = true;
     try {
       while (alive) {
         const t = el.currentTime;
-        const end = bufferedEnd(t);
-        if (next < segs.length && segs[next].t1 <= end - 0.1) next = segAt(end); // already have it
-        if (next >= segs.length) {
-          if (ms.readyState === "open" && end >= segs[segs.length - 1].t1 - 0.5) {
-            await waitIdle();
-            if (alive && ms.readyState === "open") ms.endOfStream();
-          }
+        const end = bufEnd(l, t);
+        if (l.next < l.segs.length && l.segs[l.next].t1 <= end - 0.1) l.next = segAt(l, end); // already have it
+        if (l.next >= l.segs.length) {
+          l.done = end >= l.segs[l.segs.length - 1].t1 - 0.5;
+          void maybeEnd();
           break;
         }
-        if (end - t > AHEAD) break;
-        // one request: this piece plus following ones up to MAX_REQ
-        let last = next;
-        while (last + 1 < segs.length && segs[last + 1].e - segs[next].s < MAX_REQ) last++;
-        const from = next;
-        ctrl = new AbortController();
+        l.done = false;
+        if (end - t > AHEAD || bytesAhead(l, t) > aheadBytes(l)) break;
+        // one request: this piece plus the following ones up to MAX_REQ
+        let last = l.next;
+        while (last + 1 < l.segs.length && l.segs[last + 1].e - l.segs[l.next].s < MAX_REQ) last++;
+        const from = l.next;
+        l.ctrl = new AbortController();
         let data: ArrayBuffer;
         try {
-          data = await getRange(url, segs[from].s, segs[last].e, ctrl.signal);
-          fails = 0;
+          data = await getRange(l.t.url, l.segs[from].s, l.segs[last].e, l.ctrl.signal);
+          l.fails = 0;
         } catch (e) {
           if (!alive) break;
-          if ((e as DOMException)?.name === "AbortError") continue; // a seek: start again from the new spot
-          if (++fails >= 4) {
+          if ((e as DOMException)?.name === "AbortError") continue; // a seek: go again from the new spot
+          if (++l.fails >= 4) {
             onFail(`stream stopped loading (${e instanceof Error ? e.message : "network"})`);
             alive = false;
             break;
           }
-          await new Promise((r) => setTimeout(r, 800 * fails));
+          await new Promise((r) => setTimeout(r, 800 * l.fails));
           continue;
         }
-        if (!alive || next !== from) continue; // a seek moved us meanwhile
-        await trim();
-        try {
-          await append(data);
-        } catch (e) {
-          if ((e as DOMException)?.name === "QuotaExceededError") {
-            await trim();
-            await new Promise((r) => setTimeout(r, 1000));
-            continue;
-          }
-          throw e;
-        }
-        next = last + 1;
+        if (!alive || l.next !== from) continue; // a seek moved us meanwhile
+        await trim(l, BEHIND);
+        await appendTo(l, data);
+        l.next = last + 1;
       }
     } catch (e) {
-      if (alive) onFail(`stream error (${e instanceof Error ? e.message : "?"})`);
+      if (alive) {
+        alive = false;
+        onFail(`stream error (${e instanceof Error ? e.message : "?"})`);
+      }
     } finally {
-      busy = false;
-      ctrl = null;
+      l.busy = false;
+      l.ctrl = null;
     }
   };
   const tick = () => {
     clearTimeout(timer);
-    void pump();
+    if (!alive) return;
+    lanes.forEach((l) => void pump(l));
     timer = setTimeout(tick, 1000);
   };
   const onSeeking = () => {
     const t = el.currentTime;
-    const want = segAt(bufferedEnd(t));
-    if (want !== next) {
-      next = want;
-      ctrl?.abort();
+    for (const l of lanes) {
+      const want = segAt(l, bufEnd(l, t));
+      if (want !== l.next) {
+        l.next = want;
+        l.ctrl?.abort();
+      }
     }
     // (after the end, appending again re-opens the source by itself)
     tick();
@@ -351,7 +404,7 @@ export async function attachChunked(
     () => {
       if (!alive) return;
       try {
-        sb = ms.addSourceBuffer(mime);
+        for (const l of lanes) l.sb = ms.addSourceBuffer(l.t.mime);
       } catch (e) {
         onFail(`format not supported (${e instanceof Error ? e.message : ""})`);
         return;
@@ -363,9 +416,10 @@ export async function attachChunked(
           /* set by the header */
         }
       }
-      void append(init)
+      Promise.all(lanes.map((l) => appendTo(l, l.init)))
         .then(() => {
-          next = segAt(Math.max(el.currentTime, startHint() || 0));
+          const at = Math.max(el.currentTime, startHint() || 0);
+          for (const l of lanes) l.next = segAt(l, at);
           tick();
         })
         .catch((e) => alive && onFail(`stream header failed (${e instanceof Error ? e.message : ""})`));
@@ -379,7 +433,7 @@ export async function attachChunked(
   return () => {
     alive = false;
     clearTimeout(timer);
-    ctrl?.abort();
+    lanes.forEach((l) => l.ctrl?.abort());
     el.removeEventListener("seeking", onSeeking);
     el.removeEventListener("timeupdate", tick);
     if (el.src === objUrl) {
