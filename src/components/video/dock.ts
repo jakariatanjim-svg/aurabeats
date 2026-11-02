@@ -81,6 +81,11 @@ export const dock = {
     aspects.set(id, aspect);
     if (state.id === id && Math.abs(state.aspect - aspect) > 0.001) set({ aspect });
   },
+  /** where a fallback player should start (the real player's position) */
+  setStart(t: number) {
+    dockRefs.time = t;
+    set({ startAt: t });
+  },
   setMeta(meta: VideoItem | null, next: VideoItem | null) {
     set({ meta, next });
   },

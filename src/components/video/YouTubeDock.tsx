@@ -45,12 +45,16 @@ import {
   Volume2,
   VolumeX,
   X,
+  Puzzle,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
 import { storage } from "@/utils/storage";
 import { usePlayer } from "@/hooks/usePlayer";
 import { videoLibrary } from "@/hooks/useVideoLibrary";
+import { extensionCanStream, useExtension } from "@/services/yt/extension";
+import { DirectDock, useDirect } from "./DirectDock";
+import { navMemory } from "@/utils/navMemory";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
 import { getVideoAspect } from "@/services/video/api";
@@ -59,6 +63,7 @@ import { loadYT, QUALITY_WIDTH, qualityLabel, qualityTag, YT_ERRORS, YTState, ty
 const Q_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440", "hd2160", "hd2880", "highres"];
 const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
+import { extensionPossible } from "./AdBlockTip";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 // Faster speeds, shown only when YouTube's player says it can do them (the
@@ -77,7 +82,13 @@ const fsElement = () => {
 
 export function YouTubeDock({ navigate, musicBar }: { navigate: (r: RouteKey) => void; musicBar: boolean }) {
   const d = useDock();
-  if (!d.id || d.mode === "none") return null;
+  const ext = useExtension();
+  const active = !!d.id && d.mode !== "none";
+  // With the extension: the real player first, YouTube's embedded one if that fails.
+  const direct = useDirect(active ? d.id : null, extensionCanStream(ext));
+  if (!active) return null;
+  if (direct.status === "loading" || direct.status === "ok")
+    return <DirectDock details={direct.status === "ok" ? direct.details : null} navigate={navigate} musicBar={musicBar} onFail={direct.fail} />;
   return <DockPlayer navigate={navigate} musicBar={musicBar} />;
 }
 
@@ -105,6 +116,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [passThrough, setPassThrough] = useState(false); // see "Pass-through" below
   const [error, setError] = useState<string | null>(null);
+  // the owner blocked playing it on other sites → the extension's real player can
+  const [embedBlocked, setEmbedBlocked] = useState(false);
   // Ad playing in YouTube's player (only possible when no blocker is active):
   // its "Skip" button sits outside our crop, so the crop opens up until it's over.
   const [ad, setAd] = useState(false);
@@ -128,6 +141,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     return () => clearTimeout(t);
   }, [volFx]);
   const [seekFx, setSeekFx] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
+  // keyboard seeking: repeated / held presses add up (5 → 10 → 15 s)
+  const keyTarget = useRef<{ t: number; at: number } | null>(null);
   const [flash, setFlash] = useState<{ icon: "play" | "pause"; key: number } | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null);
@@ -208,6 +223,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
             onError: (e) => {
               if (!alive) return;
               setError(YT_ERRORS[e.data] || `YouTube error ${e.data}`);
+              setEmbedBlocked([101, 150, 152, 153].includes(e.data));
             },
             // Browser refused sound before any tap/click on the page: play muted
             // now, unmute automatically on the first interaction anywhere.
@@ -694,7 +710,9 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
 
   const toMini = () => {
     if (fs !== "off") void exitFs();
-    navigate("video");
+    // back to the page the video was opened from (search results, a channel…)
+    if (navMemory.cameFromPage) window.history.back();
+    else navigate(navMemory.lastPage as RouteKey);
   };
   const expand = () => navigate(`watch:${d.id}`);
   const closeNow = () => {
@@ -1105,6 +1123,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   };
 
   /* ----------------------------- keyboard ------------------------------- */
+  const keySeek = (step: number) => {
+    const now = Date.now();
+    const kt = keyTarget.current;
+    const from = kt && now - kt.at < 1000 ? kt.t : Number(call("getCurrentTime")) || time;
+    const t = Math.max(0, duration ? Math.min(duration - 0.5, from + step) : from + step);
+    seek(t);
+    keyTarget.current = { t, at: now };
+    const side = step < 0 ? "l" : "r";
+    setSeekFx((f) => ({ side, secs: f && f.side === side && now - f.key < 1000 ? f.secs + Math.abs(step) : Math.abs(step), key: now }));
+  };
   useEffect(() => {
     if (mode === "mini") return;
     const onKey = (e: KeyboardEvent) => {
@@ -1113,10 +1141,19 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === " " || k === "k") togglePlay();
-      else if (k === "arrowleft") seekBy(-5);
-      else if (k === "arrowright") seekBy(5);
-      else if (k === "j") seekBy(-10);
-      else if (k === "l") seekBy(10);
+      else if (k === "arrowleft") keySeek(-5);
+      else if (k === "arrowright") keySeek(5);
+      else if (k === "j") keySeek(-10);
+      else if (k === "l") keySeek(10);
+      else if (k === "c") {
+        if (cc) pickCc(null);
+        else {
+          const want = (navigator.language || "en").slice(0, 2);
+          const tr = tracks.find((x) => x.languageCode.startsWith(want)) ?? tracks.find((x) => x.languageCode.startsWith("en")) ?? tracks[0];
+          if (tr) pickCc(tr.languageCode);
+          else call("loadModule", "captions");
+        }
+      }
       else if (k === "f") toggleFs();
       else if (k === "t" && fs === "off") dock.toggleTheater();
       else if (k === "i") toMini();
@@ -1322,6 +1359,15 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               >
                 <RotateCcw className="h-3.5 w-3.5" /> Try again
               </button>
+              {embedBlocked && extensionPossible() && (
+                <button
+                  type="button"
+                  onClick={() => navigate("settings")}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-xs font-bold text-white ring-1 ring-white/25 hover:bg-white/25"
+                >
+                  <Puzzle className="h-3.5 w-3.5" /> Play here with the extension
+                </button>
+              )}
               <a
                 href={`https://www.youtube.com/watch?v=${d.id}`}
                 target="_blank"

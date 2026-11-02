@@ -17,7 +17,7 @@ import { Avatar } from "@/components/video/VideoCards";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { useYtSession } from "@/services/yt/session";
 import { useSavedSongs } from "@/hooks/useSavedSongs";
-import { ThumbsUp } from "lucide-react";
+import { Clapperboard, ThumbsUp } from "lucide-react";
 import { useYtSubscriptions } from "@/services/yt/library";
 import { cn } from "@/utils/cn";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -38,6 +38,7 @@ const MAIN: NavItem[] = [
 
 const VIDEO_MAIN: NavItem[] = [
   { key: "video", label: "Home", icon: Home },
+  { key: "video-shorts", label: "Shorts", icon: Clapperboard },
   { key: "video-subs", label: "Following", icon: Rss },
   { key: "video-library", label: "Library", icon: Library },
 ];
@@ -177,7 +178,7 @@ export const Sidebar = memo(function Sidebar({
         onNavigate={onNavigate}
         compact={collapsed}
         vertical={collapsed}
-        className={cn("mb-4", collapsed ? "mx-auto w-12" : "mx-3")}
+        className={cn("mb-4", collapsed ? "mx-auto" : "mx-3")}
       />
 
       <nav className={cn("flex-1 space-y-6 overflow-y-auto scroll-area pb-24", collapsed ? "px-2" : "px-3")}>

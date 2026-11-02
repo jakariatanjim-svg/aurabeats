@@ -50,24 +50,50 @@ async function cached<T>(key: string, ttl: number, fn: () => Promise<T>, keep: (
  */
 export async function getVideo(id: string, exclude: string[] = []): Promise<VideoDetails> {
   const key = `v:${id}:${exclude.join(",")}`;
-  return cached(key, 4 * 60 * 1000, async () => {
-    let deviceErr: unknown;
-    if (deviceExtractionAvailable && !exclude.includes("device")) {
-      try {
-        // Related videos: the watch page asks `getRelated` separately.
-        return await devicePlayer(id);
-      } catch (e) {
-        deviceErr = e;
-      }
-    }
-    try {
-      const { value } = await race((p) => providerDetails(p, id), { exclude, stagger: 700, scope: "streams" });
-      return value;
-    } catch (e) {
-      // The phone's own answer explains far more than "servers busy".
-      if (deviceErr instanceof Error) throw new Error(`${deviceErr.message} • servers: ${e instanceof Error ? e.message : e}`);
-      throw e;
-    }
+  return cached(key, 4 * 60 * 1000, () => {
+    const servers = () => race((p) => providerDetails(p, id), { exclude, stagger: 700, scope: "streams" }).then((r) => r.value);
+    if (!deviceExtractionAvailable() || exclude.includes("device")) return servers();
+    // Every source at once: this device first, the servers join after a short
+    // head start (or right away if the device fails). The first answer plays.
+    return new Promise<VideoDetails>((resolve, reject) => {
+      let deviceErr: unknown = null;
+      let serverErr: unknown = null;
+      let started = false;
+      let done = false;
+      const finish = () => {
+        if (done || deviceErr === null || serverErr === null) return; // wait for both
+        done = true;
+        // The device's own answer explains far more than "servers busy".
+        const d = deviceErr instanceof Error ? deviceErr.message : String(deviceErr);
+        reject(new Error(`${d} • servers: ${serverErr instanceof Error ? serverErr.message : serverErr}`));
+      };
+      const win = (v: VideoDetails) => {
+        if (done) return;
+        done = true;
+        resolve(v);
+      };
+      const startServers = () => {
+        if (started || done) return;
+        started = true;
+        servers().then(win, (e) => {
+          serverErr = e ?? "failed";
+          finish();
+        });
+      };
+      const timer = setTimeout(startServers, 1500);
+      devicePlayer(id).then(
+        (v) => {
+          clearTimeout(timer);
+          win(v);
+        },
+        (e) => {
+          deviceErr = e ?? "failed";
+          clearTimeout(timer);
+          startServers();
+          finish();
+        },
+      );
+    });
   });
 }
 

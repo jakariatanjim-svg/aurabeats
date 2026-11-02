@@ -192,13 +192,20 @@ function fromProfile(id: string, p: Profile, prev?: YtAccount): YtAccount {
 
 /* -------------------------------- actions -------------------------------- */
 
-/** Opens Google's sign-in; resolves with the new (or re-signed) account, null if cancelled. */
-export async function addAccount(): Promise<YtAccount | null> {
+/** App: is microG RE installed (its sign-in is offered then)? */
+export async function microgInstalled(): Promise<boolean> {
+  if (!isNative) return false;
+  return YtLogin.microgStatus().then((r) => !!r.installed, () => false); // older app: no
+}
+
+/** Opens Google's sign-in (or microG RE's account picker); resolves with the
+ *  new (or re-signed) account, null if cancelled. */
+export async function addAccount(via: "google" | "microg" = "google"): Promise<YtAccount | null> {
   if (!ytAccountsSupported()) throw new Error("YouTube sign-in works in the Android app (or the website with the AuraBeats extension)");
   if (!isNative) throw new Error("Choose accounts with Connect YouTube");
   let id: string;
   try {
-    id = (await YtLogin.signIn()).account;
+    id = (await (via === "microg" ? YtLogin.signInMicroG() : YtLogin.signIn())).account;
   } catch (e) {
     if (String((e as Error)?.message ?? e).includes("cancelled")) return null;
     throw e;

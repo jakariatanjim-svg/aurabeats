@@ -1,8 +1,14 @@
 package dev.pages.aurabeats;
 
+import android.accounts.Account;
+import android.accounts.AccountManager;
+import android.accounts.OperationCanceledException;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
@@ -29,7 +35,9 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import androidx.activity.result.ActivityResult;
 
 import org.json.JSONArray;
 
@@ -39,6 +47,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -68,7 +77,17 @@ import javax.crypto.spec.GCMParameterSpec;
  * clean. The page (JS) never sees them: it asks request() to make YouTube
  * calls and this plugin adds the session.
  *
+ * signInMicroG() is the same, but the Google part comes from an account
+ * already added in microG RE (app.revanced.android.gms): microG hands out a
+ * one-time "web sign-in" address for it (the same thing microG uses for its
+ * own Google account pages), the WebView opens it, YouTube finishes the
+ * sign-in, and from there everything is identical. microG sees AuraBeats as
+ * the YouTube app (manifest meta-data added by the APK workflows), like the
+ * ReVanced YouTube apps it is made for.
+ *
  * JS: YtLogin.signIn() → { account }       (rejects "cancelled")
+ *     YtLogin.signInMicroG() → { account }  (rejects "cancelled")
+ *     YtLogin.microgStatus() → { installed }
  *     YtLogin.list() → { accounts: [id] }
  *     YtLogin.remove({ account })
  *     YtLogin.request({ account, url, method, body, headers, pageId }) → { status, body }
@@ -82,6 +101,8 @@ public class YtLoginPlugin extends Plugin {
         "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&hl=en"
             + "&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Dm%26hl%3Den"
             + "%26next%3Dhttps%253A%252F%252Fm.youtube.com%252F";
+    private static final String MICROG_PACKAGE = "app.revanced.android.gms";
+    private static final String MICROG_ACCOUNT_TYPE = "app.revanced";
     private static final String DESKTOP_UA =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
@@ -98,10 +119,81 @@ public class YtLoginPlugin extends Plugin {
             call.reject("no screen");
             return;
         }
-        a.runOnUiThread(() -> openSignIn(a, call));
+        a.runOnUiThread(() -> openSignIn(a, call, SIGN_IN_URL, "Sign in to YouTube"));
     }
 
-    private void openSignIn(final Activity a, final PluginCall call) {
+    /* ------------------------- sign in with microG ----------------------- */
+
+    @PluginMethod
+    public void microgStatus(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("installed", microgInstalled());
+        call.resolve(r);
+    }
+
+    private boolean microgInstalled() {
+        try {
+            getContext().getPackageManager().getPackageInfo(MICROG_PACKAGE, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    @PluginMethod
+    public void signInMicroG(PluginCall call) {
+        if (!microgInstalled()) {
+            call.reject("microG RE isn't installed");
+            return;
+        }
+        // Android's own account chooser: picking an account also lets AuraBeats see it.
+        Intent pick = AccountManager.newChooseAccountIntent(null, null, new String[] { MICROG_ACCOUNT_TYPE }, null, null, null, null);
+        startActivityForResult(call, pick, "onMicroGAccount");
+    }
+
+    @ActivityCallback
+    private void onMicroGAccount(final PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        Intent data = result.getData();
+        String name = data == null ? null : data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+        String type = data == null ? null : data.getStringExtra(AccountManager.KEY_ACCOUNT_TYPE);
+        final Activity a = getActivity();
+        if (result.getResultCode() != Activity.RESULT_OK || name == null || a == null) {
+            call.reject("cancelled");
+            return;
+        }
+        String service;
+        try {
+            service = "weblogin:continue=" + URLEncoder.encode(SIGN_IN_URL, "UTF-8");
+        } catch (Exception e) {
+            call.reject("microG sign-in failed");
+            return;
+        }
+        Account account = new Account(name, type != null ? type : MICROG_ACCOUNT_TYPE);
+        // With the activity given, Android shows microG's "Allow" screen
+        // itself the first time, then continues here.
+        AccountManager.get(getContext()).getAuthToken(account, service, null, a, future -> {
+            String url;
+            try {
+                Bundle b = future.getResult();
+                url = b.getString(AccountManager.KEY_AUTHTOKEN);
+            } catch (OperationCanceledException e) {
+                call.reject("cancelled");
+                return;
+            } catch (Exception e) {
+                call.reject("microG couldn't sign in: " + e.getMessage());
+                return;
+            }
+            if (url == null || !url.startsWith("https://") || url.contains("WILL_NOT_SIGN_IN")) {
+                call.reject("microG couldn't sign in to YouTube with this account");
+                return;
+            }
+            final String start = url;
+            a.runOnUiThread(() -> openSignIn(a, call, start, "Signing in with microG…"));
+        }, null);
+    }
+
+    private void openSignIn(final Activity a, final PluginCall call, final String startUrl, final String heading) {
         if (dialog != null) {
             try {
                 dialog.dismiss();
@@ -111,8 +203,6 @@ public class YtLoginPlugin extends Plugin {
         }
         final CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
-        cm.removeAllCookies(null); // a clean start: only the new account
-        cm.flush();
 
         final boolean[] done = { false };
         final Dialog d = new Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar);
@@ -129,7 +219,7 @@ public class YtLoginPlugin extends Plugin {
         int pad = dp(a, 8);
         bar.setPadding(pad * 2, pad, pad, pad);
         TextView title = new TextView(a);
-        title.setText("Sign in to YouTube");
+        title.setText(heading);
         title.setTextColor(Color.WHITE);
         title.setTextSize(16);
         bar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -234,7 +324,12 @@ public class YtLoginPlugin extends Plugin {
         if (w != null) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         dialog = d;
         d.show();
-        web.loadUrl(SIGN_IN_URL);
+        // a clean start: only the new account (wait for the wipe, so it can't
+        // remove cookies the first page has just set)
+        cm.removeAllCookies(ok -> {
+            cm.flush();
+            web.loadUrl(startUrl);
+        });
     }
 
     /** A real YouTube page (not Google's pages, accounts.youtube.com or the /signin step). */

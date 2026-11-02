@@ -1,8 +1,8 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { Heart, Loader2, Play, RefreshCw, ThumbsUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Heart, History, Loader2, Play, RefreshCw, ThumbsUp } from "lucide-react";
 import { useSavedSongs } from "@/hooks/useSavedSongs";
 import { useDiscoverFeed } from "@/hooks/useDiscoverFeed";
-import { FeedCard, FeedCardSkeleton } from "@/components/FeedCard";
+import { FeedCard, FeedCardSkeleton, FeedRow, FeedRowSkeleton, SquareCard } from "@/components/FeedCard";
 import { IconButton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -19,6 +19,12 @@ export function HomeView(_props: { onNavigate?: (r: "search") => void }) {
 
   const feed = useDiscoverFeed(favorites, history);
   const hasFavourites = favorites.length > 0;
+  // phones: YouTube Music's look — songs as lines, recent ones as covers
+  const phone = usePhone();
+  const recent = useMemo(() => {
+    const seen = new Set<string>();
+    return history.filter((t) => !seen.has(t.id) && seen.add(t.id)).slice(0, 15);
+  }, [history]);
 
   // Infinite scroll: load the next page when the end of the feed comes near.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -38,7 +44,17 @@ export function HomeView(_props: { onNavigate?: (r: "search") => void }) {
   }, [feed.done]);
 
   return (
-    <div className="space-y-10 pb-12">
+    <div className="space-y-8 pb-12 sm:space-y-10">
+      {phone && recent.length >= 3 && (
+        <section>
+          <FeedHeader icon={<History className="h-5 w-5 text-accent" />} title="Listen again" subtitle="Songs you played recently" />
+          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {recent.map((t) => (
+              <SquareCard key={t.id} track={t} context={recent} />
+            ))}
+          </div>
+        </section>
+      )}
       {/* For you — infinite, from favourites (= subscriptions) + listening */}
       <section>
         <FeedHeader
@@ -65,13 +81,23 @@ export function HomeView(_props: { onNavigate?: (r: "search") => void }) {
           <ErrorState message={feed.error} onRetry={feed.refresh} />
         ) : (
           <>
-            <div className={GRID}>
-              {feed.items.map((t) => (
-                <FeedCard key={t.id} track={t} context={feed.items} />
-              ))}
-              {(feed.loading || (hasFavourites && !feed.done && feed.items.length === 0)) &&
-                Array.from({ length: feed.items.length ? 3 : 6 }).map((_, i) => <FeedCardSkeleton key={`s${i}`} />)}
-            </div>
+            {phone ? (
+              <div className="space-y-0.5">
+                {feed.items.map((t) => (
+                  <FeedRow key={t.id} track={t} context={feed.items} />
+                ))}
+                {(feed.loading || (hasFavourites && !feed.done && feed.items.length === 0)) &&
+                  Array.from({ length: feed.items.length ? 3 : 8 }).map((_, i) => <FeedRowSkeleton key={`s${i}`} />)}
+              </div>
+            ) : (
+              <div className={GRID}>
+                {feed.items.map((t) => (
+                  <FeedCard key={t.id} track={t} context={feed.items} />
+                ))}
+                {(feed.loading || (hasFavourites && !feed.done && feed.items.length === 0)) &&
+                  Array.from({ length: feed.items.length ? 3 : 6 }).map((_, i) => <FeedCardSkeleton key={`s${i}`} />)}
+              </div>
+            )}
             {hasFavourites && !feed.loading && feed.done && feed.items.length === 0 && (
               <div className="flex flex-col items-center gap-3 py-16 text-ink3">
                 <p className="text-sm font-semibold">Nothing new right now</p>
@@ -153,4 +179,16 @@ function FeedHeader({
       </div>
     </div>
   );
+}
+
+function usePhone() {
+  const q = "(max-width: 559px)";
+  const [on, setOn] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const f = () => setOn(m.matches);
+    m.addEventListener("change", f);
+    return () => m.removeEventListener("change", f);
+  }, []);
+  return on;
 }

@@ -7,6 +7,8 @@
  * (cookies) never leaves the browser: only the answers go back to the page.
  */
 const HOSTS = new Set(["www.youtube.com", "music.youtube.com"]);
+const DEVICE_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
 
 // Requests from this worker look like they come from youtube.com itself
 // (session rule: only requests made by the extension, not by any tab).
@@ -23,7 +25,20 @@ async function setupHeaders() {
     },
     condition: { urlFilter: `|https://${host}/`, tabIds: [-1], resourceTypes: ["xmlhttprequest", "other"] },
   }));
-  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: rules.map((r) => r.id), addRules: rules });
+  // Video streams (no sign-in): YouTube's player answer is asked for as the
+  // same Apple Vision device the Android app uses, so the stream addresses
+  // need no deciphering. They are tied to this computer's address, which is
+  // why the request has to come from this browser.
+  for (const [i, path] of ["youtubei/v1/player", "sw.js_data"].entries()) {
+    rules.push({
+      id: 10 + i,
+      priority: 2,
+      action: { type: "modifyHeaders", requestHeaders: [{ header: "user-agent", operation: "set", value: DEVICE_UA }] },
+      condition: { urlFilter: `|https://www.youtube.com/${path}`, tabIds: [-1], resourceTypes: ["xmlhttprequest", "other"] },
+    });
+  }
+  const old = await chrome.declarativeNetRequest.getSessionRules();
+  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: old.map((r) => r.id), addRules: rules });
 }
 let ready = setupHeaders().catch(() => undefined);
 chrome.runtime.onStartup.addListener(() => (ready = setupHeaders().catch(() => undefined)));
@@ -52,11 +67,18 @@ async function authHeader(origin) {
   return parts.join(" ");
 }
 
-async function request({ url, method = "POST", body, headers = {}, pageId, authUser = "0" }) {
+async function request({ url, method = "POST", body, headers = {}, pageId, authUser = "0", anon = false }) {
   const u = new URL(url);
   if (u.protocol !== "https:" || !HOSTS.has(u.hostname)) return { status: 0, body: "", error: "bad url" };
   await ready;
   const origin = `https://${u.hostname}`;
+  if (anon) {
+    // no sign-in at all (video streams)
+    const h = { ...headers };
+    if (body != null && method !== "GET" && !h["Content-Type"]) h["Content-Type"] = "application/json";
+    const res = await fetch(url, { method, headers: h, body: method === "GET" ? undefined : body, credentials: "omit" });
+    return { status: res.status, body: await res.text(), signedIn: false };
+  }
   const h = { ...headers, "X-Origin": origin, "X-Goog-AuthUser": String(authUser) };
   const auth = await authHeader(origin);
   if (auth) h.Authorization = auth;

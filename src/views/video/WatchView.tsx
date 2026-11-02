@@ -21,6 +21,8 @@ import { AdBadge, AdBlockTip } from "@/components/video/AdBlockTip";
 import { Avatar, VideoRow, VideoRowSkeleton } from "@/components/video/VideoCards";
 import { Button, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
+import { Comments } from "@/components/video/Comments";
+import { getWatchExtras, watchExtrasAvailable, type WatchExtras } from "@/services/yt/watch";
 import { routeToPath, type RouteKey } from "@/routes";
 
 export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: RouteKey) => void }) {
@@ -125,6 +127,27 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     };
   }, [embed, id]);
 
+  // YouTube's own watch answer: full description, likes, comments, up next.
+  const [extras, setExtras] = useState<WatchExtras | null>(null);
+  const [extrasPending, setExtrasPending] = useState(false);
+  useEffect(() => {
+    setExtras(null);
+    if (!watchExtrasAvailable()) return;
+    let alive = true;
+    setExtrasPending(true);
+    getWatchExtras(id)
+      .then((x) => {
+        if (!alive) return;
+        setExtras(x);
+        if (x.related.length) setRelated((cur) => (cur?.length ? cur : x.related));
+      })
+      .catch(() => {})
+      .finally(() => alive && setExtrasPending(false));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
   // On-device extraction has no related list → ask a server for it.
   useEffect(() => {
     if (related || !details || details.related.length) return;
@@ -147,12 +170,22 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
       setStartAt(at || lastT.current);
       setExclude((x) => [...x, details.streams.source]);
       setDetails(null);
-      toast("Switching to another ad-free server…", "info");
     },
-    [details, toast],
+    [details],
   );
 
-  const info = details ?? meta;
+  const base = details ?? meta;
+  const info = useMemo(() => {
+    if (!base || !extras) return base;
+    const desc = [base.description, extras.description ?? ""].reduce((a, b) => (b.length > a.length ? b : a), "");
+    return {
+      ...base,
+      description: desc,
+      likes: base.likes ?? extras.likes,
+      subscribers: base.subscribers || extras.subscribers,
+      authorAvatar: base.authorAvatar || extras.authorAvatar,
+    };
+  }, [base, extras]);
   const onTime = useCallback(
     (t: number, dur: number) => {
       lastT.current = t;
@@ -232,7 +265,9 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
     }
   }, [pauseMusic, details, id]);
 
+  const [shareFx, setShareFx] = useState(0);
   const share = async () => {
+    setShareFx((n) => n + 1);
     const url = `https://www.youtube.com/watch?v=${id}`;
     try {
       if (navigator.share) await navigator.share({ title: info?.title, url });
@@ -347,11 +382,12 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 {info.authorId && <FollowButton ch={{ id: info.authorId, name: info.author, avatar: info.authorAvatar }} />}
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              {/* phones: one sideways row of buttons (YouTube app); wraps on wider screens */}
+              <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
                 <LikeButton id={id} likes={info.likes} />
                 <SaveButton v={info} />
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
-                  <Share2 className="h-3.5 w-3.5" /> Share
+                  <Share2 key={shareFx} className={cn("h-3.5 w-3.5", shareFx > 0 && "animate-wiggle")} /> Share
                 </Button>
                 <Button
                   variant="outline"
@@ -360,16 +396,6 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 >
                   <Download className="h-3.5 w-3.5" /> Download
                 </Button>
-                {!embed && (
-                  <Button
-                    variant="outline"
-                    className="px-3.5 text-xs"
-                    onClick={() => onFatal("user", lastT.current)}
-                    title="Use a different ad-free server"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" /> Another server
-                  </Button>
-                )}
               </div>
 
               {(info.description || info.snippet) ? (
@@ -386,7 +412,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                     <ChevronDown className={cn("h-3.5 w-3.5 transition", descOpen && "rotate-180")} />
                   </span>
                 </button>
-              ) : embed && fullPending ? (
+              ) : (embed && fullPending) || extrasPending ? (
                 <div className="blur-panel space-y-2 rounded-2xl p-3.5">
                   <Skeleton className="h-3 w-11/12" />
                   <Skeleton className="h-3 w-4/5" />
@@ -395,6 +421,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
               ) : null}
 
               {embed && <AdBlockTip />}
+              {extras?.commentsToken && <Comments key={id} token={extras.commentsToken} count={extras.commentCount} teaser={extras.teaser} sheet={!isLg} />}
             </>
           ) : (
             <div className="space-y-3">
@@ -461,7 +488,7 @@ function PlayerSlot({ id, startAt, className, style }: { id: string; startAt: nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   return (
-    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)} style={style}>
+    <div ref={ref} className={cn("relative overflow-hidden bg-black", className)} style={{ ...style, viewTransitionName: "ab-player" }}>
       <img src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`} alt="" className="h-full w-full object-cover opacity-60" />
     </div>
   );

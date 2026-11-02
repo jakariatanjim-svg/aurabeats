@@ -59,15 +59,10 @@ jobs:
             exit 1
           fi
 
-          VERSION=$(printf '%s' "$LATEST_TAG" | python3 -c 'import re,sys; m=re.fullmatch(r"v?(\d+)\.(\d+)", sys.stdin.read().strip()); print("%d.%d" % (int(m.group(1)), int(m.group(2))) if m else "")') || exit 1
-          if [ -z "$VERSION" ]; then
-            echo "::error::Latest release tag '$LATEST_TAG' carries no MAJOR.MINOR version. Publish a versioned release with \"Website — Release (Primary)\" first."
-            exit 1
-          fi
-
+          python3 .github/scripts/version.py latest "$LATEST_TAG"
+          VERSION=$(grep '^version=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2)
           {
             echo "tag=$LATEST_TAG"
-            echo "version=$VERSION"
             echo "asset=AuraBeats-$VERSION.apk"
           } >> "$GITHUB_OUTPUT"
           echo "Target release: $LATEST_TAG (version $VERSION)"
@@ -139,6 +134,44 @@ jobs:
                   raise SystemExit(1)
               text = text.replace(anchor, anchor + ' android:supportsPictureInPicture="true"', 1)
               path.write_text(text)
+          # Share → AuraBeats (text from YouTube & co.) and YouTube links
+          # opened with the app: the video plays inside AuraBeats.
+          if "android.intent.action.SEND" not in text:
+              anchor = 'android:name=".MainActivity"'
+              i = text.find(anchor)
+              j = text.find("</activity>", i)
+              if i < 0 or j < 0:
+                  print("::error::MainActivity not found in AndroidManifest.xml")
+                  raise SystemExit(1)
+              hosts = "".join('<data android:host="%s" />' % h for h in ["www.youtube.com", "youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"])
+              filters = (
+                  '<intent-filter android:label="Play in AuraBeats">'
+                  '<action android:name="android.intent.action.SEND" />'
+                  '<category android:name="android.intent.category.DEFAULT" />'
+                  '<data android:mimeType="text/plain" />'
+                  '</intent-filter>\n'
+                  '            <intent-filter>'
+                  '<action android:name="android.intent.action.VIEW" />'
+                  '<category android:name="android.intent.category.DEFAULT" />'
+                  '<category android:name="android.intent.category.BROWSABLE" />'
+                  '<data android:scheme="https" /><data android:scheme="http" />' + hosts +
+                  '</intent-filter>\n        '
+              )
+              text = text[:j] + "    " + filters + text[j:]
+              path.write_text(text)
+          # Sign in with microG RE (optional): Android must let the app see
+          # microG, and microG treats AuraBeats as the YouTube app (the same
+          # meta-data the ReVanced YouTube apps carry), so Google accepts it.
+          if "app.revanced.android.gms" not in text:
+              queries = '    <queries><package android:name="app.revanced.android.gms" /></queries>\n'
+              text = text.replace("</manifest>", queries + "</manifest>", 1)
+              spoof = (
+                  '\n        <meta-data android:name="app.revanced.android.gms.SPOOFED_PACKAGE_NAME" android:value="com.google.android.youtube" />'
+                  '\n        <meta-data android:name="app.revanced.android.gms.SPOOFED_PACKAGE_SIGNATURE" android:value="24bb24c05e47e0aefa68a58a766179d9b613a600" />'
+              )
+              k = text.find(">", text.find("<application"))
+              text = text[:k + 1] + spoof + text[k + 1:]
+              path.write_text(text)
           print("Declared:", add or "already present")
           PY
 
@@ -151,15 +184,14 @@ jobs:
           done
 
       # versionCode must strictly increase or Android refuses the APK as a
-      # downgrade. major*10 + minor tracks 1.0 -> 1.9 -> 2.0 as 10 -> 19 -> 20.
+      # downgrade. major*100 + minor*10 + patch keeps rising across X.Y and X.Y.Z
+      # (4.7 -> 470, 4.8.0 -> 480, 4.8.1 -> 481).
       - name: Stamp APK version
         id: stamp
         run: |
           VERSION="${{ steps.target.outputs.version }}"
-          VERSION_CODE=$(python3 -c "
-          major, minor = [int(p) for p in '$VERSION'.split('.')[:2]]
-          print(major * 10 + minor)
-          ") || exit 1
+          VERSION_CODE=$(python3 .github/scripts/version.py latest "v$VERSION" | grep '^code=' | cut -d= -f2)
+          [ -n "$VERSION_CODE" ] || exit 1
 
           python3 - "$VERSION" "$VERSION_CODE" <<'PY'
           import pathlib, re, sys

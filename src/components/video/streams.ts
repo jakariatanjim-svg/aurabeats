@@ -1,5 +1,6 @@
 /** Picks playable streams + quality ladder for the current device. */
 import { getVideoSettings } from "@/services/video/settings";
+import { hlsPlayable } from "./hls";
 import type { AudioStream, MuxedStream, StreamSet, VideoStream } from "@/services/video/types";
 
 let probe: HTMLVideoElement | null = null;
@@ -39,7 +40,7 @@ export interface Plan {
 }
 
 export function hlsSupported(): boolean {
-  return canPlay("application/vnd.apple.mpegurl");
+  return hlsPlayable();
 }
 
 export function makePlan(s: StreamSet): Plan | null {

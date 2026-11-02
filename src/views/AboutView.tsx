@@ -73,7 +73,7 @@ const PRINCIPLES = [
   {
     icon: Sparkles,
     title: "Three looks",
-    body: "Glassmorphism, Material UI and Liquid Glass, each in light and dark, with your own accent colour.",
+    body: "Material UI and Liquid Glass, each in light and dark, with your own accent colour.",
   },
   {
     icon: WaveformLogo,

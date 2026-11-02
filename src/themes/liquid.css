@@ -1,0 +1,253 @@
+/* ---------------------------- LIQUID GLASS ------------------------------
+   One clear-glass look: cards, bars and menus are lenses over soft
+   background light, with a specular rim. Settings → Blur off swaps every
+   glass surface for a solid one. */
+[data-theme="liquid"] {
+  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --glow-strength: 0;
+  --slider-fill: var(--c-accent);
+
+  /* Every surface is a clear lens: little fill, the colours behind it
+     blurred and saturated, and a bright rim of light around the edge. */
+  --panel-backdrop: blur(16px) saturate(200%) brightness(1.06);
+  --panel-radius: 26px;
+  --panel-hover-lift: 0px;
+  --panel-border: 0 solid transparent;
+
+  /* The app frame stays unblurred on purpose: a blurred parent would leave
+     the cards inside it nothing to bend (browsers stop a child's glass at a
+     blurred parent). */
+  --shell-backdrop: none;
+  --shell-radius: 32px;
+  --shell-border: 0 solid transparent;
+  --bar-radius: 32px;
+  --raised-border: 0 solid transparent;
+
+  /* the luminous rim (top-left brightest, like light through a lens) */
+  --lg-rim:
+    inset 1.5px 1.5px 1px -0.5px rgb(255 255 255 / var(--lg-rim-a, 0.7)),
+    inset -1px -1px 1px -0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.6)),
+    inset 0 0 0 1px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.22)),
+    inset 0 0 20px -6px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55));
+  --panel-highlight: var(--lg-rim);
+  --raised-highlight: var(--lg-rim);
+}
+
+[data-theme="liquid"][data-mode="dark"] {
+  --c-base: #0a0c18;
+  --c-elev: rgb(255 255 255 / 0.07);
+  --c-elev2: rgb(255 255 255 / 0.1);
+  --c-line: rgb(255 255 255 / 0.12);
+  --c-ink: #ffffff;
+  --c-ink2: #e0e2ea;
+  --c-ink3: #a3a7b6;
+  --glow: rgb(0 0 0 / 0.5);
+  --c-solid: #171a26;
+  --c-solid-strong: #1e2230;
+  --lg-rim-a: 0.5;
+
+  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.02) 45%, rgb(255 255 255 / 0.07));
+  --panel-shadow: 0 10px 30px -14px rgb(0 0 0 / 0.55);
+
+  --c-elev-strong: rgb(40 44 60 / 0.38);
+  --panel-backdrop-raised: blur(22px) saturate(210%) brightness(1.05);
+  --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.03) 50%, rgb(255 255 255 / 0.08));
+  --raised-shadow: 0 16px 40px -14px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.3);
+  --bar-shadow: var(--raised-shadow);
+
+  --shell-bg: rgb(255 255 255 / 0.025);
+  --shell-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 1px 1px 0 rgb(255 255 255 / 0.1);
+
+  /* colourful light behind the glass (from the accent colour) */
+  --app-bg-image:
+    radial-gradient(60% 55% at 8% 4%, color-mix(in oklab, var(--c-accent) 60%, transparent), transparent 70%),
+    radial-gradient(55% 50% at 96% 12%, color-mix(in oklab, var(--c-accent2) 50%, transparent), transparent 70%),
+    radial-gradient(60% 60% at 80% 96%, color-mix(in oklab, var(--c-accent) 45%, #f59e0b 20%), transparent 70%),
+    radial-gradient(50% 50% at 12% 92%, color-mix(in oklab, var(--c-accent2) 40%, #ec4899 25%), transparent 70%),
+    linear-gradient(160deg, #0d1330, #0a0c18 60%, #120c22);
+}
+
+[data-theme="liquid"][data-mode="light"] {
+  --c-base: #eef1f7;
+  /* Denser white lenses than dark mode: with thin ones the coloured light
+     behind showed through in patches, so cards and text sat on blotches. */
+  --c-elev: rgb(255 255 255 / 0.55);
+  --c-elev2: rgb(15 23 42 / 0.05);
+  --panel-backdrop: blur(22px) saturate(140%);
+  --c-line: rgb(30 41 59 / 0.12);
+  --c-ink: #0b0b0f;
+  --c-ink2: #2f3340;
+  --c-ink3: #5d6272;
+  --glow: rgb(30 41 59 / 0.25);
+  --shade: rgb(30 41 59);
+  --c-solid: #ffffff;
+  --c-solid-strong: #ffffff;
+  --lg-rim-a: 0.9;
+
+  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0.05) 45%, rgb(255 255 255 / 0.18));
+  --panel-shadow: 0 10px 28px -14px rgb(30 41 59 / 0.25), 0 1px 3px rgb(30 41 59 / 0.06);
+
+  --c-elev-strong: rgb(255 255 255 / 0.7);
+  --panel-backdrop-raised: blur(26px) saturate(150%);
+  --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0.35));
+  --raised-shadow: 0 14px 34px -14px rgb(30 41 59 / 0.3), 0 1px 4px rgb(30 41 59 / 0.08);
+  --bar-shadow: var(--raised-shadow);
+
+  --shell-bg: rgb(255 255 255 / 0.22);
+  --shell-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5), inset 1px 1px 0 rgb(255 255 255 / 0.8);
+
+  /* soft pastel light behind the glass: wide and faint, so it reads as a
+     tint of the whole background rather than coloured spots */
+  --app-bg-image:
+    radial-gradient(75% 65% at 0% 0%, color-mix(in oklab, var(--c-accent) 22%, transparent), transparent 75%),
+    radial-gradient(70% 60% at 100% 10%, color-mix(in oklab, var(--c-accent2) 18%, transparent), transparent 75%),
+    radial-gradient(75% 70% at 90% 100%, color-mix(in oklab, #fb923c 16%, transparent), transparent 75%),
+    radial-gradient(65% 60% at 5% 100%, color-mix(in oklab, #34d399 14%, transparent), transparent 75%),
+    linear-gradient(160deg, #f2f4fa, #eceff6 60%, #f4f1f8);
+}
+
+[data-blur="off"][data-theme="liquid"] {
+  --c-elev: var(--c-solid);
+  --c-elev-strong: var(--c-solid-strong);
+  --shell-bg: color-mix(in oklab, var(--c-solid) 70%, transparent);
+}
+[data-blur="off"][data-theme="liquid"] .ab-topbar {
+  --panel-fill: color-mix(in oklab, var(--c-base) 94%, transparent);
+}
+
+/* ==========================================================================
+   Liquid Glass component layer (iOS 26 patterns). Unlayered, so these win
+   over Tailwind utilities without !important.
+   ========================================================================== */
+
+/* SF-style type: bold, tightly tracked titles; nothing heavier than 700/800. */
+[data-theme="liquid"] .font-black {
+  font-weight: 800;
+}
+[data-theme="liquid"] .tracking-tight {
+  letter-spacing: -0.022em;
+}
+[data-theme="liquid"] :is(h1, h2) {
+  letter-spacing: -0.025em;
+}
+
+/* Hover lift is not an iOS idiom; press feedback is. */
+[data-theme="liquid"] .blur-panel[class*="hover:-translate-y"]:hover {
+  translate: none;
+}
+
+/* Navigation bar: it is sticky, so the page scrolls UNDER it. A see-through
+   bar showed the scrolled text on top of its own buttons (worst in light
+   mode); now it frosts what passes beneath, like the iOS bar on scroll. */
+[data-theme="liquid"] .ab-topbar {
+  --panel-fill: color-mix(in oklab, var(--c-base) 62%, transparent);
+  --panel-backdrop: blur(20px) saturate(160%);
+  --panel-sheen: none;
+  --panel-highlight: 0 0 #0000;
+  --panel-shadow: 0 0 #0000;
+  --panel-border: 0 solid transparent;
+  box-shadow: inset 0 -0.5px 0 var(--c-line);
+}
+/* Small round buttons / segmented control in the top bar = glass capsules. */
+[data-theme="liquid"] .ab-topbar :is(button.border, .ab-seg) {
+  border-color: transparent;
+  background-color: var(--c-elev-strong);
+  background-image: var(--raised-sheen);
+  -webkit-backdrop-filter: var(--panel-backdrop-raised);
+  backdrop-filter: var(--panel-backdrop-raised);
+  box-shadow: var(--raised-highlight), 0 4px 14px -8px rgb(0 0 0 / 0.25);
+}
+
+[data-theme="liquid"] .ab-nav-item {
+  border-radius: 14px;
+}
+[data-theme="liquid"] .ab-nav-item[data-active="true"] {
+  background-color: color-mix(in oklab, var(--c-accent) 16%, transparent);
+}
+[data-theme="liquid"] .ab-nav-mark {
+  display: none;
+}
+
+/* Tab bar: the iOS 26 floating glass capsule, detached from the edges. */
+[data-theme="liquid"] .ab-navbar {
+  left: calc(var(--sa-left) + 14px);
+  right: calc(var(--sa-right) + 14px);
+  bottom: calc(var(--sa-bottom) + 10px);
+  padding: 5px;
+  border-radius: 999px;
+}
+[data-theme="liquid"] .ab-navbar > div {
+  gap: 2px;
+}
+[data-theme="liquid"] .ab-navbtn {
+  min-height: 3.55rem;
+  border-radius: 999px;
+  box-shadow: none;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+[data-theme="liquid"] .ab-navbtn[data-active="true"] {
+  color: var(--c-accent);
+  /* the selected tab is a brighter drop of glass inside the capsule */
+  background-color: color-mix(in oklab, var(--c-ink) 9%, transparent);
+  box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.18);
+}
+[data-theme="liquid"] .ab-navline {
+  display: none;
+}
+/* Scrolled content now shows under the floating bars; give it room. */
+@media (max-width: 767px) {
+  [data-theme="liquid"] .ab-playerbar-wrap {
+    bottom: calc(var(--sa-bottom) + 5.4rem);
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+/* Springy press feedback on glass controls. */
+[data-theme="liquid"] :is(.ab-navbtn, .ab-primary):active {
+  scale: 0.94;
+  transition: scale 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Filter chips, outline buttons: little glass capsules with the rim. */
+[data-theme="liquid"] :is(.ab-chip, .ab-btn-outline) {
+  border-radius: 999px;
+  border-color: transparent;
+  background-color: var(--c-elev);
+  background-image: var(--panel-sheen);
+  -webkit-backdrop-filter: var(--panel-backdrop);
+  backdrop-filter: var(--panel-backdrop);
+  box-shadow: var(--lg-rim);
+}
+[data-theme="liquid"] .ab-chip[data-active="true"] {
+  background-color: color-mix(in oklab, var(--c-accent) 70%, transparent);
+  color: #fff;
+}
+/* Solid accent buttons keep their colour but get the glass rim too. */
+[data-theme="liquid"] :is(.ab-primary, .ab-btn-solid) {
+  box-shadow:
+    inset 1.5px 1.5px 1px -0.5px rgb(255 255 255 / 0.55),
+    inset -1px -1px 1px -0.5px rgb(255 255 255 / 0.3),
+    inset 0 0 16px -6px rgb(255 255 255 / 0.5),
+    0 8px 20px -10px color-mix(in oklab, var(--c-accent) 70%, transparent);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="liquid"][data-mode] {
+    --c-elev: var(--c-solid);
+    --c-elev-strong: var(--c-solid-strong);
+    --panel-backdrop: none;
+    --panel-backdrop-raised: none;
+  }
+}
+
+/* Phones: edge-to-edge content like a native iOS app; glass stays on the
+   floating tab bar and mini player. */
+@media (max-width: 639px) {
+  [data-theme="liquid"][data-mode] {
+    --shell-bg: transparent;
+    --shell-shadow: 0 0 #0000;
+    --shell-radius: 0px;
+  }
+}

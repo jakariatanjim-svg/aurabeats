@@ -16,6 +16,7 @@ export type RouteKey =
   | "video-search"
   | "video-subs"
   | "video-library"
+  | "video-shorts"
   | `watch:${string}`
   | `channel:${string}`;
 
@@ -55,6 +56,14 @@ export function pathToRoute(pathname: string): RouteKey {
     const id = clean.slice("/playlist/".length);
     return id ? (`playlist:${id}` as RouteKey) : "library";
   }
+  // YouTube-style addresses (youtube.com → aurabeats.pages.dev) open the video
+  if (clean === "/watch") {
+    const v = typeof location !== "undefined" ? new URLSearchParams(location.search).get("v") : null;
+    return v && /^[\w-]{11}$/.test(v) ? (`watch:${v}` as RouteKey) : "video";
+  }
+  const yt = clean.match(/^\/(?:shorts|live|embed)\/([\w-]{11})$/) ?? clean.match(/^\/([\w-]{11})$/);
+  if (yt && !["home", "search", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device", "video"].includes(yt[1]))
+    return `watch:${yt[1]}` as RouteKey;
   if (clean.startsWith("/watch/")) {
     const id = decodeURIComponent(clean.slice("/watch/".length));
     return id ? (`watch:${id}` as RouteKey) : "video";
@@ -66,7 +75,7 @@ export function pathToRoute(pathname: string): RouteKey {
   if (clean === "/video") return "video";
   if (clean.startsWith("/video/")) {
     const sub = clean.slice("/video/".length);
-    return (["search", "subs", "library"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
+    return (["search", "subs", "library", "shorts"].includes(sub) ? `video-${sub}` : "video") as RouteKey;
   }
   const key = clean.slice(1);
   const valid: RouteKey[] = ["home", "search", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device"];
@@ -86,6 +95,8 @@ export function routeLabel(route: RouteKey): string {
       return "Following";
     case "video-library":
       return "Video library";
+    case "video-shorts":
+      return "Shorts";
     case "home":
       return "Discover";
     case "search":

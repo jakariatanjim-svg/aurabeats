@@ -199,23 +199,6 @@ export function FullScreenPlayer() {
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {/* backdrop — the theme's own background, tinted by the artwork */}
-      <div className="ab-decor pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {art ? (
-          <img
-            src={art}
-            alt=""
-            className="absolute inset-0 h-full w-full scale-150 object-cover opacity-45 blur-[90px] saturate-150"
-          />
-        ) : (
-          <div className="absolute inset-0 scale-150 opacity-45 blur-[90px]" style={{ backgroundImage: gradientFrom(current.title) }} />
-        )}
-        {/* soft colour orbs, same language as the app background */}
-        <div className="absolute -top-24 -left-20 h-80 w-80 rounded-full bg-accent/30 blur-[90px]" />
-        <div className="absolute -right-16 bottom-10 h-96 w-96 rounded-full bg-accent2/25 blur-[100px]" />
-        <div className="absolute inset-0 bg-base/35" />
-      </div>
-
       <div className="relative z-10 flex h-full flex-col pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] pl-[var(--sa-left)]">
         {/* top bar */}
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">

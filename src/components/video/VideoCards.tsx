@@ -1,5 +1,6 @@
 import { avatarFor, directImg, rememberAvatar } from "@/utils/img";
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { HoverPreview, hoverPreviewOk } from "./HoverPreview";
 import { Clock, Radio as LiveIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount, formatTime, gradientFrom, initials, relativeTime } from "@/utils/format";
@@ -7,6 +8,7 @@ import { routeToPath } from "@/routes";
 import type { ChannelItem, VideoItem } from "@/services/video/types";
 import { ytImgProps } from "@/utils/ytImg";
 import { rememberVideo } from "@/services/video/hints";
+import { extensionCanStream, useExtension } from "@/services/yt/extension";
 
 /** The same Google picture on its other host (yt3.ggpht.com ⇄ yt3.googleusercontent.com). */
 function otherHost(u?: string): string | undefined {
@@ -24,8 +26,22 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
   if (rawSrc) rememberAvatar(channelId, rawSrc);
   const direct = directImg(rawSrc);
   const saved = avatarFor(channelId);
-  const tries = [direct, otherHost(direct), saved, otherHost(saved)].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
+  const [looked, setLooked] = useState<string | undefined>();
+  const tries = [direct, otherHost(direct), saved, otherHost(saved), looked].filter((u, i, all): u is string => !!u && all.indexOf(u) === i);
   const src = tries.find((u) => !failed.includes(u));
+  // nothing (left) to show: look the channel's picture up once (again when
+  // the extension connects — it is the fallback when the open servers fail)
+  const extReady = extensionCanStream(useExtension());
+  useEffect(() => {
+    if (src || !channelId) return;
+    let alive = true;
+    void import("@/services/video/avatarLookup")
+      .then((m) => m.lookupAvatar(channelId))
+      .then((u) => alive && u && setLooked(u));
+    return () => {
+      alive = false;
+    };
+  }, [src, channelId, extReady]);
   if (src) {
     return (
       <img
@@ -35,7 +51,7 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
         loading="lazy"
         referrerPolicy="no-referrer"
         onError={() => setFailed((f) => [...f, src])}
-        className={cn("shrink-0 rounded-full bg-ink/10 object-cover", className)}
+        className={cn("ab-fade shrink-0 rounded-full bg-ink/10 object-cover", className)}
       />
     );
   }
@@ -52,8 +68,26 @@ export function Avatar({ name, src: rawSrc, channelId, className }: { name: stri
 
 function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; className?: string }) {
   const [src, setSrc] = useState(v.thumbnail);
+  // PC: rest the mouse on it → a preview plays inside
+  const [preview, setPreview] = useState(false);
+  const timer = useRef(0);
+  const enter = () => {
+    if (v.live || !hoverPreviewOk()) return;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setPreview(true), 700);
+  };
+  const leave = () => {
+    window.clearTimeout(timer.current);
+    setPreview(false);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   return (
-    <div className={cn("relative aspect-video w-full overflow-hidden rounded-2xl bg-ink/[0.06]", className)}>
+    <div
+      data-vt-thumb={v.id}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+      className={cn("relative aspect-video w-full overflow-hidden rounded-2xl bg-ink/[0.06]", className)}
+    >
       <img
         {...(src === v.thumbnail ? ytImgProps(src) : { src })}
         alt=""
@@ -61,7 +95,7 @@ function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; cl
         decoding="async"
         referrerPolicy="no-referrer"
         onError={() => src !== `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg` && setSrc(`https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`)}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        className="ab-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
       />
       {v.live ? (
         <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
@@ -72,7 +106,8 @@ function Thumb({ v, progress, className }: { v: VideoItem; progress?: number; cl
           {formatTime(v.duration)}
         </span>
       ) : null}
-      {progress !== undefined && progress > 0 && (
+      {preview && <HoverPreview id={v.id} />}
+      {!preview && progress !== undefined && progress > 0 && (
         <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30">
           <span className="block h-full bg-red-600" style={{ width: `${Math.min(100, progress * 100)}%` }} />
         </span>
@@ -102,10 +137,11 @@ export const VideoCard = memo(function VideoCard({
   rememberVideo(v); // the watch page shows this instantly
   return (
     <div className="group min-w-0">
-      <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="focus-ring block rounded-2xl" aria-label={v.title}>
-        <Thumb v={v} progress={progress} />
+      {/* phones (one column): edge to edge, like the YouTube app */}
+      <a href={routeToPath(`watch:${v.id}`)} data-nav="true" className="focus-ring block rounded-2xl max-[519px]:-mx-4 max-[519px]:rounded-none" aria-label={v.title}>
+        <Thumb v={v} progress={progress} className="max-[519px]:rounded-none" />
       </a>
-      <div className="mt-2.5 flex gap-2.5">
+      <div className="mt-2.5 flex gap-2.5 max-[519px]:mt-2">
         {!hideChannel &&
           (v.authorId ? (
             <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" aria-label={v.author} className="shrink-0">
@@ -120,14 +156,16 @@ export const VideoCard = memo(function VideoCard({
           </a>
           {!hideChannel && (
             v.authorId ? (
-              <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" className="mt-0.5 block truncate text-xs text-ink3 hover:text-ink">
+              <a href={routeToPath(`channel:${v.authorId}`)} data-nav="true" className="mt-0.5 block truncate text-xs text-ink3 hover:text-ink max-[519px]:hidden">
                 {v.author}
               </a>
             ) : (
-              <p className="mt-0.5 truncate text-xs text-ink3">{v.author}</p>
+              <p className="mt-0.5 truncate text-xs text-ink3 max-[519px]:hidden">{v.author}</p>
             )
           )}
-          <p className="truncate text-xs text-ink3">{metaLine(v)}</p>
+          <p className="truncate text-xs text-ink3 max-[519px]:hidden">{metaLine(v)}</p>
+          {/* phones: channel · views · when on one line */}
+          <p className="mt-0.5 truncate text-xs text-ink3 min-[520px]:hidden">{[hideChannel ? "" : v.author, metaLine(v)].filter(Boolean).join(" · ")}</p>
         </div>
       </div>
     </div>
@@ -183,7 +221,7 @@ export function ChannelRow({ c }: { c: ChannelItem }) {
 
 export function VideoGrid({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("grid grid-cols-1 gap-x-4 gap-y-7 min-[520px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4", className)}>
+    <div className={cn("grid grid-cols-1 gap-x-4 gap-y-6 min-[520px]:grid-cols-2 min-[520px]:gap-y-7 lg:grid-cols-3 2xl:grid-cols-4", className)}>
       {children}
     </div>
   );

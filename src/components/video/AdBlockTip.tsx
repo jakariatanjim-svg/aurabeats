@@ -2,13 +2,15 @@
  * Website only: the official YouTube player may show ads, and a page can't
  * block them inside YouTube's iframe. A free blocker extension can, so we
  * explain how per browser (uBlock Origin Lite, Brave Shields, uBlock Origin).
- * We detect whether a blocker is active: red warning if not, blue if yes.
+ * Under the video: two status lights. Necessary: the AuraBeats extension
+ * (computers). For best experience: an ad blocker (yellow when missing).
  */
-import { useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, ShieldAlert, ShieldCheck, Smartphone, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown, ExternalLink, Loader2, RefreshCw, ShieldAlert, ShieldCheck, Smartphone } from "lucide-react";
 import { useAdBlock } from "./adblock";
-import { storage } from "@/utils/storage";
 import { cn } from "@/utils/cn";
+import { useExtension } from "@/services/yt/extension";
+import { routeToPath } from "@/routes";
 
 type Browser = "chrome" | "edge" | "brave" | "firefox" | "other";
 
@@ -27,7 +29,6 @@ function detectBrowser(): Browser {
 const UBO_LITE = "https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh";
 const UBO = "https://addons.mozilla.org/firefox/addon/ublock-origin/";
 
-const KEY = "video:adTipCollapsed";
 
 /** Always the newest GitHub release (no fixed tag), where the APK is attached. */
 export const APP_DOWNLOAD_URL = "https://github.com/jakariatanjim-svg/aurabeats/releases/latest";
@@ -145,78 +146,80 @@ export function AdBadge() {
     </span>
   ) : (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-red-500/12 px-2 py-0.5 text-[11px] font-bold text-red-500"
-      title="No ad blocker found. YouTube's player may show ads — see how to block them below."
+      className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400"
+      title="No ad blocker found. Recommended for the best experience — see below."
     >
       <ShieldAlert className="h-3 w-3" /> Ads not blocked
     </span>
   );
 }
 
-/**
- * Under the video: big red warning while no blocker is found (with the
- * per-browser how-to), a slim blue confirmation once one is detected.
- */
-export function AdBlockTip() {
-  const { state, recheck } = useAdBlock();
-  const [collapsed, setCollapsed] = useState(() => storage.get<boolean>(KEY, false));
-  const set = (v: boolean) => {
-    setCollapsed(v);
-    storage.set(KEY, v);
-  };
+type Tone = "ok" | "warn" | "bad" | "wait";
+const DOT: Record<Tone, string> = { ok: "bg-emerald-500", warn: "bg-amber-400", bad: "bg-red-500", wait: "bg-ink3 animate-pulse" };
 
-  if (state === "checking") return null;
-
-  if (state === "on") {
-    return (
-      <div className="flex items-center gap-2.5 rounded-2xl border border-blue-500/40 bg-blue-500/10 px-4 py-3 text-[13px]">
-        <ShieldCheck className="h-5 w-5 shrink-0 text-blue-500" />
-        <p className="leading-snug text-ink2">
-          <b className="text-blue-500">Extension detected.</b> YouTube's ads are blocked in this browser. Enjoy!
+function Light({ tone, group, name, value, action }: { tone: Tone; group: string; name: string; value: string; action?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-3.5 py-2.5">
+      <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", DOT[tone], tone === "ok" && "shadow-[0_0_0_3px_rgb(16_185_129/0.18)]")} />
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="text-[10px] font-bold tracking-wide text-ink3 uppercase">{group}</p>
+        <p className="truncate text-[13px] font-semibold text-ink">
+          {name} <span className="font-normal text-ink3">· {value}</span>
         </p>
       </div>
-    );
-  }
+      {action}
+    </div>
+  );
+}
 
-  if (collapsed) {
-    return (
-      <button
-        type="button"
-        onClick={() => set(false)}
-        className="flex w-full items-center gap-2 rounded-2xl border border-red-500/50 bg-red-500/10 px-4 py-3 text-left text-[13px] font-bold text-red-500 transition hover:bg-red-500/15"
-      >
-        <ShieldAlert className="h-5 w-5 shrink-0" />
-        <span className="flex-1">No ad blocker — YouTube will show ads.</span>
-        <span className="text-xs underline underline-offset-2">Fix it free</span>
-      </button>
-    );
-  }
+/** Computers with a Chromium browser can use the AuraBeats extension. */
+export const extensionPossible = () => typeof window !== "undefined" && matchMedia("(pointer: fine)").matches && !/Firefox\//.test(navigator.userAgent);
+
+/** Under the video: Necessary (extension) and For best experience (ad blocker). */
+export function AdBlockTip() {
+  const { state, recheck } = useAdBlock();
+  const ext = useExtension();
+  const [open, setOpen] = useState(false);
+  const showExt = extensionPossible();
 
   return (
-    <div className="relative rounded-2xl border-2 border-red-500/60 bg-red-500/10 p-4 sm:p-5">
-      <button
-        type="button"
-        onClick={() => set(true)}
-        aria-label="Make smaller"
-        className="absolute top-2.5 right-2.5 rounded-full p-1.5 text-red-500/80 transition hover:text-red-500"
-      >
-        <X className="h-4 w-4" />
-      </button>
-      <p className="flex items-center gap-2 pr-8 text-[15px] font-black text-red-500 sm:text-[1rem]">
-        <ShieldAlert className="h-6 w-6 shrink-0" /> No ad blocker found — YouTube will show ads
-      </p>
-      <p className="mt-1.5 mb-3 text-[12.5px] leading-relaxed text-ink2">
-        Videos on the website play in YouTube's official player, and a website isn't allowed to remove its ads. Your
-        browser can, for free, in a few seconds:
-      </p>
-      <AdBlockSteps />
-      <button
-        type="button"
-        onClick={recheck}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-red-500/50 px-3.5 py-1.5 text-xs font-bold text-red-500 transition hover:bg-red-500/10"
-      >
-        <RefreshCw className="h-3.5 w-3.5" /> I've set it up — check again
-      </button>
+    <div className="blur-panel divide-y divide-line overflow-hidden rounded-2xl p-0">
+      {showExt && (
+        <Light
+          tone={ext.connected ? "ok" : "bad"}
+          group="Necessary"
+          name="AuraBeats extension"
+          value={ext.connected ? "Connected" : "Not installed"}
+          action={
+            !ext.connected && (
+              <a href={routeToPath("settings")} data-nav="true" className="shrink-0 rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-ink/[0.05]">
+                Install
+              </a>
+            )
+          }
+        />
+      )}
+      <Light
+        tone={state === "on" ? "ok" : state === "checking" ? "wait" : "warn"}
+        group="For best experience"
+        name="Ad blocker"
+        value={state === "on" ? "Active" : state === "checking" ? "Checking…" : "Not found"}
+        action={
+          state === "off" && (
+            <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex shrink-0 items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-ink/[0.05]">
+              How <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+            </button>
+          )
+        }
+      />
+      {open && state === "off" && (
+        <div className="space-y-3 p-3.5">
+          <AdBlockSteps />
+          <button type="button" onClick={recheck} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-xs font-bold text-ink hover:bg-ink/[0.05]">
+            <RefreshCw className="h-3.5 w-3.5" /> Check again
+          </button>
+        </div>
+      )}
     </div>
   );
 }

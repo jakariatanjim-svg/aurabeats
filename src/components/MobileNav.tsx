@@ -1,4 +1,4 @@
-import { Heart, Home, Library, Rss, ThumbsUp } from "lucide-react";
+import { Clapperboard, Heart, Home, Library, Rss, ThumbsUp } from "lucide-react";
 import { cn } from "@/utils/cn";
 import type { RouteKey } from "@/routes";
 import { modeOf } from "@/components/video/AppModeSwitch";
@@ -11,6 +11,7 @@ const ITEMS: { key: RouteKey; label: string; icon: typeof Home }[] = [
 
 const VIDEO_ITEMS: { key: RouteKey; label: string; icon: typeof Home }[] = [
   { key: "video", label: "Home", icon: Home },
+  { key: "video-shorts", label: "Shorts", icon: Clapperboard },
   { key: "video-subs", label: "Following", icon: Rss },
   { key: "video-library", label: "Library", icon: Library },
 ];

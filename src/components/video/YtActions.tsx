@@ -3,7 +3,8 @@
  * back to the on-device versions (Follow, Watch later) in guest mode.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Bookmark, BookmarkCheck, Check, Lock, Plus, ThumbsUp } from "lucide-react";
+import { Bell, Bookmark, BookmarkCheck, Check, Lock, Plus, ThumbsUp } from "lucide-react";
+import { useBump } from "@/hooks/useBump";
 import { Button, Modal, Spinner } from "@/components/ui";
 import { cn } from "@/utils/cn";
 import { formatCount } from "@/utils/format";
@@ -37,18 +38,31 @@ export function FollowButton({ ch, className }: { ch: { id: string; name: string
   const session = useYtSession();
   useVideoLibrary();
   const subs = useYtSubscriptions(!!session);
-  const { toast } = usePlayer();
-  const [busy, setBusy] = useState(false);
 
   if (!session) {
-    const following = videoLibrary.isFollowing(ch.id);
-    return (
-      <Button variant={following ? "outline" : "solid"} className={className} onClick={() => videoLibrary.toggleFollow(ch)}>
-        {following ? "Following" : "Follow"}
-      </Button>
-    );
+    return <FollowLocal ch={ch} className={className} />;
   }
+  return <SubscribeYt ch={ch} className={className} loading={!subs.list && subs.loading} />;
+}
+
+function FollowLocal({ ch, className }: { ch: { id: string; name: string; avatar?: string }; className?: string }) {
+  const following = videoLibrary.isFollowing(ch.id);
+  const bump = useBump(following);
+  return (
+    <Button variant={following ? "outline" : "solid"} className={className} title="Follow on this device (no account)" onClick={() => videoLibrary.toggleFollow(ch)}>
+      <span key={bump} className={cn("inline-flex items-center gap-1.5", bump > 0 && following && "animate-pop")}>
+        {following && <Check className="h-3.5 w-3.5" />}
+        {following ? "Following" : "Follow"}
+      </span>
+    </Button>
+  );
+}
+
+function SubscribeYt({ ch, className, loading }: { ch: { id: string; name: string; avatar?: string }; className?: string; loading: boolean }) {
+  const { toast } = usePlayer();
+  const [busy, setBusy] = useState(false);
   const on = isSubscribed(ch.id);
+  const bump = useBump(on);
   const toggle = async () => {
     setBusy(true);
     try {
@@ -61,9 +75,12 @@ export function FollowButton({ ch, className }: { ch: { id: string; name: string
     }
   };
   return (
-    <Button variant={on ? "outline" : "solid"} className={className} disabled={busy || (!subs.list && subs.loading)} onClick={() => void toggle()}>
+    <Button variant={on ? "outline" : "solid"} className={className} title="Subscribe on your YouTube account" disabled={busy || loading} onClick={() => void toggle()}>
       {busy && <Spinner className="h-3.5 w-3.5" />}
-      {on ? "Subscribed" : "Subscribe"}
+      <span key={bump} className={cn("inline-flex items-center gap-1.5", bump > 0 && on && "animate-pop")}>
+        {on && !busy && <Bell className={cn("h-3.5 w-3.5", bump > 0 && "animate-wiggle")} />}
+        {on ? "Subscribed" : "Subscribe"}
+      </span>
     </Button>
   );
 }
@@ -72,6 +89,7 @@ export function FollowButton({ ch, className }: { ch: { id: string; name: string
 export function LikeButton({ id, likes }: { id: string; likes?: number }) {
   const session = useYtSession();
   const liked = useSyncExternalStore(subscribeLikes, () => likedNow(id), () => likedNow(id));
+  const likeBump = useBump(!!liked);
   const { toast } = usePlayer();
   // the public count already includes your earlier like: only adjust for changes made here
   const first = useRef<{ id: string; liked: boolean } | null>(null);
@@ -102,7 +120,7 @@ export function LikeButton({ id, likes }: { id: string; likes?: number }) {
           .catch((e) => toast(errText(e), "error"));
       }}
     >
-      <ThumbsUp className={cn("h-3.5 w-3.5", liked && "fill-current")} />
+      <ThumbsUp key={likeBump} className={cn("h-3.5 w-3.5", liked && "fill-current", likeBump > 0 && liked && "animate-like")} />
       {shown !== undefined ? formatCount(shown) : liked ? "Liked" : "Like"}
     </Button>
   );

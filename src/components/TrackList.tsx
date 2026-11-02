@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { FavIcon } from "@/components/FavIcon";
-import { formatCount, formatTime, gradientFrom, relativeTime } from "@/utils/format";
+import { formatCount, formatTime, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { Artwork, Button, Equalizer, IconButton, Modal } from "@/components/ui";
 import type { Track } from "@/types";
@@ -522,10 +522,6 @@ export function HeroCard({ track, context, eager = false }: { track: Track; cont
   const isCurrent = current?.id === track.id;
   return (
     <div className="blur-panel relative overflow-hidden p-5 sm:p-7">
-      <div
-        className="ab-decor pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full opacity-40 blur-3xl gradient-drift"
-        style={{ backgroundImage: gradientFrom(track.title) }}
-      />
       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
         <div
           className="relative mx-auto w-40 shrink-0 cursor-pointer select-none transition-transform duration-300 hover:scale-[1.02] active:scale-95 sm:mx-0 sm:w-44"

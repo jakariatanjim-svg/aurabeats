@@ -56,13 +56,28 @@ export function useYtPaged<T, P extends { next?: string } = YtPage>(
       if (cur.loading || (!reset && cur.started && !cur.next)) return;
       put(key, { ...cur, loading: true, error: null, started: true });
       try {
-        const page = await loadRef.current.load(reset ? undefined : cur.next);
-        const got = loadRef.current.pick(page);
         const base = reset ? [] : cur.items;
         const ids = new Set(base.map((x) => (x as { id?: string }).id));
-        const fresh = got.filter((x) => !ids.has((x as { id?: string }).id));
-        // an empty continuation means the end
-        put(key, { items: [...base, ...fresh], next: got.length ? page.next : undefined, loading: false, error: null, started: true });
+        let cursor = reset ? undefined : cur.next;
+        let fresh: T[] = [];
+        let next: string | undefined;
+        // A page can come back with nothing new (only removed/private videos
+        // or rows already shown) while YouTube still has more: follow its
+        // token a few times instead of treating that page as the end.
+        for (let hop = 0; hop < 4; hop++) {
+          const page = await loadRef.current.load(cursor);
+          const got = loadRef.current.pick(page);
+          fresh = got.filter((x) => {
+            const id = (x as { id?: string }).id;
+            if (ids.has(id)) return false;
+            ids.add(id);
+            return true;
+          });
+          next = page.next && page.next !== cursor ? page.next : undefined;
+          if (fresh.length || !next) break;
+          cursor = next;
+        }
+        put(key, { items: [...base, ...fresh], next, loading: false, error: null, started: true });
       } catch (e) {
         const now = (store.get(key) ?? EMPTY) as PagedState<T>;
         put(key, { ...now, loading: false, error: (e as Error)?.message || "Couldn't reach YouTube" });

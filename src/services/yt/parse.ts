@@ -243,11 +243,13 @@ export function readPage(root: unknown): YtPage {
 export function readPlaylistPage(root: unknown, isFirst: boolean): YtPage {
   const list = findAll(root, "playlistVideoListRenderer")[0] ?? findAll(root, "playlistVideoListContinuation")[0];
   if (list) return readPage(list);
-  // a continuation of the list carries playlist rows; anything else is the shelf
-  if (findAll(root, "playlistVideoRenderer").length) {
-    const actions = [...findAll(root, "appendContinuationItemsAction"), ...findAll(root, "reloadContinuationItemsCommand")];
-    return readPage(actions.length ? actions : root);
+  if (isFirst) {
+    // first page in an unknown layout: keep its videos, but don't load further
+    return { ...readPage(root), next: undefined };
   }
-  // first page in an unknown layout: keep its videos, but don't load further
-  return isFirst ? { ...readPage(root), next: undefined } : { videos: [], playlists: [], channels: [] };
+  // A continuation is only ever requested with the list's own token (the
+  // shelf's token is never followed), so whatever rows it carries — classic
+  // playlist rows or the newer lockups — belong to the list.
+  const actions = [...findAll(root, "appendContinuationItemsAction"), ...findAll(root, "reloadContinuationItemsCommand")];
+  return readPage(actions.length ? actions : root);
 }

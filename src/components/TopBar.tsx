@@ -1,6 +1,7 @@
+import { AccountMenu } from "@/components/AccountMenu";
 import { Floating } from "@/components/Floating";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Droplets, Moon, Palette, Settings, Shapes, Sparkles, Sun, Wifi } from "lucide-react";
+import { ArrowLeft, Check, Droplets, Moon, Palette, Settings, Shapes, Sun, Wifi } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ACCENTS, useTheme } from "@/hooks/useTheme";
 import { isVideoRoute, routeLabel, type RouteKey } from "@/routes";
@@ -17,7 +18,6 @@ function ThemeSwitch({ className }: { className?: string }) {
     <div className={cn("ab-seg blur-panel flex items-center gap-0.5 p-1", className)}>
       {(
         [
-          { key: "glassmorphism", label: "Glassmorphism", icon: Sparkles },
           { key: "material", label: "Material UI", icon: Shapes },
           { key: "liquid", label: "Liquid Glass", icon: Droplets },
         ] as const
@@ -189,6 +189,7 @@ export function TopBar({
           <ModeSwitch />
           <AccentPicker />
         </div>
+        <AccountMenu onNavigate={onNavigate} />
       </div>
     </header>
   );

@@ -66,7 +66,7 @@ export function Artwork({
           fetchPriority={eager ? "high" : "auto"}
           decoding={eager ? "sync" : "async"}
           onError={() => setStage((s) => s + 1)}
-          className="h-full w-full object-cover"
+          className="ab-fade h-full w-full object-cover"
           draggable={false}
         />
       ) : (
@@ -139,8 +139,8 @@ export function Button({
       type="button"
       className={cn(
         "focus-ring inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-40",
-        variant === "solid" && "bg-accent text-white hover:brightness-110 glow-soft shadow-[0_14px_34px_-18px_var(--glow)]",
-        variant === "outline" && "glass-inset border border-line bg-ink/[0.03] text-ink hover:border-accent hover:text-accent",
+        variant === "solid" && "ab-btn-solid bg-accent text-white hover:brightness-110 glow-soft shadow-[0_14px_34px_-18px_var(--glow)]",
+        variant === "outline" && "ab-btn-outline glass-inset border border-line bg-ink/[0.03] text-ink hover:border-accent hover:text-accent",
         variant === "ghost" && "text-ink2 hover:bg-ink/[0.08] hover:text-ink",
         className,
       )}

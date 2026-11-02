@@ -1,3 +1,4 @@
+import { useState } from "react";
 /** Music mode, signed in to YouTube: your YouTube Music playlists and their songs. */
 import { ArrowLeft, ListMusic, Play } from "lucide-react";
 import type { Track } from "@/types";
@@ -7,12 +8,16 @@ import { Button, SectionHeader } from "@/components/ui";
 import { EmptyState, ErrorState } from "@/components/states";
 import { TrackRow } from "@/components/TrackList";
 import { useBackHandler } from "@/utils/backStack";
-import { LoadMore } from "@/views/video/YtViews";
+import { LoadMore } from "@/components/LoadMore";
+import { directImg } from "@/utils/img";
 import { ytmPlaylists, ytmPlaylistSongs, type YtmPage, type YtmPlaylist } from "@/services/yt/music";
 
-function Cover({ src, className }: { src?: string; className: string }) {
-  return src ? (
-    <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" className={`${className} object-cover`} />
+function Cover({ src: raw, className }: { src?: string; className: string }) {
+  // straight from Google's image servers (no extension needed); placeholder if it fails
+  const [bad, setBad] = useState<string | null>(null);
+  const src = directImg(raw);
+  return src && bad !== src ? (
+    <img key={src} src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(src)} className={`ab-fade ${className} object-cover`} />
   ) : (
     <span className={`${className} flex items-center justify-center bg-accent/15 text-accent`}>
       <ListMusic className="h-1/3 w-1/3" />
