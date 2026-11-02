@@ -55,6 +55,7 @@ import { videoLibrary } from "@/hooks/useVideoLibrary";
 import { extensionCanStream, useExtension } from "@/services/yt/extension";
 import { DirectDock, useDirect } from "./DirectDock";
 import { navMemory } from "@/utils/navMemory";
+import { heldTooSoon } from "@/utils/keyRepeat";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
 import { getVideoAspect } from "@/services/video/api";
@@ -1134,12 +1135,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setSeekFx((f) => ({ side, secs: f && f.side === side && now - f.key < 1000 ? f.secs + Math.abs(step) : Math.abs(step), key: now }));
   };
   useEffect(() => {
-    if (mode === "mini") return;
+    if (mode !== "inline") return; // hidden or corner player: keys stay with the page
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      if (["arrowleft", "arrowright", "j", "l"].includes(k) && heldTooSoon(e)) {
+        e.preventDefault();
+        return;
+      }
       if (k === " " || k === "k") togglePlay();
       else if (k === "arrowleft") keySeek(-5);
       else if (k === "arrowright") keySeek(5);

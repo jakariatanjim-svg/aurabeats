@@ -48,6 +48,7 @@ import type { VideoDetails } from "@/services/video/types";
 import { getVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 import { attachHls } from "./hls";
+import { heldTooSoon } from "@/utils/keyRepeat";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
 
@@ -158,6 +159,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const badQualities = useRef(new Set<number>());
   const lastTap = useRef(0);
+  // big centre play button: phones only (computers click the picture, like YouTube)
+  const [touchUi, setTouchUi] = useState(() => typeof window !== "undefined" && !window.matchMedia("(hover: hover) and (pointer: fine)").matches);
   const cbs = useRef({ onTime, onEnded, onFatal, onPlayStart });
   cbs.current = { onTime, onEnded, onFatal, onPlayStart };
 
@@ -730,7 +733,13 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // the corner mini player never takes the keyboard (like the embedded one)
+      if (mini) return;
       const k = e.key.toLowerCase();
+      if (["arrowleft", "arrowright", "j", "l"].includes(k) && heldTooSoon(e)) {
+        e.preventDefault();
+        return;
+      }
       if (k === " " || k === "k") togglePlay();
       else if (k === "arrowleft") stepSeek(-5);
       else if (k === "arrowright") stepSeek(5);
@@ -738,7 +747,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       else if (k === "l") stepSeek(10);
       else if (k === "f") toggleFs();
       else if (k === "t" && onTheater && fs === "off") onTheater();
-      else if (k === "i" && onMini && !mini) {
+      else if (k === "i" && onMini) {
         if (fs !== "off") void exitFs();
         onMini();
       }
@@ -957,22 +966,30 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const isTouch = e.pointerType !== "mouse";
+    if (!isTouch) {
+      // computer: click = play / pause, double-click anywhere = full screen (YouTube)
+      if (now - lastTap.current < 300) {
+        lastTap.current = 0;
+        togglePlay(); // undo the first click's toggle
+        toggleFs();
+      } else {
+        lastTap.current = now;
+        togglePlay();
+      }
+      poke();
+      return;
+    }
     if (now - lastTap.current < 300 && (x < 0.35 || x > 0.65)) {
-      // double tap on the sides = ±10 s (more taps keep adding)
+      // phone: double tap on the sides = ±10 s (more taps keep adding)
       stepSeek(x < 0.5 ? -10 : 10);
       lastTap.current = now;
       return;
     }
     lastTap.current = now;
-    if (isTouch) {
-      if (controls && playing) {
-        setControls(false);
-        setMenu(false);
-      } else poke();
-    } else {
-      togglePlay();
-      poke();
-    }
+    if (controls && playing) {
+      setControls(false);
+      setMenu(false);
+    } else poke();
   };
   const onSurfaceCancel = (e: RPointerEvent<HTMLDivElement>) => {
     const h = hold.current;
@@ -1010,6 +1027,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
       ref={boxRef}
       data-video-player
       onPointerMove={(e) => e.pointerType === "mouse" && poke()}
+      onPointerDown={(e) => setTouchUi(e.pointerType !== "mouse")}
       className={cn(
         "group/player relative w-full overflow-hidden bg-black text-white select-none",
         // fills the spot the page reserved (shaped like the video)
@@ -1082,7 +1100,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         {buffering && wantPlay.current ? (
           <Loader2 className={cn("animate-spin text-white/90 drop-shadow", inPip ? "h-8 w-8" : mini ? "h-16 w-16" : "h-12 w-12")} />
         ) : (
-          showUi && (
+          showUi && touchUi && (
             <button
               type="button"
               onClick={togglePlay}

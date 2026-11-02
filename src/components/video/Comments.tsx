@@ -54,8 +54,8 @@ export function CommentsSheet({ token, count, open, onClose, side }: { token: st
       <div className={cn("fixed inset-0 z-[79]", side ? "bg-transparent" : "bg-black/40")} onClick={onClose} />
       <div
         className={cn(
-          "fixed z-[80] flex flex-col border-line bg-bg shadow-2xl",
-          side ? "top-20 right-6 bottom-6 w-[420px] rounded-3xl border" : "inset-x-0 bottom-0 h-[68dvh] rounded-t-3xl border-t",
+          "blur-panel surface-raised fixed z-[80] flex flex-col border-line shadow-2xl",
+          side ? "top-20 right-6 bottom-6 w-[420px] rounded-3xl border" : "inset-x-0 bottom-0 h-[68dvh] rounded-t-3xl rounded-b-none border-t",
         )}
       >
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
@@ -166,7 +166,7 @@ function CommentList({ token, count, bare }: { token: string; count?: string; ba
               onClick={() => s.token !== first && setFirst(s.token)}
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-bold",
-                s.token === first || (first === token && s.selected) ? "bg-ink text-bg" : "bg-ink/[0.06] text-ink2 hover:bg-ink/10",
+                s.token === first || (first === token && s.selected) ? "bg-accent text-white" : "bg-ink/[0.06] text-ink2 hover:bg-ink/10",
               )}
             >
               {s.title}
