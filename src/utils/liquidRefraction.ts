@@ -19,10 +19,17 @@
  * (clear glass, little frost), but only those on screen; phones keep it to
  * the floating surfaces.
  *
+ * Speed: the bend maps are drawn in a background worker (no page hitch when
+ * a new size appears), finished filters are kept for reuse when a surface
+ * comes back (menus reopening, cards scrolling back in), and every pass
+ * measures all surfaces first and writes after (no layout thrash).
+ *
  * Browsers: only Chromium draws SVG filters behind an element (Chrome, Edge,
  * Android app). Elsewhere, with Blur off or "reduce transparency", nothing
  * runs and the normal frosted glass stays.
  */
+
+import { lensPixels, type LensJob } from "./lensMath";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const TARGETS = ".surface-raised, .ab-topbar :is(button.border, .ab-seg), .ab-glass-lens";
@@ -32,6 +39,7 @@ const MAX_LENSED = 48; // never more lensed surfaces than this at once
 const MAX_AREA = 900_000; // px² — bigger surfaces keep the plain frost
 const MAX_CARD_AREA = 260_000; // content cards: smaller ones only (many on screen)
 const MAX_DPR = 2;
+const MAX_SPARE = 32; // finished filters kept for surfaces that come back
 
 interface Entry {
   id: string;
@@ -41,6 +49,19 @@ interface Entry {
 interface Applied {
   key: string;
 }
+interface Spec {
+  w: number;
+  h: number;
+  radius: number;
+  blur: number;
+  spec: number;
+  sat: number;
+}
+interface Maps {
+  bend: string;
+  spec: string;
+  max: number;
+}
 
 let running = false;
 let host: SVGSVGElement | null = null;
@@ -49,121 +70,74 @@ let fringe = false;
 let rich = false;
 let io: IntersectionObserver | null = null;
 const onScreen = new Set<HTMLElement>();
+const watched = new Set<HTMLElement>();
 const targets = () => (rich ? `${TARGETS}, ${CARDS}` : TARGETS);
+/** filters by look; refs 0 = spare (kept for reuse, oldest first) */
 const cache = new Map<string, Entry>();
+const building = new Map<string, Promise<Entry | null>>();
 const applied = new Map<HTMLElement, Applied>();
+/** the look each surface should have now (async builds check it) */
+const wanted = new Map<HTMLElement, string>();
 let ro: ResizeObserver | null = null;
 let mo: MutationObserver | null = null;
 const queue = new Set<HTMLElement>();
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
-/* ------------------------------ the optics ------------------------------ */
+/* --------------------------- drawing the maps ---------------------------- */
 
-/** Height of the curved rim, 0 at the outer edge → 1 where it turns flat. */
-const rimShape = (x: number) => Math.pow(Math.max(0, 1 - (1 - Math.min(1, Math.max(0, x))) ** 4), 0.25);
+let worker: Worker | null | undefined; // undefined = not tried yet
+let jobId = 0;
+const jobs = new Map<number, (m: Maps | null) => void>();
 
-/** Sideways shift (px) of light passing the rim, sampled outer → inner. */
-function bendProfile(bezel: number, thickness: number, ior = 1.5, n = 96): { p: Float32Array; max: number } {
-  const p = new Float32Array(n);
-  const eta = 1 / ior;
-  let max = 0;
-  for (let i = 0; i < n; i++) {
-    const x = i / n;
-    const a = Math.max(0, x - 1e-4);
-    const b = Math.min(1, x + 1e-4);
-    const slope = (rimShape(b) - rimShape(a)) / (b - a);
-    const len = Math.hypot(slope, 1);
-    const nx = -slope / len;
-    const ny = -1 / len;
-    const k = 1 - eta * eta * (1 - ny * ny);
-    if (k < 0) continue;
-    const c = eta * ny + Math.sqrt(k);
-    const tx = -c * nx;
-    const ty = eta - c * ny;
-    if (ty <= 1e-6) continue;
-    const v = tx * ((rimShape(x) * bezel + thickness) / ty);
-    p[i] = v;
-    if (Math.abs(v) > max) max = Math.abs(v);
+function getWorker(): Worker | null {
+  if (worker !== undefined) return worker;
+  try {
+    if (typeof OffscreenCanvas === "undefined" || typeof Worker === "undefined") throw new Error("no worker");
+    const w = new Worker(new URL("./lensWorker.ts", import.meta.url), { type: "module" });
+    w.onmessage = (e: MessageEvent<{ id: number; fail?: boolean } & Maps>) => {
+      const done = jobs.get(e.data.id);
+      jobs.delete(e.data.id);
+      done?.(e.data.fail ? null : e.data);
+    };
+    w.onerror = () => {
+      // worker unavailable: draw on the page from now on
+      w.terminate();
+      worker = null;
+      jobs.forEach((done) => done(null));
+      jobs.clear();
+    };
+    worker = w;
+  } catch {
+    worker = null;
   }
-  return { p, max };
+  return worker;
 }
 
-// light comes from the top-left, a little more from above
-const LX = -0.55;
-const LY = -0.835;
-
-/** The bend map as an image (red = sideways, green = up/down, 128 = none)
- *  and the matching edge-light image (white, strength in alpha). */
-function bendMap(w: number, h: number, radius: number, bezel: number, prof: Float32Array, max: number, dpr: number): { bend: string; spec: string } | null {
-  const W = Math.max(1, Math.round(w * dpr));
-  const H = Math.max(1, Math.round(h * dpr));
+function drawHere(job: LensJob): Maps | null {
+  const px = lensPixels(job);
   const cv = document.createElement("canvas");
-  cv.width = W;
-  cv.height = H;
+  cv.width = px.W;
+  cv.height = px.H;
   const ctx = cv.getContext("2d");
   if (!ctx) return null;
-  const img = ctx.createImageData(W, H);
-  const px = new Uint32Array(img.data.buffer);
-  px.fill(0xff008080); // little-endian RGBA (128,128,0,255): no bend
-  const lit = ctx.createImageData(W, H);
-  const ld = lit.data;
-  // rim steepness along the bezel, outer → inner (where light reflects most)
-  const steep = new Float32Array(prof.length);
-  for (let i = 0; i < prof.length; i++) {
-    const x = i / prof.length;
-    const a = Math.max(0, x - 0.01);
-    const b = Math.min(1, x + 0.01);
-    steep[i] = Math.min(1, ((rimShape(b) - rimShape(a)) / (b - a)) * 0.35);
-  }
-  const r = Math.min(Math.round(radius * dpr), W >> 1, H >> 1);
-  const bz = Math.min(Math.max(1, Math.round(bezel * dpr)), r);
-  if (r > 0 && max > 0) {
-    const outer2 = (r + 1) ** 2;
-    const inner2 = (r - bz) ** 2;
-    const spanX = W - 2 * r;
-    const spanY = H - 2 * r;
-    const n = prof.length;
-    const d = img.data;
-    for (let y = 0; y < H; y++) {
-      const py = y + 0.5;
-      const cy = py < r ? py - r : py >= H - r ? py - r - spanY : 0;
-      // rows in the flat middle band only touch the left/right rims
-      for (let x = 0; x < W; x++) {
-        const pxx = x + 0.5;
-        const cx = pxx < r ? pxx - r : pxx >= W - r ? pxx - r - spanX : 0;
-        if (cx === 0 && cy === 0) {
-          // flat centre: jump to the right rim
-          if (x < W - r - 1) x = W - r - 1;
-          continue;
-        }
-        const d2 = cx * cx + cy * cy;
-        if (d2 > outer2 || d2 < inner2) continue;
-        const dist = Math.sqrt(d2);
-        const idx = Math.min(n - 1, Math.max(0, (((r - dist) / bz) * n) | 0));
-        const v = prof[idx];
-        const fade = dist <= r ? 1 : Math.max(0, 1 - (dist - r));
-        const i = (y * W + x) * 4;
-        // edge light: facing the light → bright, the far side → a softer
-        // glint (light leaving the glass), both hugging the outer rim
-        const nx = cx / dist;
-        const ny = cy / dist;
-        const facing = nx * LX + ny * LY;
-        const depth = (r - dist) / dpr; // css px in from the edge
-        const hug = Math.exp(-Math.max(0, depth) / 2.2) * 0.85 + steep[idx] * 0.35;
-        const glint = (facing > 0 ? facing ** 1.6 : 0.5 * (-facing) ** 2.2) * hug + 0.12 * Math.exp(-Math.max(0, depth) / 0.9);
-        ld[i] = ld[i + 1] = ld[i + 2] = 255;
-        ld[i + 3] = Math.min(255, glint * 255 * fade);
-        if (!v) continue;
-        d[i] = 128 + ((-cx / dist) * v * 127 * fade) / max;
-        d[i + 1] = 128 + ((-cy / dist) * v * 127 * fade) / max;
-      }
-    }
-  }
-  ctx.putImageData(img, 0, 0);
+  ctx.putImageData(new ImageData(px.bend, px.W, px.H), 0, 0);
   const bend = cv.toDataURL("image/png");
-  ctx.clearRect(0, 0, W, H);
-  ctx.putImageData(lit, 0, 0);
-  return { bend, spec: cv.toDataURL("image/png") };
+  ctx.clearRect(0, 0, px.W, px.H);
+  ctx.putImageData(new ImageData(px.lit, px.W, px.H), 0, 0);
+  return { bend, spec: cv.toDataURL("image/png"), max: px.max };
+}
+
+async function drawMaps(job: LensJob): Promise<Maps | null> {
+  const w = getWorker();
+  if (w) {
+    const m = await new Promise<Maps | null>((resolve) => {
+      const id = ++jobId;
+      jobs.set(id, resolve);
+      w.postMessage({ id, job });
+    });
+    if (m) return m;
+  }
+  return drawHere(job);
 }
 
 const svgEl = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<string, string | number>) => {
@@ -172,20 +146,17 @@ const svgEl = <K extends keyof SVGElementTagNameMap>(name: K, attrs: Record<stri
   return e;
 };
 
-function buildFilter(w: number, h: number, radius: number, blur: number, spec: number, sat: number): SVGFilterElement | null {
+async function buildFilter({ w, h, radius, blur, spec, sat }: Spec): Promise<SVGFilterElement | null> {
   const dpr = Math.min(MAX_DPR, window.devicePixelRatio || 1);
-  const bezel = Math.max(6, Math.min(radius, 24, Math.min(w, h) * 0.34));
-  const { p, max } = bendProfile(bezel, Math.min(52, bezel * 2.6));
-  const maps = bendMap(w, h, Math.max(radius, bezel), bezel, p, max, dpr);
+  const maps = await drawMaps({ w, h, radius, dpr });
   if (!maps) return null;
-  const url = maps.bend;
   const f = svgEl("filter", {
     id: `ab-lens-${++uid}`,
     "color-interpolation-filters": "sRGB",
   });
   f.appendChild(svgEl("feGaussianBlur", { in: "SourceGraphic", stdDeviation: blur, result: "frost" }));
-  f.appendChild(svgEl("feImage", { href: url, x: 0, y: 0, width: w, height: h, preserveAspectRatio: "none", result: "map" }));
-  const scale = max * 1.1;
+  f.appendChild(svgEl("feImage", { href: maps.bend, x: 0, y: 0, width: w, height: h, preserveAspectRatio: "none", result: "map" }));
+  const scale = maps.max * 1.1;
   const bend = (s: number, result: string) =>
     f.appendChild(svgEl("feDisplacementMap", { in: "frost", in2: "map", scale: s, xChannelSelector: "R", yChannelSelector: "G", result }));
   if (fringe) {
@@ -232,7 +203,22 @@ function svgHost(): SVGSVGElement {
   return host;
 }
 
+/** Drop the oldest unused filters beyond the spare allowance. */
+function pruneSpare() {
+  let spare = 0;
+  cache.forEach((e) => e.refs <= 0 && spare++);
+  if (spare <= MAX_SPARE) return;
+  for (const [key, e] of cache) {
+    if (spare <= MAX_SPARE) break;
+    if (e.refs > 0) continue;
+    e.node.remove();
+    cache.delete(key);
+    spare--;
+  }
+}
+
 function release(el: HTMLElement) {
+  wanted.delete(el);
   const a = applied.get(el);
   if (!a) return;
   applied.delete(el);
@@ -242,47 +228,96 @@ function release(el: HTMLElement) {
   el.removeAttribute("data-lg-lens");
   const e = cache.get(a.key);
   if (e && --e.refs <= 0) {
-    e.node.remove();
+    // keep it (newest last) for when this look comes back
     cache.delete(a.key);
+    cache.set(a.key, e);
+    pruneSpare();
   }
 }
 
-function apply(el: HTMLElement) {
-  if (!running || !el.isConnected || !onScreen.has(el)) return release(el);
-  if (!applied.has(el) && applied.size >= MAX_LENSED) return;
+function attach(el: HTMLElement, key: string, e: Entry) {
+  e.refs++;
+  if (applied.has(el)) {
+    const keepWanted = wanted.get(el);
+    release(el);
+    if (keepWanted) wanted.set(el, keepWanted);
+  }
+  applied.set(el, { key });
+  ro?.observe(el);
+  el.style.setProperty("backdrop-filter", `url("#${e.id}")`);
+  el.setAttribute("data-lg-lens", "");
+}
+
+function build(key: string, spec: Spec): Promise<Entry | null> {
+  let p = building.get(key);
+  if (!p) {
+    p = buildFilter(spec)
+      .then((node) => {
+        if (!node || !running) return null;
+        svgHost().appendChild(node);
+        const e: Entry = { id: node.id, refs: 0, node };
+        cache.set(key, e);
+        pruneSpare();
+        return e;
+      })
+      .catch(() => null)
+      .finally(() => building.delete(key));
+    building.set(key, p);
+  }
+  return p;
+}
+
+/** Read one surface (no writes): the look it needs, or null for plain frost. */
+function measure(el: HTMLElement): { key: string; spec: Spec } | null {
+  if (!running || !el.isConnected || !onScreen.has(el)) return null;
   const w = Math.round(el.offsetWidth);
   const h = Math.round(el.offsetHeight);
-  const cs = getComputedStyle(el);
-  // hidden, tiny, huge or square-cornered surfaces keep the plain frost
   const card = !el.matches(TARGETS);
-  if (w < 24 || h < 20 || w * h > (card ? MAX_CARD_AREA : MAX_AREA) || cs.display === "none" || cs.visibility === "hidden") return release(el);
+  // hidden, tiny, huge or square-cornered surfaces keep the plain frost
+  if (w < 24 || h < 20 || w * h > (card ? MAX_CARD_AREA : MAX_AREA)) return null;
+  const cs = getComputedStyle(el);
+  if (cs.display === "none" || cs.visibility === "hidden") return null;
   const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, w / 2, h / 2);
-  if (radius < 6) return release(el);
+  if (radius < 6) return null;
   // frost strength follows the theme: dense for menus/sheets, lighter for
   // bars, clear for content cards (strong computers only)
-
   const blur = card
     ? Number(cs.getPropertyValue("--lg-card-blur")) || 4
     : Number(cs.getPropertyValue("--lg-lens-blur")) || (w * h > 60_000 ? 14 : 9);
   const spec = Math.round((Number(cs.getPropertyValue("--lg-spec")) || 0.7) * 100) / 100;
   const sat = card ? 1.6 : 1.9;
   const key = `${w}x${h}r${Math.round(radius)}b${blur}s${spec}${card ? "c" : ""}${fringe ? "f" : ""}`;
-  const prev = applied.get(el);
-  if (prev?.key === key) return;
-  let e = cache.get(key);
-  if (!e) {
-    const node = buildFilter(w, h, radius, blur, spec, sat);
-    if (!node) return;
-    svgHost().appendChild(node);
-    e = { id: node.id, refs: 0, node };
-    cache.set(key, e);
+  return { key, spec: { w, h, radius, blur, spec, sat } };
+}
+
+function flush(els: HTMLElement[]) {
+  // all reads first, then all writes: no forced layout per surface
+  const plans = els.map((el) => [el, measure(el)] as const);
+  for (const [el, plan] of plans) {
+    if (!plan) {
+      release(el);
+      continue;
+    }
+    const { key, spec } = plan;
+    if (applied.get(el)?.key === key) {
+      wanted.set(el, key);
+      continue;
+    }
+    if (!applied.has(el) && applied.size >= MAX_LENSED) continue;
+    wanted.set(el, key);
+    const ready = cache.get(key);
+    if (ready) {
+      attach(el, key, ready);
+      continue;
+    }
+    void build(key, spec).then((e) => {
+      // still on screen and still this size?
+      if (!e || !running || wanted.get(el) !== key || !el.isConnected || !onScreen.has(el)) return;
+      if (applied.get(el)?.key === key) return;
+      if (!applied.has(el) && applied.size >= MAX_LENSED) return;
+      attach(el, key, e);
+    });
   }
-  e.refs++;
-  if (prev) release(el);
-  applied.set(el, { key });
-  ro?.observe(el);
-  el.style.setProperty("backdrop-filter", `url("#${e.id}")`);
-  el.setAttribute("data-lg-lens", "");
 }
 
 function schedule(el: HTMLElement) {
@@ -292,17 +327,21 @@ function schedule(el: HTMLElement) {
   flushTimer = setTimeout(() => {
     const els = [...queue];
     queue.clear();
-    requestAnimationFrame(() => els.forEach(apply));
+    requestAnimationFrame(() => flush(els));
   }, 120);
 }
 
 /** Watch a surface: it is lensed while (nearly) on screen. */
 function watch(el: HTMLElement) {
+  if (watched.has(el)) return;
+  watched.add(el);
   io?.observe(el);
 }
 function unwatch(el: HTMLElement) {
+  if (!watched.delete(el)) return;
   io?.unobserve(el);
   onScreen.delete(el);
+  queue.delete(el);
   release(el);
 }
 
@@ -341,6 +380,7 @@ export function startLens() {
           schedule(el);
         } else {
           onScreen.delete(el);
+          queue.delete(el);
           release(el);
         }
       }
@@ -348,21 +388,24 @@ export function startLens() {
     { rootMargin: "160px" },
   );
   mo = new MutationObserver((recs) => {
+    const sel = targets();
+    let removed = false;
     for (const r of recs) {
       if (r.type === "attributes") {
         const t = r.target as HTMLElement;
-        if (t.matches(targets())) {
-          watch(t);
-          schedule(t);
-        } else unwatch(t);
+        if (t.matches(sel)) {
+          if (watched.has(t)) schedule(t);
+          else watch(t);
+        } else if (watched.has(t)) unwatch(t);
         continue;
       }
       r.addedNodes.forEach((n) => n instanceof HTMLElement && scan(n));
-      r.removedNodes.forEach((n) => {
-        if (!(n instanceof HTMLElement)) return;
-        for (const el of [...onScreen]) if (!el.isConnected) unwatch(el);
-        for (const el of [...applied.keys()]) if (!el.isConnected) release(el);
-      });
+      if (r.removedNodes.length) removed = true;
+    }
+    // one sweep per batch, not one per removed node
+    if (removed) {
+      for (const el of [...watched]) if (!el.isConnected) unwatch(el);
+      for (const el of [...applied.keys()]) if (!el.isConnected) release(el);
     }
   });
   mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
@@ -378,9 +421,11 @@ export function stopLens() {
   ro = mo = null;
   io = null;
   onScreen.clear();
+  watched.clear();
   clearTimeout(flushTimer);
   queue.clear();
   for (const el of [...applied.keys()]) release(el);
+  wanted.clear();
   cache.forEach((e) => e.node.remove());
   cache.clear();
 }

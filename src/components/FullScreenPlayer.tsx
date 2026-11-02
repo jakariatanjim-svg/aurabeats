@@ -114,9 +114,9 @@ export function FullScreenPlayer() {
     storage.set("lyricsRomanized", v);
   };
 
-  // Phones: lyrics is a page beside the artwork. Swipe right opens it (it
-  // comes in from the left); on lyrics, a swipe either way goes back.
-  // Swiping left on the artwork only rubber-bands. Imperative transforms.
+  // Phones: lyrics is a page to the right of the artwork. A right-to-left
+  // swipe opens it; on lyrics, a swipe either way goes back. A left-to-right
+  // swipe on the artwork only rubber-bands. Imperative transforms.
   const isPhone = !useMinWidth(768);
   const pagerRef = useRef<HTMLDivElement>(null);
   const artPaneRef = useRef<HTMLDivElement>(null);
@@ -154,7 +154,7 @@ export function FullScreenPlayer() {
     const lyr = lyricsPaneRef.current;
     if (!showLyrics) {
       placePane(art, dx, animate);
-      if (dx > 0) placePane(lyr, dx - w, animate);
+      if (dx < 0) placePane(lyr, w + dx, animate);
       else if (lyr) lyr.style.visibility = "hidden";
     } else {
       placePane(lyr, dx, animate);
@@ -188,7 +188,7 @@ export function FullScreenPlayer() {
     s.v = 0.7 * ((t.clientX - s.lastX) / Math.max(1, now - s.lastT)) + 0.3 * s.v;
     s.lastX = t.clientX;
     s.lastT = now;
-    s.dx = !showLyrics && dx < 0 ? dx * 0.2 : dx; // nothing to the right of the artwork
+    s.dx = !showLyrics && dx > 0 ? dx * 0.2 : dx; // nothing to the left of the artwork
     layoutPanes(s.dx, false);
   };
   const onPagerTouchEnd = () => {
@@ -197,7 +197,7 @@ export function FullScreenPlayer() {
     if (!s || !s.lock) return;
     const w = pagerRef.current?.clientWidth || window.innerWidth;
     const dir = Math.sign(s.dx);
-    const allowed = showLyrics || dir > 0;
+    const allowed = showLyrics || dir < 0;
     const far = Math.abs(s.dx) > w * 0.25;
     const flick = Math.abs(s.v) > 0.45 && Math.abs(s.dx) > 30 && Math.sign(s.v) === dir;
     paneBusy.current = true;
@@ -215,7 +215,7 @@ export function FullScreenPlayer() {
       // spring back
       if (!showLyrics) {
         placePane(artPaneRef.current, 0, true);
-        if (s.dx > 0) placePane(lyricsPaneRef.current, -w, true);
+        if (s.dx < 0) placePane(lyricsPaneRef.current, w, true);
       } else {
         placePane(lyricsPaneRef.current, 0, true);
         placePane(artPaneRef.current, s.dx > 0 ? -w : w, true);
@@ -444,7 +444,7 @@ export function FullScreenPlayer() {
                 className={cn("absolute inset-0 flex flex-col items-center justify-center gap-5 pt-3", showLyrics && "invisible")}
               >
                 {/* artwork in a frosted glass frame */}
-                <div className="relative w-[min(72vw,18rem,40dvh)] sm:w-[min(42vh,22rem)]">
+                <div key={current.id} className="ab-art-in relative w-[min(72vw,18rem,40dvh)] sm:w-[min(42vh,22rem)]">
                   <div
                     className={cn("absolute -inset-6 -z-10 rounded-[3rem] blur-[50px] transition-opacity duration-1000", isPlaying ? "opacity-70" : "opacity-30")}
                     style={art ? { backgroundImage: `url("${art}")`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundImage: gradientFrom(current.title) }}
@@ -462,7 +462,7 @@ export function FullScreenPlayer() {
                     />
                   </div>
                 </div>
-                <div className="w-full max-w-xl px-2 text-center">
+                <div key={`t-${current.id}`} className="ab-text-in w-full max-w-xl px-2 text-center">
                   <h2 className="truncate text-2xl font-black tracking-tight text-ink sm:text-3xl">{current.title}</h2>
                   <p className="mt-1 truncate text-sm text-ink2 sm:text-[1rem]">{current.artist}{current.genre ? ` • ${current.genre}` : ""}</p>
                 </div>
@@ -479,10 +479,10 @@ export function FullScreenPlayer() {
                 )}
               </div>
             </div>
-            {/* phones: which page is showing (lyrics sits to the left) */}
+            {/* phones: which page is showing (lyrics sits to the right) */}
             <div className="mt-2 flex items-center justify-center gap-1.5 md:hidden" aria-hidden>
-              <span className={cn("h-1.5 rounded-full transition-all duration-300", showLyrics ? "w-4 bg-ink/70" : "w-1.5 bg-ink/25")} />
               <span className={cn("h-1.5 rounded-full transition-all duration-300", showLyrics ? "w-1.5 bg-ink/25" : "w-4 bg-ink/70")} />
+              <span className={cn("h-1.5 rounded-full transition-all duration-300", showLyrics ? "w-4 bg-ink/70" : "w-1.5 bg-ink/25")} />
             </div>
 
             {/* Controls — ALWAYS visible, on a raised glass card */}
@@ -511,7 +511,7 @@ export function FullScreenPlayer() {
                     isPlaying && "bg-accent text-white shadow-[0_0_40px_-6px_var(--glow)]",
                   )}
                 >
-                  {isBuffering ? <Loader2 className="h-7 w-7 animate-spin" /> : isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 translate-x-[2px] fill-current" />}
+                  {isBuffering ? <Loader2 className="h-7 w-7 animate-spin" /> : <span key={isPlaying ? "pause" : "play"} className="ab-icon-swap flex">{isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 translate-x-[2px] fill-current" />}</span>}
                 </button>
                 <IconButton onClick={next} aria-label="Next" size="lg" className="text-ink"><SkipForward className="h-6 w-6 fill-current" /></IconButton>
                 <IconButton active={repeat === "one"} onClick={cycleRepeat} aria-label={repeat === "one" ? "Repeat ON" : "Repeat OFF"} className={repeat === "one" ? undefined : "opacity-60 hover:opacity-100"}>
@@ -699,7 +699,7 @@ function useMinWidth(px: number) {
  * rest of the queue stays); + keeps it for later.
  */
 function UpNextDrawer() {
-  const { current, queue, index, jumpTo, playNextNow, addToQueue } = usePlayer();
+  const { current, queue, index, jumpTo, playNextNow, addToQueue, settings, updateSettings } = usePlayer();
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<Track | null>(null);
   const [songs, setSongs] = useState<Track[] | null>(null);
@@ -841,9 +841,23 @@ function UpNextDrawer() {
           <div className="mx-auto h-1.5 w-10 rounded-full bg-ink/25" />
           <div className="mt-2 flex items-center justify-between">
             <p className="px-1 text-[11px] font-bold tracking-[0.2em] text-ink2 uppercase">Up next</p>
-            <IconButton onClick={hide} aria-label="Close up next">
-              <ChevronDown className="h-5 w-5" />
-            </IconButton>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!settings.autoplay}
+                onClick={() => updateSettings({ autoplay: !settings.autoplay })}
+                className="flex items-center gap-2 rounded-full px-2 py-1.5 text-[12px] font-semibold text-ink2"
+              >
+                Autoplay
+                <span className={cn("relative h-5 w-9 rounded-full transition-colors duration-200", settings.autoplay ? "bg-accent" : "bg-ink/20")}>
+                  <span className={cn("absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200", settings.autoplay && "translate-x-4")} />
+                </span>
+              </button>
+              <IconButton onClick={hide} aria-label="Close up next">
+                <ChevronDown className="h-5 w-5" />
+              </IconButton>
+            </div>
           </div>
         </div>
         <div ref={listRef} className="scroll-area min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
@@ -852,9 +866,11 @@ function UpNextDrawer() {
               {upcoming.length > 0 && (
                 <>
                   <p className="px-2 pt-1 pb-1.5 text-[10px] font-bold tracking-[0.18em] text-ink3 uppercase">Queue</p>
-                  {upcoming.map((t, i) => (
-                    <UpNextRow key={`${t.id}-${i}`} track={t} onPlay={() => jumpTo(index + 1 + i)} />
-                  ))}
+                  <div className="ab-stagger">
+                    {upcoming.map((t, i) => (
+                      <UpNextRow key={`${t.id}-${i}`} track={t} onPlay={() => jumpTo(index + 1 + i)} />
+                    ))}
+                  </div>
                 </>
               )}
               <p className="px-2 pt-3 pb-1.5 text-[10px] font-bold tracking-[0.18em] text-ink3 uppercase">Suggested</p>
@@ -863,9 +879,11 @@ function UpNextDrawer() {
                   <Loader2 className="h-5 w-5 animate-spin text-ink3" />
                 </div>
               ) : suggested.length ? (
-                suggested.map((t) => (
-                  <UpNextRow key={t.id} track={t} onPlay={() => playNextNow(t)} onAdd={() => addToQueue(t)} />
-                ))
+                <div className="ab-stagger">
+                  {suggested.map((t) => (
+                    <UpNextRow key={t.id} track={t} onPlay={() => playNextNow(t)} onAdd={() => addToQueue(t)} />
+                  ))}
+                </div>
               ) : (
                 <p className="py-8 text-center text-xs text-ink3">No suggestions right now</p>
               )}

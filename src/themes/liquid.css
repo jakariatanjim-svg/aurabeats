@@ -82,13 +82,12 @@
   --shell-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 1px 1px 0 rgb(255 255 255 / 0.1);
 
   /* colourful light behind the glass (from the accent colour): broad glows
-     plus a few soft-edged discs of light — shapes with edges are what the
-     glass visibly bends, a smooth wash shows no lensing at all */
+     plus two sweeping ribbons of aurora light — curved bands with soft
+     edges, which the glass visibly bends (a smooth wash shows no lensing),
+     without the spots the old round discs made */
   --app-bg-image:
-    radial-gradient(circle 17vmax at 22% 30%, color-mix(in oklab, var(--c-accent) 34%, transparent) 0 62%, transparent 74%),
-    radial-gradient(circle 12vmax at 78% 64%, color-mix(in oklab, var(--c-accent2) 32%, transparent) 0 60%, transparent 73%),
-    radial-gradient(circle 9vmax at 58% 14%, color-mix(in oklab, #f472b6 26%, transparent) 0 58%, transparent 72%),
-    radial-gradient(circle 7vmax at 10% 78%, color-mix(in oklab, #38bdf8 26%, transparent) 0 58%, transparent 72%),
+    radial-gradient(135% 70% at 18% 112%, transparent 56%, color-mix(in oklab, var(--c-accent) 30%, transparent) 61%, color-mix(in oklab, var(--c-accent2) 26%, transparent) 65.5%, color-mix(in oklab, #38bdf8 14%, transparent) 69%, transparent 74%),
+    radial-gradient(120% 62% at 88% -14%, transparent 55%, color-mix(in oklab, #f472b6 18%, transparent) 60%, color-mix(in oklab, var(--c-accent2) 28%, transparent) 64.5%, color-mix(in oklab, var(--c-accent) 16%, transparent) 68%, transparent 73%),
     linear-gradient(122deg, transparent 38%, rgb(255 255 255 / 0.035) 46%, transparent 47.5%, transparent 53%, rgb(255 255 255 / 0.025) 58%, transparent 60%),
     radial-gradient(60% 55% at 8% 4%, color-mix(in oklab, var(--c-accent) 60%, transparent), transparent 70%),
     radial-gradient(55% 50% at 96% 12%, color-mix(in oklab, var(--c-accent2) 50%, transparent), transparent 70%),
@@ -142,10 +141,8 @@
   /* soft pastel light behind the glass: wide and faint, so it reads as a
      tint of the whole background rather than coloured spots */
   --app-bg-image:
-    radial-gradient(circle 17vmax at 22% 30%, color-mix(in oklab, var(--c-accent) 15%, transparent) 0 62%, transparent 74%),
-    radial-gradient(circle 12vmax at 78% 64%, color-mix(in oklab, var(--c-accent2) 14%, transparent) 0 60%, transparent 73%),
-    radial-gradient(circle 9vmax at 58% 14%, color-mix(in oklab, #f472b6 12%, transparent) 0 58%, transparent 72%),
-    radial-gradient(circle 7vmax at 10% 78%, color-mix(in oklab, #38bdf8 13%, transparent) 0 58%, transparent 72%),
+    radial-gradient(135% 70% at 18% 112%, transparent 56%, color-mix(in oklab, var(--c-accent) 14%, transparent) 61%, color-mix(in oklab, var(--c-accent2) 12%, transparent) 65.5%, color-mix(in oklab, #38bdf8 8%, transparent) 69%, transparent 74%),
+    radial-gradient(120% 62% at 88% -14%, transparent 55%, color-mix(in oklab, #f472b6 9%, transparent) 60%, color-mix(in oklab, var(--c-accent2) 13%, transparent) 64.5%, color-mix(in oklab, var(--c-accent) 8%, transparent) 68%, transparent 73%),
     radial-gradient(75% 65% at 0% 0%, color-mix(in oklab, var(--c-accent) 22%, transparent), transparent 75%),
     radial-gradient(70% 60% at 100% 10%, color-mix(in oklab, var(--c-accent2) 18%, transparent), transparent 75%),
     radial-gradient(75% 70% at 90% 100%, color-mix(in oklab, #fb923c 16%, transparent), transparent 75%),

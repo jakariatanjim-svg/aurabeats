@@ -69,7 +69,7 @@ function VideoList({
     return <EmptyState title={empty} action={<Button variant="outline" onClick={list.refresh}>Refresh</Button>} />;
   }
   const items = rows ? (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="ab-stagger grid gap-3 lg:grid-cols-2">
       {list.items.map((v) => (
         <VideoRow key={v.id} v={v} progress={progress.get(v.id)} action={action?.(v, () => list.remove((x) => x.id === v.id))} />
       ))}
@@ -322,7 +322,7 @@ function Playlists({ onOpen }: { onOpen: (p: YtPlaylist) => void }) {
         </Button>
       </div>
       {list.items.length ? (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="ab-stagger grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
           {list.items.map((p) => (
             <button key={p.id} type="button" onClick={() => onOpen(p)} className="focus-ring group text-left">
               <div className="relative aspect-video overflow-hidden rounded-2xl bg-ink/10">

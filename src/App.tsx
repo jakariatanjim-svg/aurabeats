@@ -367,7 +367,7 @@ function Shell() {
               </div>
             }
           >
-            <div key={shownRoute} className="animate-fade-up mx-auto w-full max-w-[1600px] pb-8">
+            <div key={shownRoute} className="ab-route mx-auto w-full max-w-[1600px] pb-8">
               {!online && needsInternet(shownRoute) ? (
                 <OfflineScreen onNavigate={navigate} />
               ) : (

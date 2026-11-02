@@ -549,6 +549,37 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setHistory((prev) => [entry, ...prev.filter((t) => t.id !== entry.id)].slice(0, HISTORY_LIMIT));
   }, [engine.isPlaying, current]);
 
+  /* ------------------- music autoplay (queue ended) ---------------------- */
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const autoplayBusy = useRef(false);
+  /** Queue ran out: play a song like the current one. False when none. */
+  const continueWithSimilar = useCallback(async (): Promise<boolean> => {
+    const cur = queueRef.current[indexRef.current];
+    if (!cur || autoplayBusy.current) return false;
+    autoplayBusy.current = true;
+    try {
+      const { songsLike } = await import("@/services/upNext");
+      const list = await songsLike(cur).catch(() => [] as Track[]);
+      if (queueRef.current[indexRef.current]?.id !== cur.id) return true; // moved on meanwhile
+      const have = new Set(queueRef.current.map((t) => t.id));
+      const pick = list.find((t) => !have.has(t.id));
+      if (!pick) return false;
+      const at = indexRef.current;
+      const q = queueRef.current;
+      const merged = [...q.slice(0, at + 1), pick, ...q.slice(at + 1)];
+      queueRef.current = merged;
+      setQueue(merged);
+      indexRef.current = at + 1;
+      resolvedUrlsRef.current = [];
+      setIndex(at + 1);
+      setAttempt(0);
+      return true;
+    } finally {
+      autoplayBusy.current = false;
+    }
+  }, []);
+
   /* ------------------------------ navigation ----------------------------- */
   const goTo = useCallback(
     (nextIndex: number) => {
@@ -569,6 +600,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const next = useCallback(() => {
     const q = queueRef.current;
     if (q.length === 0) return;
+    if (indexRef.current >= q.length - 1 && repeatRef.current === "off" && settingsRef.current.autoplay) {
+      // ⏭ on the last song with autoplay on: a similar song, like YT Music
+      void continueWithSimilar().then((ok) => {
+        if (!ok) goTo(indexRef.current + 1);
+      });
+      return;
+    }
     if (q.length === 1) {
       setAttempt(0);
       engineRef.current.seek(0);
@@ -576,7 +614,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
     goTo(indexRef.current + 1);
-  }, [goTo]);
+  }, [goTo, continueWithSimilar]);
 
   const previous = useCallback(() => {
     if (engineRef.current.currentTime > 4) {
@@ -600,6 +638,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const isLast = indexRef.current >= q.length - 1;
     if (isLast && repeatRef.current === "off") {
       engine.pause();
+      if (settingsRef.current.autoplay) void continueWithSimilar();
       return;
     }
     next();
