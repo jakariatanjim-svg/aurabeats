@@ -255,7 +255,7 @@ function LocalLibrary() {
           hint={tab === "history" ? "Videos you watch appear here, with where you left off." : "Tap “Watch later” under any video to save it here."}
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="ab-stagger grid gap-3 lg:grid-cols-2">
           {list.map((v) => (
             <VideoRow
               key={v.id}

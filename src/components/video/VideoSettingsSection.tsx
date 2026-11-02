@@ -68,8 +68,8 @@ export function VideoSettingsSection() {
         <Toggle
           title="Autoplay next video"
           hint="When a video ends"
-          on={s.autoplayNext}
-          onChange={() => setVideoSettings({ autoplayNext: !s.autoplayNext })}
+          on={s.autoplay}
+          onChange={() => setVideoSettings({ autoplay: !s.autoplay })}
         />
 
         <form
@@ -113,7 +113,7 @@ function Toggle({ title, hint, on, onChange }: { title: string; hint: string; on
         aria-pressed={on}
         aria-label={title}
         onClick={onChange}
-        className={cn("relative h-6 w-11 shrink-0 rounded-full transition", on ? "bg-emerald-500" : "bg-ink/15")}
+        className={cn("ab-switch relative h-6 w-11 shrink-0 rounded-full transition", on ? "bg-emerald-500" : "bg-ink/15")}
       >
         <span
           className={cn(

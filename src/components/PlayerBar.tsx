@@ -231,10 +231,10 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
             >
               {isBuffering ? (
                 <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" />
-              ) : isPlaying ? (
-                <Pause className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
               ) : (
-                <Play className="h-4 w-4 translate-x-[1px] fill-current sm:h-5 sm:w-5" />
+                <span key={isPlaying ? "pause" : "play"} className="ab-icon-swap flex">
+                  {isPlaying ? <Pause className="h-4 w-4 fill-current sm:h-5 sm:w-5" /> : <Play className="h-4 w-4 translate-x-[1px] fill-current sm:h-5 sm:w-5" />}
+                </span>
               )}
             </button>
             <IconButton onClick={next} aria-label="Next track" tooltip="Next" size="sm">

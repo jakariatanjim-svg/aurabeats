@@ -9,6 +9,8 @@ export type TrackSource = "archive" | "audius" | "jiosaavn" | "jamendo" | "youtu
 export interface PlayerSettings {
   queueEnabled: boolean;
   rememberSearchTab: boolean;
+  /** Music: when the queue ends, keep playing songs like the last one. */
+  autoplay?: boolean;
   sleepTimer?: number; // timestamp when it should stop
 }
 

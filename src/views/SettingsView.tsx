@@ -157,7 +157,24 @@ export function SettingsView() {
               <Slider ariaLabel="Volume" value={volume * 100} max={100} onChange={(v) => setVolume(v / 100)} />
             </div>
           )}
-          <SettingRow title="Playback queue" hint="Play next, add to queue">
+          <SettingRow title="Autoplay" hint="Songs like the last one when the queue ends">
+            <Switch on={!!settings.autoplay} label="Autoplay" onClick={() => updateSettings({ autoplay: !settings.autoplay })} />
+          </SettingRow>
+          <SettingRow
+            title="Playback queue"
+            hint={
+              <>
+                Play next, add to queue
+                <span className="mt-1 block text-amber-500/90">
+                  Not fully tested by the owner. If something goes wrong,{" "}
+                  <a href="https://github.com/jakariatanjim-svg/aurabeats/issues" target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
+                    please report it
+                  </a>
+                  .
+                </span>
+              </>
+            }
+          >
             <Switch on={settings.queueEnabled} label="Playback queue" onClick={() => updateSettings({ queueEnabled: !settings.queueEnabled })} />
           </SettingRow>
           <SettingRow title="Remember search tab" hint="YT Music or Other Sources" last>
@@ -245,7 +262,7 @@ export function SettingsView() {
   );
 }
 
-function SettingRow({ title, hint, last, children }: { title: string; hint?: string; last?: boolean; children: React.ReactNode }) {
+function SettingRow({ title, hint, last, children }: { title: string; hint?: React.ReactNode; last?: boolean; children: React.ReactNode }) {
   return (
     <div className={cn("flex items-center justify-between gap-4", !last && "border-b border-line pb-4")}>
       <div className="min-w-0">

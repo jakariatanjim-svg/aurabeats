@@ -162,6 +162,8 @@ export function DirectDock({
           onTime={onTime}
           onEnded={onEnded}
           onFatal={(_reason, at) => onFail(at || dockRefs.time)}
+          next={d.next}
+          onNext={() => d.next && navigate(`watch:${d.next.id}`)}
           mini={mini}
           onAspect={onAspect}
           onTheater={() => dock.toggleTheater()}

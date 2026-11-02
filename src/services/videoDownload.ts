@@ -11,7 +11,7 @@
  */
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { isNative } from "@/services/video/net";
-import type { StreamSet } from "@/services/video/types";
+import { audioFor, type StreamSet } from "@/services/video/types";
 
 export const videoSiteUrl = (id: string) => `https://www.youtubeprint.com/watch?v=${encodeURIComponent(id)}`;
 
@@ -69,8 +69,8 @@ const clen = (url?: string) => {
 
 export function downloadOptions(s: StreamSet): DlOption[] {
   const best = <T extends { bitrate?: number }>(xs: T[]) => [...xs].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
-  const aac = best(s.audio.filter((a) => a.mime.startsWith("audio/mp4")));
-  const opus = best(s.audio.filter((a) => a.mime.startsWith("audio/webm")));
+  const aac = best(audioFor(s.audio).filter((a) => a.mime.startsWith("audio/mp4")));
+  const opus = best(audioFor(s.audio).filter((a) => a.mime.startsWith("audio/webm")));
   const out = new Map<number, DlOption>();
 
   const add = (o: DlOption) => {
@@ -243,7 +243,7 @@ export async function startAudioDownload(videoId: string, title: string, artist 
 async function bestAac(videoId: string) {
   const { devicePlayer } = await import("@/services/video/innertube");
   const s = (await devicePlayer(videoId)).streams;
-  const aac = [...s.audio.filter((a) => a.mime.startsWith("audio/mp4"))].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
+  const aac = [...audioFor(s.audio).filter((a) => a.mime.startsWith("audio/mp4"))].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
   if (!aac) throw new Error("no audio stream");
   return aac;
 }

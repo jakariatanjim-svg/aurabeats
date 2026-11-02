@@ -1,9 +1,11 @@
+import { useSyncExternalStore } from "react";
 import { storage } from "@/utils/storage";
 
 export interface VideoSettings {
   /** "auto" or a max height (360, 480, 720, 1080, 1440, 2160) */
   quality: "auto" | number;
-  autoplayNext: boolean;
+  /** play the next video when one ends (off by default; the switch in the player) */
+  autoplay: boolean;
   /** Your own Invidious or Piped API URL; empty = automatic public servers */
   customServer: string;
   /** app: on mobile data, videos start at 480p at most */
@@ -15,7 +17,7 @@ export interface VideoSettings {
 }
 
 const KEY = "videoSettings";
-const DEFAULTS: VideoSettings = { quality: "auto", autoplayNext: true, customServer: "", dataSaver: false, rotateFullscreen: false, pipOnLeave: true };
+const DEFAULTS: VideoSettings = { quality: "auto", autoplay: false, customServer: "", dataSaver: false, rotateFullscreen: false, pipOnLeave: true };
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -57,3 +59,18 @@ export function guessRegion(): string {
   }
   return "US";
 }
+
+/* Repeat: once on, it stays on for every video until the page is closed. */
+let repeatOn = false;
+const repeatListeners = new Set<Listener>();
+export const getRepeat = () => repeatOn;
+export function setRepeat(on: boolean) {
+  repeatOn = on;
+  repeatListeners.forEach((l) => l());
+}
+const subscribeRepeat = (l: Listener) => {
+  repeatListeners.add(l);
+  return () => repeatListeners.delete(l);
+};
+export const useRepeat = () => useSyncExternalStore(subscribeRepeat, getRepeat, getRepeat);
+export const useAutoplay = () => useSyncExternalStore(subscribeVideoSettings, () => current.autoplay, () => current.autoplay);

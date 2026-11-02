@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronUp, MessageSquare, Pause, Play, RotateCcw, RotateCw, Share2, ThumbsUp, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ChevronUp, MessageSquare, Pause, Play, RotateCcw, RotateCw, MoreVertical, Share2, ThumbsUp, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -22,6 +22,8 @@ import { dock } from "@/components/video/dock";
 import { watchLayer } from "@/components/video/watchLayer";
 import { EmbedShort, NativeShort, type ShortHandle } from "@/components/video/ShortPlayers";
 import { CommentsSheet } from "@/components/video/Comments";
+import { ShortMenu } from "./ShortMenu";
+import { heldTooSoon } from "@/utils/keyRepeat";
 import { FollowButton } from "@/components/video/YtActions";
 import { Avatar } from "@/components/video/VideoCards";
 import { Spinner } from "@/components/ui";
@@ -122,7 +124,14 @@ export function ShortsView() {
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // a video page on top (app) or an open dialog / sheet owns the keys
+      if (watchLayer.get().mode === "full" || document.querySelector("[role=dialog]")) return;
       const k = e.key.toLowerCase();
+      if (["arrowleft", "arrowright", "j", "l"].includes(k) && heldTooSoon(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (k === "arrowdown") go(1);
       else if (k === "arrowup") go(-1);
       else if (k === "arrowleft") seek(-5);
@@ -277,11 +286,26 @@ function Slide({
   const [comments, setComments] = useState(false);
   const [flash, setFlash] = useState<{ icon: "play" | "pause"; key: number } | null>(null);
   const lastTap = useRef(0);
+  const pointer = useRef("touch");
   const recorded = useRef(false);
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    if (!active) setMenu(null);
+  }, [active]);
 
   useEffect(() => {
     if (!active) setSt({ playing: false, time: 0, duration: 0, failed: undefined });
   }, [active]);
+
+  // never music and a Short at once: whichever started last keeps playing
+  const { isPlaying: musicOn, pause: pauseMusic } = usePlayer();
+  const was = useRef({ music: musicOn, short: false });
+  useEffect(() => {
+    const w = was.current;
+    if (active && musicOn && !w.music && st.playing) handle?.current?.pause();
+    else if (active && st.playing && !w.short && musicOn) pauseMusic();
+    was.current = { music: musicOn, short: active && st.playing };
+  }, [active, musicOn, st.playing, handle, pauseMusic]);
 
   // remember it in the watch history once it really played
   useEffect(() => {
@@ -300,7 +324,8 @@ function Slide({
     const now = Date.now();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
-    if (now - lastTap.current < 300 && (x < 0.33 || x > 0.67)) {
+    // double tap on the sides = ±10 s: phones only. A mouse click just pauses / plays.
+    if (pointer.current !== "mouse" && now - lastTap.current < 300 && (x < 0.33 || x > 0.67)) {
       onSeek(x < 0.5 ? -10 : 10);
       lastTap.current = now;
       return;
@@ -339,7 +364,7 @@ function Slide({
           />
         )}
         {/* taps: pause / play, double tap on the sides = ±10 s */}
-        <div className="absolute inset-0" onClick={tap} />
+        <div className="absolute inset-0" onPointerDown={(e) => (pointer.current = e.pointerType)} onClick={tap} />
 
         {active && st.failed && (
           <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-2xl bg-black/70 p-4 text-center text-xs text-white">
@@ -403,7 +428,7 @@ function Slide({
         {/* phone: buttons over the video */}
         {!wide && (
           <div className="absolute right-2 bottom-24 flex flex-col items-center gap-4 text-white">
-            <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} overlay />
+            <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} overlay />
           </div>
         )}
       </div>
@@ -411,10 +436,11 @@ function Slide({
       {/* computer: buttons beside the video */}
       {wide && (
         <div className="flex flex-col items-center gap-4 self-end pb-6 text-ink">
-          <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} />
+          <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} />
         </div>
       )}
 
+      {menu && active && <ShortMenu handle={handle?.current ?? null} anchor={menu} sheet={!wide} onClose={() => setMenu(null)} />}
       {meta.commentsToken && <CommentsSheet token={meta.commentsToken} count={meta.commentCount} open={comments} onClose={() => setComments(false)} side={wide} />}
     </section>
   );
@@ -422,7 +448,21 @@ function Slide({
 
 const thumb = (s: ShortItem) => s.thumbnail ?? `https://i.ytimg.com/vi/${s.id}/oar2.jpg`;
 
-function Actions({ id, meta, onComments, onShare, overlay }: { id: string; meta: Meta; onComments: () => void; onShare: () => void; overlay?: boolean }) {
+function Actions({
+  id,
+  meta,
+  onComments,
+  onShare,
+  onMore,
+  overlay,
+}: {
+  id: string;
+  meta: Meta;
+  onComments: () => void;
+  onShare: () => void;
+  onMore: (r: DOMRect) => void;
+  overlay?: boolean;
+}) {
   const session = useYtSession();
   const liked = useSyncExternalStore(subscribeLikes, () => likedNow(id), () => likedNow(id));
   useEffect(() => {
@@ -457,6 +497,11 @@ function Actions({ id, meta, onComments, onShare, overlay }: { id: string; meta:
           <Share2 className="h-6 w-6" />
         </span>
         Share
+      </button>
+      <button type="button" aria-label="More options" onClick={(e) => onMore(e.currentTarget.getBoundingClientRect())} className="flex flex-col items-center gap-1 text-xs font-bold">
+        <span className={pill}>
+          <MoreVertical className="h-6 w-6" />
+        </span>
       </button>
     </>
   );

@@ -20,6 +20,7 @@ export interface YTPlayer {
   getPlaybackQuality(): string;
   getAvailableQualityLevels(): string[];
   loadModule(m: string): void;
+  unloadModule?(m: string): void;
   getOption(module: string, option: string): unknown;
   setOption(module: string, option: string, value: unknown): void;
   loadVideoById(o: { videoId: string; startSeconds?: number }): void;
