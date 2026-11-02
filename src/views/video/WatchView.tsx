@@ -5,7 +5,7 @@ import { requestVideoDownload } from "@/services/videoDownload";
 import { ChevronDown, Download, ExternalLink, RefreshCw, Share2, ShieldCheck } from "lucide-react";
 import { FollowButton, LikeButton, SaveButton } from "@/components/video/YtActions";
 import { cn } from "@/utils/cn";
-import { formatCount, relativeTime } from "@/utils/format";
+import { formatCount, formatTime, relativeTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
 import { findInSearch, getVideo, getVideoInfo, getVideoMeta, mergeInfo, relatedFallback, relatedFor } from "@/services/video/api";
@@ -22,7 +22,9 @@ import { Avatar, VideoRow, VideoRowSkeleton } from "@/components/video/VideoCard
 import { Button, Skeleton } from "@/components/ui";
 import { ErrorState } from "@/components/states";
 import { Comments } from "@/components/video/Comments";
-import { getWatchExtras, watchExtrasAvailable, type WatchExtras } from "@/services/yt/watch";
+import { getPlayerExtras, getWatchExtras, watchExtrasAvailable, type WatchExtras } from "@/services/yt/watch";
+import { deviceExtractionAvailable } from "@/services/video/innertube";
+import { chaptersFromDescription, requestSeek, setVideoExtras, type Chapter } from "@/components/video/videoExtras";
 import { routeToPath, type RouteKey } from "@/routes";
 
 export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: RouteKey) => void }) {
@@ -186,6 +188,20 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
       authorAvatar: base.authorAvatar || extras.authorAvatar,
     };
   }, [base, extras]);
+  // "In this video": YouTube's chapters, else the description's 0:00 list
+  const chapters = useMemo(() => extras?.chapters ?? chaptersFromDescription(info?.description ?? ""), [extras, info?.description]);
+  useEffect(() => setVideoExtras(id, { chapters }), [id, chapters]);
+  // the creator's end screen and info cards
+  useEffect(() => {
+    if (!deviceExtractionAvailable()) return;
+    let alive = true;
+    getPlayerExtras(id)
+      .then((x) => alive && setVideoExtras(id, x))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id]);
   const onTime = useCallback(
     (t: number, dur: number) => {
       lastT.current = t;
@@ -398,6 +414,8 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 </Button>
               </div>
 
+              {chapters.length > 0 && <Chapters list={chapters} id={id} />}
+
               {(info.description || info.snippet) ? (
                 <button
                   type="button"
@@ -528,5 +546,35 @@ function Linkified({ text }: { text: string }) {
         ),
       )}
     </>
+  );
+}
+
+/** "In this video": the chapters, tap one to jump there. */
+function Chapters({ list, id }: { list: Chapter[]; id: string }) {
+  return (
+    <section>
+      <p className="mb-2 text-sm font-bold text-ink">In this video</p>
+      <div className="-mx-4 flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        {list.map((c) => (
+          <button
+            key={c.t}
+            type="button"
+            onClick={() => requestSeek(c.t)}
+            className="blur-panel w-40 shrink-0 overflow-hidden rounded-xl text-left transition hover:brightness-110"
+          >
+            <img
+              src={c.thumb ?? `https://i.ytimg.com/vi/${id}/mqdefault.jpg`}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="aspect-video w-full object-cover"
+            />
+            <span className="block p-2">
+              <span className="line-clamp-2 text-xs font-bold text-ink">{c.title}</span>
+              <span className="mt-0.5 block text-[11px] font-semibold text-accent">{formatTime(c.t)}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

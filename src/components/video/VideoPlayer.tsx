@@ -38,13 +38,19 @@ import {
   RotateCcw,
   RotateCw,
   Settings2,
+  Subtitles,
+  Languages,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/format";
 import { storage } from "@/utils/storage";
-import type { VideoDetails } from "@/services/video/types";
+import { audioTracks, type VideoDetails } from "@/services/video/types";
+import { useChunkedSrc } from "./useChunked";
+import { CaptionText, pickTrack, saveCcLang, savedCcLang, useCaptionCues } from "./captions";
+import { PlayerOverlays } from "./PlayerOverlays";
+import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
 import { getVideoSettings, subscribeVideoSettings } from "@/services/video/settings";
 import { autoHeight, dataCap, makePlan, pickQuality, type Plan } from "./streams";
 import { attachHls } from "./hls";
@@ -83,7 +89,14 @@ const mediaErr = (el: HTMLMediaElement) => {
 };
 
 export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, onTime, onEnded, onFatal, mini = false, onDrag, onAspect, onTheater, onMini }: VideoPlayerProps) {
-  const plan: Plan | null = useMemo(() => makePlan(details.streams), [details.streams]);
+  // dubbed videos: which language track plays (null = the original)
+  const [audioTrack, setAudioTrack] = useState<string | null>(null);
+  const plan: Plan | null = useMemo(() => makePlan(details.streams, audioTrack), [details.streams, audioTrack]);
+  const tracks = useMemo(() => audioTracks(details.streams.audio), [details.streams.audio]);
+  const [ccLang, setCcLang] = useState<string | null>(() => savedCcLang());
+  const ccTrack = pickTrack(details.captions ?? [], ccLang);
+  const cues = useCaptionCues(ccTrack);
+  const extras = useVideoExtras(details.id);
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -168,7 +181,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const qIndexRef = useRef(qIndex);
   qIndexRef.current = qIndex;
   const hlsUrl = plan?.mode === "hls" ? plan.hls : undefined;
-  const videoSrc = hlsUrl ? undefined : dual ? (audioOnly ? undefined : quality?.video?.url) : quality?.muxed?.url;
+  const videoStream = hlsUrl ? undefined : dual ? (audioOnly ? undefined : quality?.video) : quality?.muxed;
+  const trackResume = useRef<{ t: number; play: boolean } | null>(null);
+  // YouTube's files are loaded piece by piece (smooth like YouTube); plain address otherwise
+  const videoSrc = useChunkedSrc(videoRef, videoStream, () => (dual ? (audioRef.current?.currentTime ?? 0) : started.current ? 0 : startAt));
+  const audioSrc = useChunkedSrc(audioRef, dual ? plan?.audio : undefined, () => trackResume.current?.t ?? (started.current ? (audioRef.current?.currentTime ?? 0) : startAt));
 
   // live streams: hls.js (or the browser's own HLS) feeds the <video>
   useEffect(() => {
@@ -419,6 +436,67 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     };
   }, [dual, qIndex, plan]);
 
+  // Another audio language: the sound file changes → same moment, same state.
+  const changeAudioTrack = (id: string | null) => {
+    const a = audioRef.current;
+    if (dual && a) trackResume.current = { t: a.currentTime, play: wantPlay.current };
+    setAudioTrack(id);
+    setMenu(false);
+  };
+  useEffect(() => {
+    const a = audioRef.current;
+    const r = trackResume.current;
+    if (!a || !r) return;
+    const go = () => {
+      trackResume.current = null;
+      a.currentTime = r.t;
+      const v = videoRef.current;
+      if (v?.getAttribute("src")) v.currentTime = r.t;
+      if (r.play) void playBoth();
+    };
+    a.addEventListener("loadedmetadata", go, { once: true });
+    return () => a.removeEventListener("loadedmetadata", go);
+  }, [plan?.audio?.url, playBoth]);
+
+  const pickCc = (lang: string | null) => {
+    setCcLang(lang);
+    saveCcLang(lang);
+    setMenu(false);
+  };
+  const toggleCc = () => {
+    const list = details.captions ?? [];
+    if (ccTrack) return pickCc(null);
+    const want = (navigator.language || "en").slice(0, 2);
+    const t = list.find((x) => x.lang.startsWith(want) && !x.auto) ?? list.find((x) => !x.auto) ?? list.find((x) => x.lang.startsWith(want)) ?? list[0];
+    if (t) pickCc(t.lang);
+  };
+
+  // A chapter tapped on the watch page → jump there.
+  useEffect(() => {
+    if (mini) return;
+    return onSeekRequest((t) => {
+      seek(t);
+      void playBoth();
+    });
+  }, [mini, seek, playBoth]);
+
+  // Mouse wheel over the volume control (speaker + bar) = volume ±10 % (PC).
+  // Elsewhere on the video the wheel scrolls the page as usual.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || !showVolumeUi || mini) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.deltaY || !(e.target as HTMLElement | null)?.closest("[data-volume]")) return;
+      e.preventDefault();
+      setVolume((v: number) => Math.max(0, Math.min(1, Math.round(v * 10) / 10 + (e.deltaY < 0 ? 0.1 : -0.1))));
+      setMuted(false);
+      poke();
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mini]);
+
   // Single mode: changing quality reloads the file → keep position.
   const resumeAt = useRef<number | null>(null);
   const changeQuality = (i: number, isAuto = false) => {
@@ -544,7 +622,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   }, []);
 
   // Leaving the app while the video plays → floating window (Android 8+).
-  const hasPicture = Boolean(videoSrc || hlsUrl) && !audioOnly;
+  const hasPicture = Boolean(videoStream || hlsUrl) && !audioOnly;
   useEffect(() => {
     if (!isNative) return;
     pip.configure({
@@ -752,6 +830,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         onMini();
       }
       else if (k === "m") setMuted((m) => !m);
+      else if (k === "c") toggleCc();
       else if (k === "arrowup") setVolume((v: number) => Math.min(1, v + 0.05));
       else if (k === "arrowdown") setVolume((v: number) => Math.max(0, v - 0.05));
       else if (k === "escape" && fs === "css") void exitFs();
@@ -1021,6 +1100,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
   const pct = duration ? (shown / duration) * 100 : 0;
   const bufPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
   const showUi = !mini && !inPip && (controls || !playing);
+  const curChapter = chapterAt(extras.chapters, scrub ?? time);
 
   return (
     <div
@@ -1052,7 +1132,7 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             : { transition: "transform 220ms cubic-bezier(.2,.8,.2,1)" }
         }
       />
-      {dual && <audio ref={audioRef} src={plan.audio!.url} preload="auto" />}
+      {dual && <audio ref={audioRef} src={audioSrc} preload="auto" />}
 
       {audioOnly && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -1072,6 +1152,8 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
         onPointerCancel={onSurfaceCancel}
         onContextMenu={(e) => e.preventDefault()}
       />
+      {cues.length > 0 && !inPip && <CaptionText cues={cues} time={time} raised={showUi} />}
+      {!mini && !inPip && <PlayerOverlays id={details.id} time={time} controlsShown={showUi} />}
       {zoomPill && fs !== "off" && (
         <span className="pointer-events-none absolute top-[calc(var(--sa-top)+1rem)] left-1/2 -translate-x-1/2 animate-fade-in rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-bold">
           {zoomPill}
@@ -1165,11 +1247,11 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
             {playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
           </CtlBtn>
           {showVolumeUi && (
+          <div data-volume className="flex items-center gap-1 sm:gap-2">
           <CtlBtn label={muted ? "Unmute (m)" : "Mute (m)"} onClick={() => setMuted((m) => !m)}>
             {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </CtlBtn>
-          )}
-          {showVolumeUi && <input
+          <input
             type="range"
             min={0}
             max={1}
@@ -1181,7 +1263,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
               setMuted(false);
             }}
             className="hidden w-20 accent-white md:block"
-          />}
+          />
+          </div>
+          )}
           <span className="ml-1 text-xs font-semibold tabular-nums text-white/90">
             {details.live ? (
               <span className="flex items-center gap-1.5">
@@ -1191,6 +1275,9 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
               `${formatTime(shown)} / ${formatTime(duration)}`
             )}
           </span>
+          {curChapter && (
+            <span className="hidden min-w-0 truncate text-xs font-semibold text-white/80 sm:inline">• {curChapter.title}</span>
+          )}
           <span className="flex-1" />
           {!details.live && (
             <CtlBtn label={loop ? "Loop on" : "Loop"} active={loop} onClick={() => setLoop((l) => !l)}>
@@ -1241,6 +1328,38 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
                 <MenuItem key={q.height} active={!auto && i === qIndex} onClick={() => changeQuality(i)}>
                   {q.label}
                   {q.height >= 2160 ? <Badge>4K</Badge> : q.height >= 1440 ? <Badge>QHD</Badge> : q.height >= 720 ? <Badge>HD</Badge> : null}
+                </MenuItem>
+              ))}
+            </>
+          )}
+          {(details.captions?.length ?? 0) > 0 && (
+            <>
+              <p className="mt-3 mb-1.5 flex items-center gap-1 px-1 text-[10px] font-bold tracking-widest text-white/50 uppercase">
+                <Subtitles className="h-3 w-3" /> Captions
+              </p>
+              <MenuItem active={!ccTrack} onClick={() => pickCc(null)}>
+                Off
+              </MenuItem>
+              {details.captions!.map((c) => (
+                <MenuItem key={c.url} active={ccTrack?.url === c.url} onClick={() => pickCc(c.lang)}>
+                  {c.name}
+                  {c.auto && <span className="text-white/50">(auto)</span>}
+                </MenuItem>
+              ))}
+            </>
+          )}
+          {dual && tracks.length > 0 && (
+            <>
+              <p className="mt-3 mb-1.5 flex items-center gap-1 px-1 text-[10px] font-bold tracking-widest text-white/50 uppercase">
+                <Languages className="h-3 w-3" /> Audio track
+              </p>
+              {tracks.map((t) => (
+                <MenuItem
+                  key={t.id}
+                  active={audioTrack ? audioTrack === t.id : t.isDefault}
+                  onClick={() => changeAudioTrack(t.isDefault ? null : t.id)}
+                >
+                  {t.name}
                 </MenuItem>
               ))}
             </>

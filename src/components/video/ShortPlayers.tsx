@@ -6,7 +6,7 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { storage } from "@/utils/storage";
 import { getVideo } from "@/services/video/api";
-import type { StreamSet } from "@/services/video/types";
+import { audioFor, type StreamSet } from "@/services/video/types";
 import { attachHls } from "./hls";
 import { canPlay } from "./streams";
 import { loadYT, qualityLabel, YT_ERRORS, YTState, type YTPlayer } from "./yt";
@@ -63,6 +63,8 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [quality, setQualityPref] = useState(() => storage.get<string>("shorts:quality", "auto"));
   const [cc, setCc] = useState<string | null>(null);
+  const ccRef = useRef(cc);
+  ccRef.current = cc;
   const tracks = useRef<ShortChoice[]>([]);
 
   useLayoutEffect(() => {
@@ -76,6 +78,7 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
 
   useEffect(() => {
     let alive = true;
+    let probed = false;
     let timer: ReturnType<typeof setInterval> | undefined;
     const el = document.createElement("div");
     host.current?.appendChild(el);
@@ -108,6 +111,22 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
               }, 250);
             },
             onStateChange: (e) => {
+              // captions are only listed once their part is loaded: load it
+              // quietly once, note the tracks, hide them again (unless chosen)
+              if (e.data === YTState.PLAYING && !probed) {
+                probed = true;
+                e.target.loadModule("captions");
+                setTimeout(() => {
+                  if (!alive || !p.current) return;
+                  try {
+                    const list = p.current.getOption("captions", "tracklist");
+                    if (Array.isArray(list) && list.length) tracks.current = (list as { languageCode: string; displayName: string }[]).map((t) => ({ id: t.languageCode, label: t.displayName }));
+                    if (!ccRef.current) p.current.unloadModule?.("captions");
+                  } catch {
+                    /* no captions */
+                  }
+                }, 1500);
+              }
               // a Short loops, like on YouTube
               if (e.data === YTState.ENDED) {
                 e.target.seekTo(0, true);
@@ -235,7 +254,7 @@ type Level = { height: number; pick: Exclude<Pick, null> };
 
 /** Playable heights, best first: picture + sound files, else single files; HLS last. */
 function levelsOf(s: StreamSet): Level[] {
-  const audio = s.audio.filter((a) => canPlay(a.mime)).sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
+  const audio = audioFor(s.audio).filter((a) => canPlay(a.mime)).sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
   // the level is the label's number ("1080p"), which is right for upright videos too
   const lv = (x: { label: string; height: number }) => parseInt(x.label, 10) || x.height;
   const byH = new Map<number, Level & { avc: boolean }>();

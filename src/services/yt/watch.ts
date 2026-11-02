@@ -8,6 +8,7 @@ import type { VideoItem } from "@/services/video/types";
 import { deviceExtractionAvailable, webAnon } from "@/services/video/innertube";
 import { bestImage, findAll, isObj, parseCount, readPage, text, type Obj } from "./parse";
 import { call, ytSession } from "./session";
+import type { Chapter, EndItem, InfoCard, LinkKind } from "@/components/video/videoExtras";
 
 export const watchExtrasAvailable = () => !!ytSession() || deviceExtractionAvailable();
 
@@ -30,6 +31,8 @@ export interface WatchExtras {
   /** first comment for the collapsed comments card (phones) */
   teaser?: { avatar?: string; text: string };
   related: VideoItem[];
+  /** "In this video" chapters (or YouTube's key moments) */
+  chapters?: Chapter[];
 }
 
 const cache = new Map<string, Promise<WatchExtras>>();
@@ -86,7 +89,104 @@ function readWatch(r: Obj): WatchExtras {
     commentsToken: typeof token === "string" ? token : undefined,
     teaser: teaserBox ? { avatar: bestImage(teaserBox.teaserAvatar), text: text(teaserBox.teaserContent) } : undefined,
     related: secondaryResults ? readPage(secondaryResults).videos : [],
+    chapters: readChapters(r),
   };
+}
+
+/** Chapters from the player bar, else the "key moments" panel. */
+function readChapters(r: Obj): Chapter[] | undefined {
+  const bar = findAll(r.playerOverlays, "chapterRenderer");
+  const list: Chapter[] = bar.map((c) => ({ t: (Number(c.timeRangeStartMillis) || 0) / 1000, title: text(c.title), thumb: bestImage(c.thumbnail) }));
+  if (list.length < 2) {
+    for (const m of findAll(r.engagementPanels, "macroMarkersListItemRenderer")) {
+      const at = findAll(m.onTap, "watchEndpoint")[0]?.startTimeSeconds;
+      list.push({ t: Number(at) || 0, title: text(m.title), thumb: bestImage(m.thumbnail) });
+    }
+  }
+  const seen = new Set<number>();
+  const out = list.filter((c) => c.title && !seen.has(c.t) && seen.add(c.t)).sort((a, b) => a.t - b.t);
+  return out.length >= 2 ? out : undefined;
+}
+
+/* ----------------------- end screen and info cards ------------------------ */
+
+function linkOf(root: unknown): { kind: LinkKind; target: string; playlist?: string } | null {
+  const w = findAll(root, "watchEndpoint")[0];
+  if (w && typeof w.videoId === "string") return { kind: typeof w.playlistId === "string" ? "playlist" : "video", target: w.videoId, playlist: typeof w.playlistId === "string" ? w.playlistId : undefined };
+  const b = findAll(root, "browseEndpoint")[0];
+  if (b && typeof b.browseId === "string") {
+    if (b.browseId.startsWith("UC")) return { kind: "channel", target: b.browseId };
+    if (b.browseId.startsWith("VL")) return { kind: "playlist", target: "", playlist: b.browseId.slice(2) };
+  }
+  const u = findAll(root, "urlEndpoint")[0];
+  if (u && typeof u.url === "string") {
+    let url = u.url;
+    // YouTube wraps outside links in its redirect page
+    const q = /[?&]q=([^&]+)/.exec(url);
+    if (/youtube\.com\/redirect/.test(url) && q) url = decodeURIComponent(q[1]);
+    return { kind: "link", target: url };
+  }
+  return null;
+}
+
+export interface PlayerExtras {
+  ends: EndItem[];
+  cards: InfoCard[];
+}
+
+const pcache = new Map<string, Promise<PlayerExtras>>();
+
+/** The creator's end-screen suggestions and info cards (YouTube's `player` answer). */
+export function getPlayerExtras(id: string): Promise<PlayerExtras> {
+  let p = pcache.get(id);
+  if (!p) {
+    p = webAnon<Obj>("player", { videoId: id, contentCheckOk: true, racyCheckOk: true }).then(readPlayerExtras);
+    p.catch(() => pcache.delete(id));
+    pcache.set(id, p);
+    if (pcache.size > 20) pcache.delete(pcache.keys().next().value!);
+  }
+  return p;
+}
+
+export function readPlayerExtras(r: Obj): PlayerExtras {
+  const ends: EndItem[] = [];
+  for (const e of findAll(r.endscreen, "endscreenElementRenderer")) {
+    const link = linkOf(e.endpoint);
+    if (!link) continue;
+    ends.push({
+      ...link,
+      kind: e.style === "CHANNEL" || e.style === "SUBSCRIBE" ? "channel" : link.kind,
+      title: text(e.title),
+      meta: text(e.metadata) || undefined,
+      image: bestImage(e.image),
+      left: Number(e.left) || 0,
+      top: Number(e.top) || 0,
+      width: Number(e.width) || 0.3,
+      aspect: Number(e.aspectRatio) || 16 / 9,
+      start: (Number(e.startMs) || 0) / 1000,
+      end: (Number(e.endMs) || 0) / 1000,
+    });
+  }
+  const cards: InfoCard[] = [];
+  for (const c of findAll(r.cards, "cardRenderer")) {
+    const content = isObj(c.content) ? c.content : {};
+    const inner = Object.values(content).find(isObj) ?? {};
+    const link = linkOf(inner);
+    if (!link) continue;
+    const cue = findAll(c.cueRanges, "startCardActiveMs")[0];
+    const startMs = Array.isArray(c.cueRanges) && isObj(c.cueRanges[0]) ? Number(c.cueRanges[0].startCardActiveMs) : Number(cue);
+    const title =
+      text(inner.videoTitle) || text(inner.playlistTitle) || text(inner.channelName) || text(inner.title) || text(inner.displayDomain) || "";
+    cards.push({
+      ...link,
+      title,
+      meta: text(inner.channelName) && title !== text(inner.channelName) ? text(inner.channelName) : text(inner.lengthString) || text(inner.playlistVideoCount) || undefined,
+      image: bestImage(inner.videoThumbnail ?? inner.playlistThumbnail ?? inner.channelAvatar ?? inner.image ?? inner),
+      teaser: text(findAll(c.teaser, "simpleCardTeaserRenderer")[0]?.message) || undefined,
+      at: (startMs || 0) / 1000,
+    });
+  }
+  return { ends, cards };
 }
 
 /* -------------------------------- comments -------------------------------- */

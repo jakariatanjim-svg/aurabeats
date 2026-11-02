@@ -11,7 +11,8 @@
  * The player reports a failing source back via `exclude`, so a dead server
  * is skipped transparently ("try another server").
  */
-import { devicePlayer, deviceExtractionAvailable } from "./innertube";
+import { devicePlayer, deviceExtractionAvailable, webAnon } from "./innertube";
+import { bestImage, findAll, isObj, readPage, text, type Obj } from "@/services/yt/parse";
 import { http, isNative } from "./net";
 import {
   EmptyChannelError,
@@ -293,8 +294,50 @@ export async function searchVideos(q: string, cursor?: string, source?: string, 
 }
 
 let lastChannelProvider: Provider | null = null;
+/* YouTube's own channel page (app, or website with the extension): the most
+   reliable list of a channel's videos — the servers often return none. */
+const VIDEOS_TAB = "EgZ2aWRlb3PyBgQKAjoA";
+
+async function ytChannel(id: string, cursor?: string): Promise<ChannelPage> {
+  const r = await webAnon<Obj>("browse", cursor ? { continuation: cursor } : { browseId: id, params: VIDEOS_TAB });
+  const page = readPage(cursor ? r : (findAll(r.contents, "richGridRenderer")[0] ?? findAll(r.contents, "tabRenderer").find((t) => t.selected) ?? r.contents));
+  const videos = page.videos.map(({ setVideoId: _, ...v }) => v);
+  if (cursor) return { id, name: "", videos, next: page.next };
+  const meta = findAll(r.metadata, "channelMetadataRenderer")[0] ?? {};
+  const header = isObj(r.header) ? r.header : {};
+  let subscribers: string | undefined;
+  const walk = (n: unknown) => {
+    if (subscribers) return;
+    if (typeof n === "string") {
+      if (/subscriber/i.test(n) && n.length < 40) subscribers = n;
+    } else if (Array.isArray(n)) n.forEach(walk);
+    else if (isObj(n)) Object.values(n).forEach(walk);
+  };
+  walk(header);
+  const banner = bestImage(findAll(header, "imageBannerViewModel")[0]) ?? bestImage(findAll(header, "banner")[0]);
+  return {
+    id,
+    name: text(meta.title) || (typeof meta.title === "string" ? meta.title : ""),
+    avatar: bestImage(meta.avatar),
+    banner,
+    description: typeof meta.description === "string" ? meta.description : text(meta.description) || undefined,
+    subscribers,
+    videos: videos.map((v) => ({ ...v, author: v.author || text(meta.title), authorId: v.authorId || id })),
+    next: page.next,
+  };
+}
+
 export async function getChannel(id: string, cursor?: string, source?: string): Promise<ChannelPage & { source: string }> {
   return cached(`c:${id}:${cursor ?? ""}`, 15 * 60 * 1000, async () => {
+    if (deviceExtractionAvailable() && (!cursor || source === "yt")) {
+      try {
+        const c = await ytChannel(id, cursor);
+        if (c.videos.length || cursor) return { ...c, source: "yt" };
+      } catch {
+        /* the servers below */
+      }
+      if (cursor) return { id, name: "", videos: [], source: "yt" };
+    }
     if (cursor && source && lastChannelProvider && providerKey(lastChannelProvider) === source) {
       return { ...(await providerChannel(lastChannelProvider, id, cursor)), source };
     }
@@ -325,6 +368,7 @@ export async function getChannel(id: string, cursor?: string, source?: string): 
     } catch (err) {
       // No server had videos: the channel's RSS still gives the latest uploads.
       const rss = await channelRss(id).catch(() => null);
+    // (an empty answer isn't kept, so "Try again" really asks again)
       if (rss?.videos.length) return { ...withHeader({ id, name: rss.name, videos: rss.videos }), source: "rss" };
       if (partial) return { ...(partial as ChannelPage), source: "partial" };
       throw err;
@@ -369,7 +413,7 @@ export async function channelRss(channelId: string): Promise<{ name: string; vid
     }
     if (!videos.length && !feedTitle) throw new Error("empty feed");
     return { name: feedTitle, videos };
-  });
+  }, (r) => r.videos.length > 0);
 }
 
 async function latestFor(channelId: string): Promise<VideoItem[]> {

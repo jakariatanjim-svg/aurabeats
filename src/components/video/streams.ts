@@ -1,7 +1,7 @@
 /** Picks playable streams + quality ladder for the current device. */
 import { getVideoSettings } from "@/services/video/settings";
 import { hlsPlayable } from "./hls";
-import type { AudioStream, MuxedStream, StreamSet, VideoStream } from "@/services/video/types";
+import { audioFor, type AudioStream, type MuxedStream, type StreamSet, type VideoStream } from "@/services/video/types";
 
 let probe: HTMLVideoElement | null = null;
 export function canPlay(mime: string): boolean {
@@ -43,7 +43,7 @@ export function hlsSupported(): boolean {
   return hlsPlayable();
 }
 
-export function makePlan(s: StreamSet): Plan | null {
+export function makePlan(s: StreamSet, audioTrack?: string | null): Plan | null {
   if (s.live) {
     if (s.hls && hlsSupported()) return { mode: "hls", qualities: [], hls: s.hls };
     const muxed = s.muxed.filter((m) => canPlay(m.mime));
@@ -51,7 +51,7 @@ export function makePlan(s: StreamSet): Plan | null {
     return null;
   }
 
-  const audio = s.audio
+  const audio = audioFor(s.audio, audioTrack)
     .filter((a) => canPlay(a.mime))
     .sort((a, b) => {
       // Prefer Opus (better quality per bit), then bitrate.

@@ -65,6 +65,8 @@ const Q_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440"
 const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
 import { extensionPossible } from "./AdBlockTip";
+import { PlayerOverlays } from "./PlayerOverlays";
+import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 // Faster speeds, shown only when YouTube's player says it can do them (the
@@ -131,6 +133,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const maxSeen = useRef(-1);
   const [tracks, setTracks] = useState<{ languageCode: string; displayName: string }[]>([]);
   const [cc, setCc] = useState<string | null>(null);
+  const extras = useVideoExtras(d.id);
+  const ccRef = useRef(cc);
+  ccRef.current = cc;
+  // YouTube only lists a video's captions after its captions part is loaded,
+  // so it is loaded once quietly when the video starts (then hidden again) —
+  // otherwise the Captions menu never appeared.
+  const ccProbe = useRef<"idle" | "probing" | "done">("idle");
   const [controls, setControls] = useState(true);
   const [menu, setMenu] = useState<null | "main" | "speed" | "quality" | "cc">(null);
   const [held, setHeld] = useState(false);
@@ -173,6 +182,17 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       return (p[fn] as unknown as (...a: unknown[]) => unknown).apply(p, args);
     } catch {
       return undefined;
+    }
+  }, []);
+
+  const hideCaptions = useCallback(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    try {
+      if (p.unloadModule) p.unloadModule("captions");
+      else p.setOption("captions", "track", {});
+    } catch {
+      /* player gone */
     }
   }, []);
 
@@ -238,9 +258,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               if (!alive || !playerRef.current) return;
               try {
                 const list = playerRef.current.getOption("captions", "tracklist");
-                if (Array.isArray(list)) setTracks(list as { languageCode: string; displayName: string }[]);
+                if (Array.isArray(list) && list.length) setTracks(list as { languageCode: string; displayName: string }[]);
               } catch {
                 /* no captions module */
+              }
+              // the quiet look-up below is done: hide them again unless wanted
+              if (ccProbe.current === "probing") {
+                ccProbe.current = "done";
+                if (!ccRef.current) hideCaptions();
               }
             },
           },
@@ -259,6 +284,21 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     };
   }, []);
 
+  // First real playback of each video: load captions quietly to learn its tracks.
+  const ccTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (state !== YTState.PLAYING || ad || ccProbe.current !== "idle") return;
+    ccProbe.current = "probing";
+    call("loadModule", "captions");
+    clearTimeout(ccTimer.current);
+    ccTimer.current = setTimeout(() => {
+      if (ccProbe.current !== "probing") return;
+      ccProbe.current = "done";
+      if (!ccRef.current) hideCaptions();
+    }, 4000);
+  }, [state, ad, call, hideCaptions]);
+  useEffect(() => () => clearTimeout(ccTimer.current), []);
+
   // A new video was opened (watch page claimed the dock with another id).
   const lastClaim = useRef(d.claim);
   useEffect(() => {
@@ -276,6 +316,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     maxSeen.current = -1;
     setTracks([]);
     setCc(null);
+    ccProbe.current = "idle";
     setTime(d.startAt);
     setDuration(0);
     setState(YTState.UNSTARTED);
@@ -651,7 +692,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setVolumeState(n);
     storage.set("video:ytVolume", n);
     call("setVolume", n);
-    if (n > 0 && (muted || needsUnmute)) unmute();
+    // sound back on at exactly this level (unmute() would jump to 60 % when
+    // the old level was 0 — the "volume suddenly goes to the middle" bug)
+    if (n > 0 && (muted || needsUnmute)) {
+      call("unMute");
+      unmuteAt.current = Date.now();
+      setMuted(false);
+      setNeedsUnmute(false);
+    }
     if (n === 0) {
       call("mute");
       setMuted(true);
@@ -1135,7 +1183,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setSeekFx((f) => ({ side, secs: f && f.side === side && now - f.key < 1000 ? f.secs + Math.abs(step) : Math.abs(step), key: now }));
   };
   useEffect(() => {
-    if (mode !== "inline") return; // hidden or corner player: keys stay with the page
+    if (mode === "mini" || mode === "none") return; // hidden or corner player: keys stay with the page
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
@@ -1179,6 +1227,17 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // A chapter tapped on the watch page → jump there.
+  const seekRef = useRef(seek);
+  seekRef.current = seek;
+  useEffect(() => {
+    if (mode === "mini" || mode === "none") return;
+    return onSeekRequest((t) => {
+      seekRef.current(t);
+      call("playVideo");
+    });
+  }, [mode, call]);
 
   // Mouse wheel over the volume control (speaker icon + bar) = volume ±10 %
   // (PC). Anywhere else on the video the wheel does nothing special, so the
@@ -1231,6 +1290,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const shownTime = scrub ?? time;
   const pct = duration ? (shownTime / duration) * 100 : 0;
   const showUi = !ad && (controls || !playing || ended);
+  const curChapter = chapterAt(extras.chapters, shownTime);
   // Fixed quality: lay the iframe out at that level's width, scale to fit.
   const fw = frame.w || 1;
   const fh = frame.h || 1;
@@ -1515,6 +1575,8 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               </div>
             )}
 
+            {!error && !ad && d.id && <PlayerOverlays id={d.id} time={time} controlsShown={showUi} />}
+
             {/* ended */}
             {ended && !error && (
               <div className="absolute inset-0 flex items-center justify-center gap-4">
@@ -1595,6 +1657,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 <span className="ml-1.5 text-[12px] font-semibold tabular-nums text-white/90 sm:text-[13px]">
                   {formatTime(shownTime)} <span className="text-white/60">/ {duration ? formatTime(duration) : "--:--"}</span>
                 </span>
+                {curChapter && <span className="hidden min-w-0 truncate text-[12px] font-semibold text-white/80 sm:inline sm:text-[13px]">• {curChapter.title}</span>}
 
                 <span className="flex-1" />
 
