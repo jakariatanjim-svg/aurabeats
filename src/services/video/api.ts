@@ -142,7 +142,7 @@ export async function getVideoMeta(id: string): Promise<VideoDetails> {
  * /shorts/ form reports the real shape (the /watch form is always 16:9) and
  * works for every video. Falls back to 16:9.
  */
-export async function getVideoAspect(id: string): Promise<number> {
+export async function getVideoAspect(id: string, fallback = 16 / 9): Promise<number> {
   return cached(`aspect:${id}`, 24 * 60 * 60 * 1000, async () => {
     const url = `https://www.youtube.com/shorts/${id}`;
     const o = await http<{ width?: number; height?: number }>(
@@ -156,7 +156,7 @@ export async function getVideoAspect(id: string): Promise<number> {
     // the sizes are small (200 × 113), so snap to the usual shapes
     for (const s of [16 / 9, 9 / 16, 4 / 3, 1]) if (Math.abs(r - s) < 0.03) return s;
     return Math.min(3, Math.max(0.4, r));
-  }).catch(() => 16 / 9);
+  }).catch(() => fallback);
 }
 
 /**

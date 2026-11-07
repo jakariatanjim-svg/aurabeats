@@ -26,9 +26,10 @@ import { deviceExtractionAvailable } from "@/services/video/innertube";
 import { useExtension } from "@/services/yt/extension";
 import { chaptersFromDescription, requestSeek, setVideoExtras, type Chapter } from "@/components/video/videoExtras";
 import { routeToPath, type RouteKey } from "@/routes";
+import { ShareSheet, shareNative } from "@/components/ShareSheet";
 
 export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: RouteKey) => void }) {
-  const { isPlaying, toggle, toast } = usePlayer();
+  const { isPlaying, toggle } = usePlayer();
   const lib = useVideoLibrary();
   const [details, setDetails] = useState<VideoDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -287,18 +288,11 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
   }, [pauseMusic, details, id]);
 
   const [shareFx, setShareFx] = useState(0);
+  const [shareOpen, setShareOpen] = useState(false);
+  // app: the phone's share sheet; website: our own pop-up
   const share = async () => {
     setShareFx((n) => n + 1);
-    const url = `https://www.youtube.com/watch?v=${id}`;
-    try {
-      if (navigator.share) await navigator.share({ title: info?.title, url });
-      else {
-        await navigator.clipboard.writeText(url);
-        toast("Link copied", "success");
-      }
-    } catch {
-      /* cancelled */
-    }
+    if (!(await shareNative({ title: info?.title, url: `https://www.youtube.com/watch?v=${id}` }))) setShareOpen(true);
   };
 
   const progressOf = (vid: string) => {
@@ -412,6 +406,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
                   <Share2 key={shareFx} className={cn("h-3.5 w-3.5", shareFx > 0 && "animate-wiggle")} /> Share
                 </Button>
+                <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} target={{ title: info.title, url: `https://www.youtube.com/watch?v=${id}` }} />
                 <Button
                   variant="outline"
                   className="px-3.5 text-xs"

@@ -295,6 +295,7 @@ function pipedItem(s: PipedStream): VideoItem | null {
     live: s.duration === -1,
     thumbnail: thumbFor(id),
     snippet: s.shortDescription || undefined,
+    short: s.isShort || undefined,
   };
 }
 

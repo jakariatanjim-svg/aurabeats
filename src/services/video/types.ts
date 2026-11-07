@@ -16,6 +16,8 @@ export interface VideoItem {
   thumbnail: string;
   /** first lines of the description (search results) */
   snippet?: string;
+  /** a YouTube Short (search results) */
+  short?: boolean;
 }
 
 export interface ChannelItem {

@@ -2,7 +2,7 @@
  * Video pages for a signed-in YouTube account: YouTube's recommendations on
  * Home, subscriptions on Following, and the account's library.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, Bookmark, Clock, ListVideo, Plus, ThumbsUp, UserRound, X } from "lucide-react";
 import { useVideoLibrary } from "@/hooks/useVideoLibrary";
 import { dropYtLists, useYtPaged } from "@/hooks/useYtPaged";
@@ -36,6 +36,10 @@ import { useYtSession } from "@/services/yt/session";
 
 const videosOf = (p: YtPage) => p.videos;
 
+/** A Shorts shelf after every this many videos on home. */
+const SHELF_EVERY = 16;
+const chunks = <T,>(a: T[], n: number): T[][] => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
+
 export function useProgressMap() {
   const lib = useVideoLibrary();
   return useMemo(() => {
@@ -54,12 +58,15 @@ function VideoList({
   rows,
   empty,
   action,
+  shorts,
 }: {
   name: string;
   load: (cursor?: string) => Promise<YtPage>;
   rows?: boolean;
   empty: string;
   action?: (v: YtVideo, remove: () => void) => ReactNode;
+  /** home: more Shorts shelves between the videos, like YouTube */
+  shorts?: boolean;
 }) {
   const progress = useProgressMap();
   const list = useYtPaged<YtVideo>(name, load, videosOf);
@@ -72,6 +79,19 @@ function VideoList({
     <div className="ab-stagger grid gap-3 lg:grid-cols-2">
       {list.items.map((v) => (
         <VideoRow key={v.id} v={v} progress={progress.get(v.id)} action={action?.(v, () => list.remove((x) => x.id === v.id))} />
+      ))}
+    </div>
+  ) : shorts ? (
+    <div className="space-y-8">
+      {chunks(list.items, SHELF_EVERY).map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 && i <= 3 && <ShortsRow part={i} />}
+          <VideoGrid>
+            {part.map((v) => (
+              <VideoCard key={v.id} v={v} progress={progress.get(v.id)} />
+            ))}
+          </VideoGrid>
+        </Fragment>
       ))}
     </div>
   ) : (
@@ -95,7 +115,7 @@ export function YtHome() {
   return (
     <div className="space-y-8">
       <ShortsRow />
-      <VideoList name="home" load={ytHome} empty="No recommendations yet" />
+      <VideoList name="home" load={ytHome} empty="No recommendations yet" shorts />
     </div>
   );
 }

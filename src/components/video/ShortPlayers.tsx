@@ -43,8 +43,6 @@ export interface ShortHandle {
 export interface ShortPlayerProps {
   id: string;
   muted: boolean;
-  /** sound was refused before a tap: playing muted */
-  onMutedStart?: () => void;
   onState: (s: { playing: boolean; time: number; duration: number; failed?: string }) => void;
   ref?: Ref<ShortHandle>;
 }
@@ -57,12 +55,12 @@ const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SHORT_WIDTH: Record<string, number> = { tiny: 144, small: 240, medium: 360, large: 480, hd720: 720, hd1080: 1080, hd1440: 1440, hd2160: 2160 };
 const Q_ORDER = ["hd2160", "hd1440", "hd1080", "hd720", "large", "medium", "small", "tiny"];
 
-export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlayerProps) {
+export function EmbedShort({ id, muted, onState, ref }: ShortPlayerProps) {
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const p = useRef<YTPlayer | null>(null);
-  const cb = useRef({ onState, onMutedStart });
-  cb.current = { onState, onMutedStart };
+  const cb = useRef({ onState });
+  cb.current = { onState };
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -138,11 +136,18 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
                 e.target.playVideo();
               }
             },
+            // the browser wants a tap before sound: start right away and turn
+            // the sound on by itself at the very first touch / click / key
+            // (the sound button never flips to muted)
             onAutoplayBlocked: () => {
               if (!alive || !p.current) return;
               p.current.mute();
               p.current.playVideo();
-              cb.current.onMutedStart?.();
+              const unmute = () => {
+                for (const t of ["pointerdown", "keydown"]) window.removeEventListener(t, unmute, true);
+                if (alive && !mutedRef.current) p.current?.unMute();
+              };
+              for (const t of ["pointerdown", "keydown"]) window.addEventListener(t, unmute, true);
             },
             onApiChange: () => {
               try {
@@ -292,7 +297,7 @@ function levelsOf(s: StreamSet): Level[] {
 /** Auto: the best level up to 1080p (a Short fills a phone screen). */
 const autoLevel = (l: Level[]) => l.find((x) => x.height <= 1080) ?? l[l.length - 1];
 
-export function NativeShort({ id, muted, onMutedStart, onState, ref }: ShortPlayerProps) {
+export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
   const v = useRef<HTMLVideoElement>(null);
   const a = useRef<HTMLAudioElement>(null);
   const [levels, setLevels] = useState<Level[] | null>(null);
@@ -301,10 +306,6 @@ export function NativeShort({ id, muted, onMutedStart, onState, ref }: ShortPlay
   const startAt = useRef(0);
   const cb = useRef(onState);
   cb.current = onState;
-  const mutedRef = useRef(muted);
-  mutedRef.current = muted;
-  const mutedStart = useRef(onMutedStart);
-  mutedStart.current = onMutedStart;
 
   useEffect(() => {
     let alive = true;
@@ -362,13 +363,20 @@ export function NativeShort({ id, muted, onMutedStart, onState, ref }: ShortPlay
       if (dual && resume) el.currentTime = resume;
     };
     m0?.addEventListener("loadedmetadata", onMeta, { once: true });
-    // sound refused before a tap: play muted and say so (the 🔇 button turns on)
+    // plays straight away with sound (the app allows it, see MainActivity);
+    // should the phone still refuse, it starts at the very next touch
+    let retry = () => {};
     const play = () =>
       m0?.play().catch((e: unknown) => {
-        if (!alive || !m0 || (e as { name?: string })?.name !== "NotAllowedError" || mutedRef.current) return;
-        mutedStart.current?.();
-        m0.muted = true;
-        m0.play().catch(() => {});
+        if (!alive || !m0 || (e as { name?: string })?.name !== "NotAllowedError") return;
+        retry = () => {
+          for (const t of ["pointerdown", "keydown"]) window.removeEventListener(t, go, true);
+        };
+        const go = () => {
+          retry();
+          if (alive && m0.paused) void m0.play().catch(() => {});
+        };
+        for (const t of ["pointerdown", "keydown"]) window.addEventListener(t, go, true);
       });
     void play();
     if (dual) el.play().catch(() => {});
@@ -417,6 +425,7 @@ export function NativeShort({ id, muted, onMutedStart, onState, ref }: ShortPlay
     m0?.addEventListener("ended", onEnd);
     return () => {
       alive = false;
+      retry();
       clearInterval(timer);
       m0?.removeEventListener("ended", onEnd);
       m0?.removeEventListener("loadedmetadata", onMeta);

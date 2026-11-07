@@ -22,6 +22,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ShareTargetPlugin.class);
         registerPlugin(PlayerScreenPlugin.class);
         super.onCreate(savedInstanceState);
+        // videos and Shorts start with sound by themselves, no tap needed
+        getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
         // opened by "Share → AuraBeats" or a YouTube link
         ShareTargetPlugin.handle(getIntent());
     }
