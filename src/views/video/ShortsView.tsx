@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, MessageSquare, Pause, Play, RotateCcw, RotateCw, MoreVertical, Share2, ThumbsUp, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { formatCount } from "@/utils/format";
+import { formatCount, formatTime } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { isNative } from "@/services/video/net";
 import { getVideoMeta } from "@/services/video/api";
@@ -349,7 +349,7 @@ function Slide({
   const progress = st.duration ? Math.min(1, st.time / st.duration) : 0;
 
   return (
-    <section className={cn("relative flex h-full snap-start snap-always items-center justify-center", wide && "gap-4 py-2")}>
+    <section className={cn("relative flex h-full snap-start snap-always items-center justify-center select-none", wide && "gap-4 py-2")}>
       <div
         className={cn("relative overflow-hidden bg-black", wide ? "aspect-[9/16] h-full max-w-full rounded-2xl" : "h-full w-full")}
       >
@@ -423,7 +423,7 @@ function Slide({
         </div>
 
         {/* progress */}
-        {active && <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/20"><div className="h-full bg-accent" style={{ width: `${progress * 100}%` }} /></div>}
+        {active && <ShortSeekBar progress={progress} duration={st.duration} onSeek={(t) => handle?.current?.seekTo(t)} />}
 
         {/* phone: buttons over the video */}
         {!wide && (
@@ -504,5 +504,90 @@ function Actions({
         </span>
       </button>
     </>
+  );
+}
+
+/**
+ * The Short's progress line, which can be used: hover (mouse) shows the time
+ * under the pointer, click or drag (mouse or finger) moves the Short there.
+ * It grows a little while hovered or held, like YouTube's.
+ */
+function ShortSeekBar({ progress, duration, onSeek }: { progress: number; duration: number; onSeek: (t: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<number | null>(null); // 0..1 under the mouse
+  const [drag, setDrag] = useState<number | null>(null); // 0..1 while held
+  const [pending, setPending] = useState<number | null>(null); // let go here, waiting for the player
+  useEffect(() => {
+    if (pending === null) return;
+    if (Math.abs(progress - pending) < 0.03) {
+      setPending(null);
+      return;
+    }
+    const t = setTimeout(() => setPending(null), 1500);
+    return () => clearTimeout(t);
+  }, [progress, pending]);
+  const at = (clientX: number) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r || !r.width) return 0;
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  };
+  const usable = duration > 0;
+  const shown = drag ?? pending ?? progress;
+  const tip = drag ?? hover;
+  return (
+    <div
+      ref={ref}
+      role="slider"
+      aria-label="Seek"
+      aria-valuemin={0}
+      aria-valuemax={Math.round(duration)}
+      aria-valuenow={Math.round(progress * duration)}
+      className={cn("group/seek absolute inset-x-0 bottom-0 z-[3] flex h-4 touch-none items-end", usable && "cursor-pointer")}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        if (!usable) return;
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDrag(at(e.clientX));
+      }}
+      onPointerMove={(e) => {
+        if (!usable) return;
+        const x = at(e.clientX);
+        if (drag !== null) setDrag(x);
+        else if (e.pointerType === "mouse") setHover(x);
+      }}
+      onPointerUp={(e) => {
+        if (drag === null) return;
+        const x = at(e.clientX);
+        onSeek(x * duration);
+        setPending(x);
+        setDrag(null);
+        if (e.pointerType !== "mouse") setHover(null);
+      }}
+      onPointerCancel={() => setDrag(null)}
+      onPointerLeave={() => setHover(null)}
+    >
+      <div className={cn("relative w-full bg-white/25 transition-[height] duration-150", drag !== null ? "h-[6px]" : "h-[3px] group-hover/seek:h-[5px]")}>
+        {hover !== null && drag === null && <div className="absolute inset-y-0 left-0 bg-white/30" style={{ width: `${hover * 100}%` }} />}
+        <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${shown * 100}%` }} />
+        {usable && (
+          <span
+            className={cn(
+              "absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent shadow transition-transform duration-150",
+              drag !== null ? "scale-125" : "scale-0 group-hover/seek:scale-100",
+            )}
+            style={{ left: `${shown * 100}%` }}
+          />
+        )}
+      </div>
+      {usable && tip !== null && (
+        <span
+          className="pointer-events-none absolute bottom-4 -translate-x-1/2 rounded-md bg-black/80 px-2 py-0.5 text-[12px] font-semibold text-white tabular-nums"
+          style={{ left: `clamp(1.75rem, ${tip * 100}%, calc(100% - 1.75rem))` }}
+        >
+          {formatTime(tip * duration)}
+        </span>
+      )}
+    </div>
   );
 }

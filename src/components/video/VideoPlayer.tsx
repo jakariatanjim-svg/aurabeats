@@ -65,6 +65,8 @@ import { attachHls } from "./hls";
 import { heldTooSoon } from "@/utils/keyRepeat";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
+/** full screen: the mouse this close (px) to the left edge hides the controls at once */
+const FS_LEFT_EDGE = 16;
 
 export interface VideoPlayerProps {
   details: VideoDetails;
@@ -1343,8 +1345,23 @@ export function VideoPlayer({ details, startAt = 0, musicPlaying, onPlayStart, o
     <div
       ref={boxRef}
       data-video-player
-      onPointerMove={(e) => e.pointerType === "mouse" && poke()}
+      onPointerMove={(e) => {
+        if (e.pointerType !== "mouse") return;
+        // full screen, mouse at the very left edge: controls hide at once (YouTube)
+        if (fs !== "off" && !menu && e.clientX - e.currentTarget.getBoundingClientRect().left <= FS_LEFT_EDGE) {
+          if (hideTimer.current) clearTimeout(hideTimer.current);
+          if (!master()?.paused) setControls(false);
+          return;
+        }
+        poke();
+      }}
       onPointerDown={(e) => setTouchUi(e.pointerType !== "mouse")}
+      onPointerLeave={(e) => {
+        // mouse left the player: the controls go at once (like YouTube)
+        if (e.pointerType !== "mouse" || menu || master()?.paused) return;
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        setControls(false);
+      }}
       className={cn(
         "group/player relative w-full overflow-hidden bg-black text-white select-none",
         // fills the spot the page reserved (shaped like the video)

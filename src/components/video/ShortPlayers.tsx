@@ -30,6 +30,8 @@ export interface ShortHandle {
   toggle: () => void;
   pause: () => void;
   seekBy: (s: number) => void;
+  /** jump to a time (seconds) */
+  seekTo: (t: number) => void;
   options: () => ShortOptions;
   setQuality: (id: string) => void;
   setCaption: (id: string | null) => void;
@@ -186,6 +188,12 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
       if (!pl) return;
       const d = pl.getDuration() || 0;
       pl.seekTo(Math.max(0, Math.min(d ? d - 0.3 : Infinity, (pl.getCurrentTime() || 0) + s)), true);
+    },
+    seekTo: (t) => {
+      const pl = p.current;
+      if (!pl) return;
+      const d = pl.getDuration() || 0;
+      pl.seekTo(Math.max(0, Math.min(d ? d - 0.3 : Infinity, t)), true);
     },
     options: () => {
       const pl = p.current;
@@ -391,6 +399,14 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
       const m = dual ? a.current : el;
       if (!el || !m) return;
       const t = Math.max(0, Math.min((m.duration || Infinity) - 0.3, m.currentTime + s));
+      m.currentTime = t;
+      if (dual) el.currentTime = t;
+    },
+    seekTo: (to) => {
+      const el = v.current;
+      const m = dual ? a.current : el;
+      if (!el || !m) return;
+      const t = Math.max(0, Math.min((m.duration || Infinity) - 0.3, to));
       m.currentTime = t;
       if (dual) el.currentTime = t;
     },

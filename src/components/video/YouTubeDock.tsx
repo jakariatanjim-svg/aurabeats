@@ -77,6 +77,8 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 // embed is normally capped at 2x; the Android app's own player does 3x/4x).
 const FAST = [3, 4];
 const HOLD_MS = 420;
+/** full screen: the mouse this close (px) to the left edge hides the controls at once */
+const FS_LEFT_EDGE = 16;
 const TAP_MS = 280;
 
 type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
@@ -942,6 +944,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setControls(false), touch ? 3200 : 2600);
   }, [touch]);
+  /** Full screen, mouse at the very left edge of the screen: the controls
+   *  hide at once, like YouTube. True when it did. */
+  const atLeftEdge = (e: { clientX: number; pointerType: string }) => {
+    if (fs === "off" || e.pointerType !== "mouse" || menu) return false;
+    const r = boxRef.current?.getBoundingClientRect();
+    if (!r || e.clientX - r.left > FS_LEFT_EDGE) return false;
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    if (playing) setControls(false);
+    return true;
+  };
   useEffect(() => {
     if (!playing || menu || scrub !== null) {
       if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -1045,7 +1057,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (pts.current.size > 1) return;
     const s = g.current;
     if (e.pointerType === "mouse" && e.buttons === 0) {
-      if (mode !== "mini") poke();
+      if (mode !== "mini" && !atLeftEdge(e)) poke();
       return;
     }
     if (s.id !== e.pointerId) return;
@@ -1620,7 +1632,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               onPointerUp={(e) => e.stopPropagation()}
               onPointerMove={(e) => {
                 e.stopPropagation();
-                if (e.pointerType === "mouse") poke();
+                if (e.pointerType === "mouse" && !atLeftEdge(e)) poke();
               }}
             >
               {/* progress */}

@@ -151,7 +151,7 @@ export function DirectDock({
 
   const mini = mode === "mini";
   return (
-    <div ref={boxRef} className="fixed z-40 overflow-hidden bg-black shadow-2xl">
+    <div ref={boxRef} className="fixed z-40 overflow-hidden bg-black shadow-2xl select-none">
       {details ? (
         <VideoPlayer
           key={`${details.id}:${details.streams.source}`}

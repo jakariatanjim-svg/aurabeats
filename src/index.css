@@ -167,6 +167,17 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* Videos and pictures never take the blue text-selection tint (dragging a
+   selection across the page, Ctrl+A); text around them still selects. */
+video,
+iframe,
+img,
+canvas,
+[data-video-player] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Scroll containers. No transform here on purpose: a transformed ancestor
    becomes the containing block of every position:fixed descendant, which
    trapped menus and modals inside the scroll area. */
