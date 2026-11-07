@@ -333,14 +333,14 @@ export function Slider({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDragging(false)}
-      className={cn("group/slider relative flex cursor-pointer touch-none items-center py-2", disabled && "opacity-50", className)}
+      className={cn("ab-slider group/slider relative flex cursor-pointer touch-none items-center py-2", disabled && "opacity-50", className)}
     >
-      <div className={cn("relative w-full overflow-hidden rounded-full bg-ink/15", height)}>
+      <div className={cn("ab-slider-track relative w-full overflow-hidden rounded-full bg-ink/15", height)}>
         {buffered !== undefined && (
           <div className="absolute inset-y-0 left-0 rounded-full bg-ink/15 transition-[width] duration-300" style={{ width: `${bufPct}%` }} />
         )}
         <div
-          className="absolute inset-y-0 left-0 rounded-full"
+          className="ab-slider-fill absolute inset-y-0 left-0 rounded-full"
           style={{
             width: `${pct}%`,
             background: "var(--slider-fill)",
@@ -350,7 +350,7 @@ export function Slider({
       </div>
       <div
         className={cn(
-          "pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink shadow transition-opacity",
+          "ab-slider-thumb pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink shadow transition-opacity",
           dragging ? "opacity-100" : "opacity-0 group-hover/slider:opacity-100",
         )}
         style={{ left: `${pct}%` }}

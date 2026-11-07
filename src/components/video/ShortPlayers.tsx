@@ -9,6 +9,8 @@ import { getVideo } from "@/services/video/api";
 import { audioFor, type StreamSet } from "@/services/video/types";
 import { attachHls } from "./hls";
 import { canPlay } from "./streams";
+import type { ChunkTrack } from "./chunked";
+import { chunkedOk, useChunkedSrc } from "./useChunked";
 import { loadYT, qualityLabel, YT_ERRORS, YTState, type YTPlayer } from "./yt";
 
 export interface ShortChoice {
@@ -259,7 +261,7 @@ export function EmbedShort({ id, muted, onMutedStart, onState, ref }: ShortPlaye
 
 /* ----------------------------------- app ---------------------------------- */
 
-type Pick = { hls: string } | { src: string } | { video: string; audio: string } | null;
+type Pick = { hls: string } | { src: string } | { video: ChunkTrack; audio: ChunkTrack } | null;
 type Level = { height: number; pick: Exclude<Pick, null> };
 
 /** Playable heights, best first: picture + sound files, else single files; HLS last. */
@@ -275,7 +277,7 @@ function levelsOf(s: StreamSet): Level[] {
       const avc = /avc1/.test(v.mime);
       const cur = byH.get(h);
       // H.264 first (hardware decoding on every phone)
-      if (!cur || (avc && !cur.avc)) byH.set(h, { height: h, avc, pick: { video: v.url, audio: audio.url } });
+      if (!cur || (avc && !cur.avc)) byH.set(h, { height: h, avc, pick: { video: { url: v.url, mime: v.mime, layout: v.layout }, audio: { url: audio.url, mime: audio.mime, layout: audio.layout } } });
     }
   }
   for (const m of s.muxed) {
@@ -290,7 +292,7 @@ function levelsOf(s: StreamSet): Level[] {
 /** Auto: the best level up to 1080p (a Short fills a phone screen). */
 const autoLevel = (l: Level[]) => l.find((x) => x.height <= 1080) ?? l[l.length - 1];
 
-export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
+export function NativeShort({ id, muted, onMutedStart, onState, ref }: ShortPlayerProps) {
   const v = useRef<HTMLVideoElement>(null);
   const a = useRef<HTMLAudioElement>(null);
   const [levels, setLevels] = useState<Level[] | null>(null);
@@ -299,6 +301,10 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
   const startAt = useRef(0);
   const cb = useRef(onState);
   cb.current = onState;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const mutedStart = useRef(onMutedStart);
+  mutedStart.current = onMutedStart;
 
   useEffect(() => {
     let alive = true;
@@ -318,7 +324,23 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
 
   const level = levels?.length ? (qPref === "auto" ? autoLevel(levels) : (levels.find((l) => l.height <= Number(qPref)) ?? levels[levels.length - 1])) : undefined;
   const pick = level?.pick ?? null;
-  const dual = !!pick && "audio" in pick;
+  // Picture + sound go piece by piece into ONE <video> (one clock, like
+  // YouTube): no second sound player to keep in step — that drift and the
+  // re-syncing was the stuck sound / frozen Short. A Short needs no
+  // background play, so this is fine in the app. Falls back to the two
+  // players with plain file addresses when it can't work.
+  const [comboOff, setComboOff] = useState(false);
+  useEffect(() => setComboOff(false), [id]);
+  const comboTracks = pick && "audio" in pick && !comboOff ? [pick.video, pick.audio] : [];
+  const combo = comboTracks.length === 2 && chunkedOk(comboTracks);
+  const dual = !!pick && "audio" in pick && !combo;
+  useChunkedSrc(v, combo ? comboTracks : [], {
+    startHint: () => startAt.current,
+    onPlain: (at) => {
+      startAt.current = at;
+      setComboOff(true);
+    },
+  });
 
   // attach the picked streams (again after a quality change, at the same moment)
   useEffect(() => {
@@ -328,54 +350,99 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
     let alive = true;
     if ("hls" in pick) {
       attachHls(el, pick.hls, (why) => alive && cb.current({ playing: false, time: 0, duration: 0, failed: why })).then((s) => (alive ? (stop = s) : s()));
-    } else {
-      el.src = "src" in pick ? pick.src : pick.video;
-      if (a.current && "audio" in pick) a.current.src = pick.audio;
+    } else if (!combo) {
+      el.src = "src" in pick ? pick.src : pick.video.url;
+      if (a.current && dual) a.current.src = pick.audio.url;
     }
-    const master = () => ("audio" in pick ? a.current : el);
+    const master = () => (dual ? a.current : el);
     const m0 = master();
-    if (m0 && startAt.current) m0.currentTime = startAt.current;
-    if ("audio" in pick && startAt.current) el.currentTime = startAt.current;
-    m0?.play().catch(() => {});
-    if ("audio" in pick) el.play().catch(() => {});
-    // keep the picture with the sound; loop both
+    const resume = startAt.current;
+    const onMeta = () => {
+      if (resume && m0 && Math.abs(m0.currentTime - resume) > 0.5) m0.currentTime = resume;
+      if (dual && resume) el.currentTime = resume;
+    };
+    m0?.addEventListener("loadedmetadata", onMeta, { once: true });
+    // sound refused before a tap: play muted and say so (the 🔇 button turns on)
+    const play = () =>
+      m0?.play().catch((e: unknown) => {
+        if (!alive || !m0 || (e as { name?: string })?.name !== "NotAllowedError" || mutedRef.current) return;
+        mutedStart.current?.();
+        m0.muted = true;
+        m0.play().catch(() => {});
+      });
+    void play();
+    if (dual) el.play().catch(() => {});
+
+    // two players (fallback only): the picture follows the sound; if either
+    // has to wait for data, the other waits too instead of running ahead
+    let heldForPicture = false;
+    const onSoundWait = () => dual && el.pause();
+    const onSoundPlaying = () => {
+      if (!dual || !m0) return;
+      if (Math.abs(el.currentTime - m0.currentTime) > 0.15) el.currentTime = m0.currentTime;
+      el.play().catch(() => {});
+    };
+    const onPictureWait = () => {
+      if (!dual || !m0 || m0.paused) return;
+      heldForPicture = true;
+      m0.pause();
+    };
+    const onPictureReady = () => {
+      if (!heldForPicture || !m0) return;
+      heldForPicture = false;
+      void m0.play().catch(() => {});
+    };
+    if (dual && m0) {
+      m0.addEventListener("waiting", onSoundWait);
+      m0.addEventListener("playing", onSoundPlaying);
+      el.addEventListener("waiting", onPictureWait);
+      el.addEventListener("canplay", onPictureReady);
+    }
     const timer = setInterval(() => {
       const m = master();
       if (!m) return;
-      if ("audio" in pick && Math.abs(el.currentTime - m.currentTime) > 0.25) el.currentTime = m.currentTime;
+      // only a real drift is corrected (each correction makes the picture skip)
+      if (dual && !m.paused && !el.seeking && Math.abs(el.currentTime - m.currentTime) > 0.4) el.currentTime = m.currentTime;
       startAt.current = m.currentTime;
-      cb.current({ playing: !m.paused, time: m.currentTime, duration: Number.isFinite(m.duration) ? m.duration : 0 });
+      cb.current({ playing: !m.paused || heldForPicture, time: m.currentTime, duration: Number.isFinite(m.duration) ? m.duration : 0 });
     }, 250);
     const onEnd = () => {
       const m = master();
       if (!m) return;
       m.currentTime = 0;
-      el.currentTime = 0;
-      void m.play();
-      if ("audio" in pick) void el.play();
+      if (dual) el.currentTime = 0;
+      void m.play().catch(() => {});
+      if (dual) void el.play().catch(() => {});
     };
     m0?.addEventListener("ended", onEnd);
     return () => {
       alive = false;
       clearInterval(timer);
       m0?.removeEventListener("ended", onEnd);
+      m0?.removeEventListener("loadedmetadata", onMeta);
+      if (m0) {
+        m0.removeEventListener("waiting", onSoundWait);
+        m0.removeEventListener("playing", onSoundPlaying);
+      }
+      el.removeEventListener("waiting", onPictureWait);
+      el.removeEventListener("canplay", onPictureReady);
       stop();
       el.pause();
-      el.removeAttribute("src");
+      if (!combo) el.removeAttribute("src");
       a.current?.pause();
       a.current?.removeAttribute("src");
     };
-  }, [pick]);
+  }, [pick, combo, dual]);
 
   useEffect(() => {
     if (a.current) a.current.muted = muted;
     if (v.current) v.current.muted = dual || muted;
-  }, [muted, dual, pick]);
+  }, [muted, dual, pick, combo]);
 
   useEffect(() => {
     if (v.current) v.current.playbackRate = rate;
     if (a.current) a.current.playbackRate = rate;
-  }, [rate, pick]);
+  }, [rate, pick, combo]);
 
   useImperativeHandle(ref, () => ({
     toggle: () => {
@@ -428,7 +495,7 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
 
   return (
     <>
-      <video ref={v} playsInline muted={dual || muted} loop={!dual} className="absolute inset-0 h-full w-full object-contain" />
+      <video ref={v} playsInline muted={dual || muted} loop={!dual && !combo} className="absolute inset-0 h-full w-full object-contain" />
       {dual && <audio ref={a} preload="auto" />}
     </>
   );
