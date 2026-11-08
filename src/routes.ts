@@ -61,7 +61,9 @@ export function pathToRoute(pathname: string): RouteKey {
     const v = typeof location !== "undefined" ? new URLSearchParams(location.search).get("v") : null;
     return v && /^[\w-]{11}$/.test(v) ? (`watch:${v}` as RouteKey) : "video";
   }
-  const yt = clean.match(/^\/(?:shorts|live|embed)\/([\w-]{11})$/) ?? clean.match(/^\/([\w-]{11})$/);
+  // a Short's address opens the Shorts player at it
+  if (/^\/shorts\/[\w-]{11}$/.test(clean)) return "video-shorts";
+  const yt = clean.match(/^\/(?:live|embed)\/([\w-]{11})$/) ?? clean.match(/^\/([\w-]{11})$/);
   if (yt && !["home", "search", "library", "favorites", "history", "settings", "about", "privacy", "downloads", "device", "video"].includes(yt[1]))
     return `watch:${yt[1]}` as RouteKey;
   if (clean.startsWith("/watch/")) {

@@ -24,6 +24,7 @@ import {
 import { cn } from "@/utils/cn";
 import { FavIcon } from "@/components/FavIcon";
 import { videoIdOfTrack, watchTrackVideo, canSaveOffline } from "@/utils/watchVideo";
+import { OpenIn } from "@/components/OpenIn";
 import { requestVideoDownload } from "@/services/videoDownload";
 import { formatTime, gradientFrom } from "@/utils/format";
 import { usePlaybackClock, usePlayer } from "@/hooks/usePlayer";
@@ -465,6 +466,9 @@ export function FullScreenPlayer() {
                 <div key={`t-${current.id}`} className="ab-text-in w-full max-w-xl px-2 text-center">
                   <h2 className="truncate text-2xl font-black tracking-tight text-ink sm:text-3xl">{current.title}</h2>
                   <p className="mt-1 truncate text-sm text-ink2 sm:text-[1rem]">{current.artist}{current.genre ? ` • ${current.genre}` : ""}</p>
+                  {current.source !== "local" && !current.isLive && (
+                    <OpenIn kind="song" id={videoIdOfTrack(current)} query={`${current.title} ${current.artist}`} className="mt-2 justify-center" />
+                  )}
                 </div>
               </div>
               <div

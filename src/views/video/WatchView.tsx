@@ -27,6 +27,7 @@ import { useExtension } from "@/services/yt/extension";
 import { chaptersFromDescription, requestSeek, setVideoExtras, type Chapter } from "@/components/video/videoExtras";
 import { routeToPath, type RouteKey } from "@/routes";
 import { ShareSheet, shareNative } from "@/components/ShareSheet";
+import { OpenIn } from "@/components/OpenIn";
 
 export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: RouteKey) => void }) {
   const { isPlaying, toggle } = usePlayer();
@@ -406,6 +407,7 @@ export function WatchView({ id, onNavigate }: { id: string; onNavigate: (r: Rout
                 <Button variant="outline" className="px-3.5 text-xs" onClick={share}>
                   <Share2 key={shareFx} className={cn("h-3.5 w-3.5", shareFx > 0 && "animate-wiggle")} /> Share
                 </Button>
+                <OpenIn kind="video" id={id} className="self-center" />
                 <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} target={{ title: info.title, url: `https://www.youtube.com/watch?v=${id}` }} />
                 <Button
                   variant="outline"

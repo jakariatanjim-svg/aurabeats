@@ -43,6 +43,8 @@ export interface ShortHandle {
 export interface ShortPlayerProps {
   id: string;
   muted: boolean;
+  /** 0..1 */
+  volume?: number;
   onState: (s: { playing: boolean; time: number; duration: number; failed?: string }) => void;
   ref?: Ref<ShortHandle>;
 }
@@ -55,7 +57,7 @@ const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SHORT_WIDTH: Record<string, number> = { tiny: 144, small: 240, medium: 360, large: 480, hd720: 720, hd1080: 1080, hd1440: 1440, hd2160: 2160 };
 const Q_ORDER = ["hd2160", "hd1440", "hd1080", "hd720", "large", "medium", "small", "tiny"];
 
-export function EmbedShort({ id, muted, onState, ref }: ShortPlayerProps) {
+export function EmbedShort({ id, muted, volume = 1, onState, ref }: ShortPlayerProps) {
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const p = useRef<YTPlayer | null>(null);
@@ -63,6 +65,8 @@ export function EmbedShort({ id, muted, onState, ref }: ShortPlayerProps) {
   cb.current = { onState };
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const volRef = useRef(volume);
+  volRef.current = volume;
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [quality, setQualityPref] = useState(() => storage.get<string>("shorts:quality", "auto"));
   const [cc, setCc] = useState<string | null>(null);
@@ -100,6 +104,7 @@ export function EmbedShort({ id, muted, onState, ref }: ShortPlayerProps) {
             onReady: (e) => {
               if (!alive) return;
               p.current = e.target;
+              e.target.setVolume(Math.round(volRef.current * 100));
               if (mutedRef.current) e.target.mute();
               else e.target.unMute();
               e.target.playVideo();
@@ -181,6 +186,13 @@ export function EmbedShort({ id, muted, onState, ref }: ShortPlayerProps) {
     if (muted) pl.mute();
     else pl.unMute();
   }, [muted]);
+  useEffect(() => {
+    try {
+      p.current?.setVolume(Math.round(volume * 100));
+    } catch {
+      /* not ready */
+    }
+  }, [volume]);
 
   useImperativeHandle(ref, () => ({
     toggle: () => {
@@ -297,7 +309,7 @@ function levelsOf(s: StreamSet): Level[] {
 /** Auto: the best level up to 1080p (a Short fills a phone screen). */
 const autoLevel = (l: Level[]) => l.find((x) => x.height <= 1080) ?? l[l.length - 1];
 
-export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
+export function NativeShort({ id, muted, volume = 1, onState, ref }: ShortPlayerProps) {
   const v = useRef<HTMLVideoElement>(null);
   const a = useRef<HTMLAudioElement>(null);
   const [levels, setLevels] = useState<Level[] | null>(null);
@@ -447,6 +459,10 @@ export function NativeShort({ id, muted, onState, ref }: ShortPlayerProps) {
     if (a.current) a.current.muted = muted;
     if (v.current) v.current.muted = dual || muted;
   }, [muted, dual, pick, combo]);
+  useEffect(() => {
+    if (a.current) a.current.volume = volume;
+    if (v.current) v.current.volume = volume;
+  }, [volume, dual, pick, combo]);
 
   useEffect(() => {
     if (v.current) v.current.playbackRate = rate;

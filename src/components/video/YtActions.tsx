@@ -166,7 +166,7 @@ function AccountSaveButton({ videoId, open, setOpen }: { videoId: string; open: 
   );
 }
 
-function SaveSheet({ videoId, onClose }: { videoId: string; onClose: () => void }) {
+export function SaveSheet({ videoId, onClose }: { videoId: string; onClose: () => void }) {
   const { toast } = usePlayer();
   const targets = useSyncExternalStore(subscribeSaved, () => savedTargetsNow(videoId), () => savedTargetsNow(videoId));
   const [error, setError] = useState<string | null>(null);

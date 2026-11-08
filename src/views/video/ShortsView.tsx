@@ -6,15 +6,20 @@
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronUp, Maximize, MessageSquare, Minimize, Pause, Play, RotateCcw, RotateCw, MoreVertical, Share2, ThumbsUp, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize, MessageSquare, Minimize, Pause, Play, RotateCcw, RotateCw, MoreVertical, Share2, Subtitles, ThumbsUp, Volume1, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { formatCount, formatTime } from "@/utils/format";
+import { formatCount } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { isNative } from "@/services/video/net";
 import { getVideoAspect, getVideoMeta } from "@/services/video/api";
 import { ShareSheet, shareNative } from "@/components/ShareSheet";
 import { ShortsSource, takeShortsStart, type ShortItem } from "@/services/yt/shorts";
-import { getWatchExtras, watchExtrasAvailable } from "@/services/yt/watch";
+import { getPlayerExtras, getWatchExtras, watchExtrasAvailable } from "@/services/yt/watch";
+import { setVideoExtras } from "@/components/video/videoExtras";
+import { SeekPreview } from "@/components/video/SeekPreview";
+import { SaveSheet } from "@/components/video/YtActions";
+import { OpenIn } from "@/components/OpenIn";
+import { storage } from "@/utils/storage";
 import { likedNow, loadLike, setLiked, subscribeLikes } from "@/services/yt/library";
 import { useYtSession } from "@/services/yt/session";
 import { dropYtLists } from "@/hooks/useYtPaged";
@@ -51,6 +56,8 @@ export function ShortsView() {
   const [busy, setBusy] = useState(false);
   const [ended, setEnded] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(() => storage.get<number>("shorts:volume", 1));
+  useEffect(() => storage.set("shorts:volume", volume), [volume]);
   const src = useRef<ShortsSource | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const handle = useRef<ShortHandle>(null);
@@ -94,7 +101,7 @@ export function ShortsView() {
     const got = await src.current.more().catch(() => [] as ShortItem[]);
     setItems((cur) => {
       const ids = new Set(cur.map((s) => s.id));
-      return [...cur, ...got.filter((s) => !ids.has(s.id))];
+      return [...cur, ...got.filter((s) => !ids.has(s.id) && !unwanted(s))];
     });
     if (!got.length) setEnded(true);
     setBusy(false);
@@ -102,7 +109,9 @@ export function ShortsView() {
 
   useEffect(() => {
     const start = takeShortsStart();
-    src.current = new ShortsSource(start ? start.list.slice(start.index) : undefined);
+    // opened from a /shorts/<id> address (a copied link): start with that one
+    const fromUrl = /^\/shorts\/([\w-]{11})/.exec(window.location.pathname)?.[1];
+    src.current = new ShortsSource(start ? start.list.slice(start.index) : fromUrl ? [{ id: fromUrl }] : undefined);
     void loadMore();
     // first page only
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,6 +120,22 @@ export function ShortsView() {
   useEffect(() => {
     if (items.length && active >= items.length - 3) void loadMore();
   }, [active, items.length, loadMore]);
+
+  // the address shows the Short playing (youtube.com/shorts/<id> form), so
+  // copying it from the address bar gives a working link, like a video's
+  const activeId = items[active]?.id;
+  useEffect(() => {
+    if (!activeId) return;
+    const path = `/shorts/${activeId}`;
+    if (window.location.pathname !== path) history.replaceState(history.state, "", path);
+  }, [activeId]);
+
+  // "Not interested" / "Don't recommend this channel": out of the list now
+  // and kept out later (remembered on this device)
+  const skip = useCallback((id: string, channel?: string) => {
+    hideShort(id, channel);
+    setItems((cur) => cur.filter((x) => x.id !== id && !(channel && x.authorId === channel)));
+  }, []);
 
   const go = useCallback((dir: 1 | -1) => {
     const el = box.current;
@@ -212,6 +237,9 @@ export function ShortsView() {
             near={Math.abs(i - active) <= 1}
             muted={muted}
             setMuted={setMuted}
+            volume={volume}
+            setVolume={setVolume}
+            onSkip={skip}
             handle={i === active ? handle : undefined}
             seekFx={i === active ? seekFx : null}
             onSeek={seek}
@@ -245,6 +273,15 @@ export function ShortsView() {
   return wide ? view : createPortal(view, document.body);
 }
 
+const HIDDEN = "shorts:hidden";
+const BLOCKED = "shorts:blockedChannels";
+function hideShort(id: string, channel?: string) {
+  storage.set(HIDDEN, [id, ...storage.get<string[]>(HIDDEN, []).filter((x) => x !== id)].slice(0, 500));
+  if (channel) storage.set(BLOCKED, [channel, ...storage.get<string[]>(BLOCKED, []).filter((x) => x !== channel)].slice(0, 500));
+}
+const blockedChannel = (id?: string) => !!id && storage.get<string[]>(BLOCKED, []).includes(id);
+const unwanted = (s: ShortItem) => storage.get<string[]>(HIDDEN, []).includes(s.id) || blockedChannel(s.authorId);
+
 function RoundBtn({ label, onClick, disabled, dark, children }: { label: string; onClick: () => void; disabled?: boolean; dark?: boolean; children: React.ReactNode }) {
   return (
     <button
@@ -271,6 +308,7 @@ interface Meta {
   likes?: number;
   commentsToken?: string;
   commentCount?: string;
+  description?: string;
 }
 
 function useShortMeta(s: ShortItem, on: boolean): Meta {
@@ -281,7 +319,7 @@ function useShortMeta(s: ShortItem, on: boolean): Meta {
     const fill = (x: Meta) => alive && setM((cur) => ({ ...x, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== undefined && v !== "")) }));
     if (watchExtrasAvailable()) {
       getWatchExtras(s.id)
-        .then((x) => fill({ title: x.title, author: x.author, authorId: x.authorId, authorAvatar: x.authorAvatar, likes: x.likes, commentsToken: x.commentsToken, commentCount: x.commentCount }))
+        .then((x) => fill({ title: x.title, author: x.author, authorId: x.authorId, authorAvatar: x.authorAvatar, likes: x.likes, commentsToken: x.commentsToken, commentCount: x.commentCount, description: x.description }))
         .catch(() => getVideoMeta(s.id).then((x) => fill({ title: x.title, author: x.author })).catch(() => {}));
     } else {
       getVideoMeta(s.id)
@@ -304,6 +342,9 @@ function Slide({
   near,
   muted,
   setMuted,
+  volume,
+  setVolume,
+  onSkip,
   handle,
   seekFx,
   onSeek,
@@ -316,6 +357,9 @@ function Slide({
   near: boolean;
   muted: boolean;
   setMuted: (m: boolean) => void;
+  volume: number;
+  setVolume: (v: number) => void;
+  onSkip: (id: string, channel?: string) => void;
   handle?: React.RefObject<ShortHandle | null>;
   seekFx: { side: "l" | "r"; secs: number; key: number } | null;
   onSeek: (s: number) => void;
@@ -335,6 +379,49 @@ function Slide({
   useEffect(() => {
     if (!active) setSt({ playing: false, time: 0, duration: 0, failed: undefined });
   }, [active]);
+
+  // the little preview pictures over the progress line (when YouTube gives them)
+  useEffect(() => {
+    if (!active || !(isNative || watchExtrasAvailable())) return;
+    let alive = true;
+    getPlayerExtras(s.id)
+      .then((x) => alive && x.storyboard && setVideoExtras(s.id, { storyboard: x.storyboard }))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [active, s.id]);
+
+  // a channel you chose not to see: straight on to the next Short
+  useEffect(() => {
+    if (active && blockedChannel(meta.authorId)) onSkip(s.id, meta.authorId);
+  }, [active, meta.authorId, s.id, onSkip]);
+
+  // captions on / off (the CC button on the video)
+  const [cc, setCc] = useState<string | null>(null);
+  useEffect(() => setCc(null), [s.id]);
+  const toggleCc = () => {
+    const h = handle?.current;
+    if (!h) return;
+    if (cc) {
+      h.setCaption(null);
+      setCc(null);
+      return;
+    }
+    const list = h.options().captions;
+    const pick = list.find((c) => c.id.startsWith("en")) ?? list[0];
+    if (pick) {
+      h.setCaption(pick.id);
+      setCc(pick.id);
+    }
+  };
+
+  const session = useYtSession();
+  const [saveOpen, setSaveOpen] = useState(false);
+  const save = () => {
+    if (session) setSaveOpen(true);
+    else videoLibrary.toggleLater({ id: s.id, title: meta.title ?? "", author: meta.author ?? "", authorId: meta.authorId, duration: Math.round(st.duration), thumbnail: thumb(s) });
+  };
 
   // never music and a Short at once: whichever started last keeps playing
   const { isPlaying: musicOn, pause: pauseMusic } = usePlayer();
@@ -393,9 +480,8 @@ function Slide({
   const mediaStyle: React.CSSProperties = cover
     ? { width: `max(100cqw, calc(100cqh * ${ar}))`, height: `max(100cqh, calc(100cqw / ${ar}))` }
     : { width: `min(100cqw, calc(100cqh * ${ar}))`, height: `min(100cqh, calc(100cqw / ${ar}))` };
-  // computers: the player's height leaves room for the title under it
-  const infoRoom = full ? "4.75rem" : "5.25rem";
-  const frameH = `min(calc(100cqh - ${infoRoom} - 1rem), calc((100cqw - 7rem) / ${frameAr}))`;
+  // computers: as tall as fits, leaving room on the right for the buttons and the title
+  const frameH = `min(calc(100cqh - 1rem), calc((100cqw - 26rem) / ${frameAr}))`;
 
   const frame = (
     <div
@@ -409,6 +495,7 @@ function Slide({
             ref={handle}
             id={s.id}
             muted={muted}
+            volume={volume}
             onState={(x) => setSt({ playing: x.playing, time: x.time, duration: x.duration, failed: x.failed })}
           />
         )}
@@ -450,25 +537,45 @@ function Slide({
       )}
 
       {wide ? (
-        /* computers: small controls on top, only while the mouse is over it */
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/45 to-transparent p-3 pb-8 text-white opacity-0 transition-opacity duration-200 group-hover/frame:opacity-100 focus-within:opacity-100">
-          <div className="pointer-events-auto flex items-center gap-1">
-            <button type="button" aria-label={st.playing ? "Pause" : "Play"} onClick={() => handle?.current?.toggle()} className="rounded-full p-2 hover:bg-white/15">
+        /* computers: the video stays clean; the controls show only while
+           the mouse is over it and go away the moment it leaves */
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent p-2.5 pb-10 text-white opacity-0 group-hover/frame:opacity-100 has-[:focus-visible]:opacity-100">
+          <div className="pointer-events-auto flex items-center gap-0.5">
+            <button type="button" aria-label={st.playing ? "Pause" : "Play"} title={st.playing ? "Pause (k)" : "Play (k)"} onClick={() => handle?.current?.toggle()} className="rounded-full p-2 hover:bg-white/15">
               {st.playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
             </button>
-            <button type="button" aria-label={muted ? "Unmute" : "Mute"} onClick={() => setMuted(!muted)} className="rounded-full p-2 hover:bg-white/15">
-              {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            {/* sound: the slider opens beside the button while pointing at it */}
+            <div className="group/vol flex items-center rounded-full pr-1 hover:bg-white/15">
+              <button type="button" aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute (m)" : "Mute (m)"} onClick={() => setMuted(!muted)} className="rounded-full p-2">
+                {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : volume < 0.5 ? <Volume1 className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.02}
+                aria-label="Volume"
+                value={muted ? 0 : volume}
+                onChange={(e) => {
+                  const v = Number(e.currentTarget.value);
+                  setVolume(v);
+                  if (muted && v > 0) setMuted(false);
+                }}
+                className="ab-range h-1 w-0 cursor-pointer opacity-0 transition-[width,opacity] duration-200 group-hover/vol:w-20 group-hover/vol:opacity-100 focus-visible:w-20 focus-visible:opacity-100 accent-white"
+              />
+            </div>
+          </div>
+          <div className="pointer-events-auto flex items-center gap-0.5">
+            <button type="button" aria-label="Captions" aria-pressed={!!cc} title="Captions" onClick={toggleCc} className={cn("relative rounded-full p-2 hover:bg-white/15", cc && "after:absolute after:inset-x-2.5 after:bottom-1 after:h-0.5 after:rounded-full after:bg-accent")}>
+              <Subtitles className="h-5 w-5" />
+            </button>
+            <button type="button" aria-label="More options" onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())} className="rounded-full p-2 hover:bg-white/15">
+              <MoreVertical className="h-5 w-5" />
+            </button>
+            <button type="button" aria-label={full ? "Exit full screen" : "Full screen"} title={full ? "Exit full screen (f)" : "Full screen (f)"} onClick={onFull} className="rounded-full p-2 hover:bg-white/15">
+              {full ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             </button>
           </div>
-          <button
-            type="button"
-            aria-label={full ? "Exit full screen" : "Full screen"}
-            title={full ? "Exit full screen (f)" : "Full screen (f)"}
-            onClick={onFull}
-            className="pointer-events-auto rounded-full p-2 hover:bg-white/15"
-          >
-            {full ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
-          </button>
         </div>
       ) : (
         <>
@@ -494,7 +601,7 @@ function Slide({
       )}
 
       {/* progress */}
-      {active && <ShortSeekBar progress={progress} duration={st.duration} onSeek={(t) => handle?.current?.seekTo(t)} />}
+      {active && <ShortSeekBar id={s.id} progress={progress} duration={st.duration} onSeek={(t) => handle?.current?.seekTo(t)} />}
     </div>
   );
 
@@ -502,16 +609,21 @@ function Slide({
     <section className={cn("relative flex h-full snap-start snap-always items-center justify-center select-none", wide && "gap-4 py-2 [container-type:size]")}>
       {wide ? (
         <>
-          {/* computers: nothing over the picture — channel and title sit
-              under it, the buttons beside it, level with its bottom */}
-          <div className="grid grid-cols-[auto_auto] gap-x-4">
+          {/* computers: nothing over the picture. The video sits in the
+              middle; the buttons, then channel, Subscribe and title are
+              beside it, lined up with its bottom, like YouTube */}
+          <div className="grid w-full grid-cols-[1fr_auto_1fr] gap-x-4">
+            <span />
             <div style={{ width: `calc(${frameH} * ${frameAr})` }}>{frame}</div>
-            <div className="flex flex-col items-center gap-4 self-end">
-              <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} dark={full} />
-            </div>
-            <div className={cn("mt-3 min-w-0 px-1", full ? "text-white" : "text-ink")} style={{ width: `calc(${frameH} * ${frameAr})` }}>
-              <Who meta={meta} dark={full} />
-              {meta.title && <p className={cn("mt-1.5 line-clamp-2 text-sm leading-snug", full ? "text-white/85" : "text-ink2")}>{meta.title}</p>}
+            <div className="flex min-w-0 items-end gap-4 pr-16">
+              <div className="flex shrink-0 flex-col items-center gap-4">
+                <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} dark={full} />
+              </div>
+              <div className={cn("min-w-0 max-w-72 pb-1", full ? "text-white" : "text-ink")}>
+                <Who meta={meta} dark={full} />
+                {meta.title && <p className={cn("mt-2 line-clamp-3 text-sm leading-snug", full ? "text-white/85" : "text-ink2")}>{meta.title}</p>}
+                <OpenIn kind="short" id={s.id} dark={full} className="mt-2" />
+              </div>
             </div>
           </div>
         </>
@@ -519,7 +631,23 @@ function Slide({
         frame
       )}
 
-      {menu && active && <ShortMenu handle={handle?.current ?? null} anchor={menu} sheet={!wide} onClose={() => setMenu(null)} />}
+      {menu && active && (
+        <ShortMenu
+          handle={handle?.current ?? null}
+          anchor={menu}
+          sheet={!wide}
+          onClose={() => setMenu(null)}
+          info={{ id: s.id, title: meta.title, description: meta.description, author: meta.author }}
+          actions={{
+            onSave: save,
+            onFull: wide ? onFull : undefined,
+            full,
+            onNotInterested: () => onSkip(s.id),
+            onBlockChannel: meta.authorId ? () => onSkip(s.id, meta.authorId) : undefined,
+          }}
+        />
+      )}
+      {saveOpen && <SaveSheet videoId={s.id} onClose={() => setSaveOpen(false)} />}
       {meta.commentsToken && <CommentsSheet token={meta.commentsToken} count={meta.commentCount} open={comments} onClose={() => setComments(false)} side={wide} />}
       {!isNative && <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} target={{ title: meta.title, url: shareUrl }} />}
     </section>
@@ -626,7 +754,7 @@ function Actions({
  * under the pointer, click or drag (mouse or finger) moves the Short there.
  * It grows a little while hovered or held, like YouTube's.
  */
-function ShortSeekBar({ progress, duration, onSeek }: { progress: number; duration: number; onSeek: (t: number) => void }) {
+function ShortSeekBar({ id, progress, duration, onSeek }: { id: string; progress: number; duration: number; onSeek: (t: number) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null); // 0..1 under the mouse
   const [drag, setDrag] = useState<number | null>(null); // 0..1 while held
@@ -694,14 +822,8 @@ function ShortSeekBar({ progress, duration, onSeek }: { progress: number; durati
           />
         )}
       </div>
-      {usable && tip !== null && (
-        <span
-          className="pointer-events-none absolute bottom-4 -translate-x-1/2 rounded-md bg-black/80 px-2 py-0.5 text-[12px] font-semibold text-white tabular-nums"
-          style={{ left: `clamp(1.75rem, ${tip * 100}%, calc(100% - 1.75rem))` }}
-        >
-          {formatTime(tip * duration)}
-        </span>
-      )}
+      {/* a small picture of that moment over the pointer, with the time */}
+      {usable && tip !== null && <SeekPreview id={id} t={tip * duration} duration={duration} left={tip * (ref.current?.clientWidth ?? 0)} barWidth={ref.current?.clientWidth} />}
     </div>
   );
 }
