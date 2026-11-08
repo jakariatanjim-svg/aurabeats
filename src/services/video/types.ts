@@ -16,6 +16,8 @@ export interface VideoItem {
   thumbnail: string;
   /** first lines of the description (search results) */
   snippet?: string;
+  /** a YouTube Short (search results) */
+  short?: boolean;
 }
 
 export interface ChannelItem {
@@ -36,12 +38,35 @@ export interface VideoStream {
   fps?: number;
   bitrate?: number;
   label: string; // "1080p60"
+  /** byte layout (YouTube's own streams): lets the player fetch in small pieces */
+  layout?: StreamLayout;
+}
+
+/** Where a file's header and index are, so it can be played piece by piece. */
+export interface StreamLayout {
+  init: [number, number];
+  index: [number, number];
+  /** file size in bytes */
+  size?: number;
+  /** length in ms */
+  durMs?: number;
 }
 
 export interface AudioStream {
   url: string;
   mime: string;
   bitrate?: number;
+  layout?: StreamLayout;
+  /** dubbed / extra language tracks */
+  track?: { id: string; name: string; isDefault: boolean };
+}
+
+export interface CaptionTrack {
+  url: string;
+  lang: string;
+  name: string;
+  /** made by YouTube's speech recognition */
+  auto?: boolean;
 }
 
 export interface MuxedStream {
@@ -67,6 +92,7 @@ export interface VideoDetails extends VideoItem {
   subscribers?: string;
   related: VideoItem[];
   streams: StreamSet;
+  captions?: CaptionTrack[];
 }
 
 export interface ChannelPage {
@@ -84,4 +110,21 @@ export interface ChannelPage {
 export function thumbFor(id: string, q: "mq" | "hq" | "maxres" = "hq"): string {
   const file = q === "mq" ? "mqdefault" : q === "maxres" ? "maxresdefault" : "hqdefault";
   return `https://i.ytimg.com/vi/${id}/${file}.jpg`;
+}
+
+/** The video's own soundtrack (dubbed languages left out), or one chosen language. */
+export function audioFor(list: AudioStream[], trackId?: string | null): AudioStream[] {
+  if (trackId) {
+    const t = list.filter((a) => a.track?.id === trackId);
+    if (t.length) return t;
+  }
+  const d = list.filter((a) => !a.track || a.track.isDefault);
+  return d.length ? d : list;
+}
+
+/** Distinct audio languages of a video (empty when it has only one). */
+export function audioTracks(list: AudioStream[]): { id: string; name: string; isDefault: boolean }[] {
+  const m = new Map<string, { id: string; name: string; isDefault: boolean }>();
+  for (const a of list) if (a.track && !m.has(a.track.id)) m.set(a.track.id, a.track);
+  return m.size > 1 ? [...m.values()].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name)) : [];
 }

@@ -148,6 +148,11 @@ function Shell() {
       const anchor = (e.target as HTMLElement | null)?.closest?.("a[data-nav='true']") as HTMLAnchorElement | null;
       if (!anchor) return;
       e.preventDefault();
+      // the page you are on: back to its top, no duplicate history step
+      if (anchor.pathname + anchor.search === lastLoc.current) {
+        jumpTop();
+        return;
+      }
       saveScroll();
       window.history.pushState(null, "", anchor.pathname + anchor.search);
       lastLoc.current = anchor.pathname + anchor.search;
@@ -287,7 +292,9 @@ function Shell() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
+      // browser shortcuts (Ctrl+F, Ctrl+Space…) stay the browser's
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       // The video player owns the keyboard while a video is open.
       if (watching && !expanded) return;
       if (e.code === "Space") {
@@ -360,7 +367,7 @@ function Shell() {
               </div>
             }
           >
-            <div key={shownRoute} className="animate-fade-up mx-auto w-full max-w-[1600px] pb-8">
+            <div key={shownRoute} className="ab-route mx-auto w-full max-w-[1600px] pb-8">
               {!online && needsInternet(shownRoute) ? (
                 <OfflineScreen onNavigate={navigate} />
               ) : (

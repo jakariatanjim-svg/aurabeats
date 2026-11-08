@@ -296,8 +296,9 @@ export function TrackRow({
       onKeyDown={(e) => {
         if (e.key === "Enter") playNow(track, context);
       }}
+      style={index !== undefined && index < 14 ? { animationDelay: `${index * 32}ms` } : undefined}
       className={cn(
-        "group/row flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-2 text-left select-none transition-colors duration-200 focus-ring",
+        "ab-rise group/row flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-2 text-left select-none transition-colors duration-200 focus-ring",
         isCurrent ? "bg-accent/10" : "hover:bg-ink/[0.07] active:bg-ink/10",
       )}
     >
@@ -494,7 +495,7 @@ export function Carousel({ children }: { children: ReactNode }) {
   };
   return (
     <div className="group/car relative -mx-1">
-      <div ref={ref} className="no-scrollbar flex gap-3 overflow-x-auto scroll-smooth px-1 pb-1">
+      <div ref={ref} className="ab-stagger no-scrollbar flex gap-3 overflow-x-auto scroll-smooth px-1 pb-1">
         {children}
       </div>
       {[-1, 1].map((dir) => (

@@ -39,3 +39,19 @@ export function useBackHandler(active: boolean, onBack: Handler): void {
     return pushBackHandler(() => ref.current());
   }, [active]);
 }
+
+/** Computers: Esc closes it too (sheets and menus without their own Esc). */
+export function useEscape(active: boolean, onClose: Handler): void {
+  const ref = useRef(onClose);
+  ref.current = onClose;
+  useEffect(() => {
+    if (!active) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      ref.current();
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [active]);
+}

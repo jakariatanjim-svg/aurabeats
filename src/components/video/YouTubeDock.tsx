@@ -55,6 +55,7 @@ import { videoLibrary } from "@/hooks/useVideoLibrary";
 import { extensionCanStream, useExtension } from "@/services/yt/extension";
 import { DirectDock, useDirect } from "./DirectDock";
 import { navMemory } from "@/utils/navMemory";
+import { heldTooSoon } from "@/utils/keyRepeat";
 import type { RouteKey } from "@/routes";
 import { dock, dockRefs, useDock } from "./dock";
 import { getVideoAspect } from "@/services/video/api";
@@ -64,12 +65,20 @@ const Q_ORDER = ["tiny", "small", "medium", "large", "hd720", "hd1080", "hd1440"
 const qRank = (q: string) => Q_ORDER.indexOf(q);
 import { adBlockState } from "./adblock";
 import { extensionPossible } from "./AdBlockTip";
+import { PlayerOverlays } from "./PlayerOverlays";
+import { EndScreen } from "./EndScreen";
+import { ChapterMarks, SeekPreview } from "./SeekPreview";
+import { AutoplaySwitch } from "./AutoplaySwitch";
+import { getRepeat, setRepeat, useAutoplay, useRepeat } from "@/services/video/settings";
+import { chapterAt, onSeekRequest, useVideoExtras } from "./videoExtras";
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 // Faster speeds, shown only when YouTube's player says it can do them (the
 // embed is normally capped at 2x; the Android app's own player does 3x/4x).
 const FAST = [3, 4];
 const HOLD_MS = 420;
+/** full screen: the mouse this close (px) to the left edge hides the controls at once */
+const FS_LEFT_EDGE = 16;
 const TAP_MS = 280;
 
 type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
@@ -130,6 +139,13 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const maxSeen = useRef(-1);
   const [tracks, setTracks] = useState<{ languageCode: string; displayName: string }[]>([]);
   const [cc, setCc] = useState<string | null>(null);
+  const extras = useVideoExtras(d.id);
+  const ccRef = useRef(cc);
+  ccRef.current = cc;
+  // YouTube only lists a video's captions after its captions part is loaded,
+  // so it is loaded once quietly when the video starts (then hidden again) —
+  // otherwise the Captions menu never appeared.
+  const ccProbe = useRef<"idle" | "probing" | "done">("idle");
   const [controls, setControls] = useState(true);
   const [menu, setMenu] = useState<null | "main" | "speed" | "quality" | "cc">(null);
   const [held, setHeld] = useState(false);
@@ -159,6 +175,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   const playing = state === YTState.PLAYING || state === YTState.BUFFERING;
   const ended = state === YTState.ENDED;
   const touch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  const autoplay = useAutoplay();
 
   // Did WE (the user, music starting…) pause it? Anything else that stops
   // the video is a stall the player recovers from by itself.
@@ -172,6 +189,17 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       return (p[fn] as unknown as (...a: unknown[]) => unknown).apply(p, args);
     } catch {
       return undefined;
+    }
+  }, []);
+
+  const hideCaptions = useCallback(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    try {
+      if (p.unloadModule) p.unloadModule("captions");
+      else p.setOption("captions", "track", {});
+    } catch {
+      /* player gone */
     }
   }, []);
 
@@ -237,9 +265,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               if (!alive || !playerRef.current) return;
               try {
                 const list = playerRef.current.getOption("captions", "tracklist");
-                if (Array.isArray(list)) setTracks(list as { languageCode: string; displayName: string }[]);
+                if (Array.isArray(list) && list.length) setTracks(list as { languageCode: string; displayName: string }[]);
               } catch {
                 /* no captions module */
+              }
+              // the quiet look-up below is done: hide them again unless wanted
+              if (ccProbe.current === "probing") {
+                ccProbe.current = "done";
+                if (!ccRef.current) hideCaptions();
               }
             },
           },
@@ -258,6 +291,21 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     };
   }, []);
 
+  // First real playback of each video: load captions quietly to learn its tracks.
+  const ccTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (state !== YTState.PLAYING || ad || ccProbe.current !== "idle") return;
+    ccProbe.current = "probing";
+    call("loadModule", "captions");
+    clearTimeout(ccTimer.current);
+    ccTimer.current = setTimeout(() => {
+      if (ccProbe.current !== "probing") return;
+      ccProbe.current = "done";
+      if (!ccRef.current) hideCaptions();
+    }, 4000);
+  }, [state, ad, call, hideCaptions]);
+  useEffect(() => () => clearTimeout(ccTimer.current), []);
+
   // A new video was opened (watch page claimed the dock with another id).
   const lastClaim = useRef(d.claim);
   useEffect(() => {
@@ -275,6 +323,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     maxSeen.current = -1;
     setTracks([]);
     setCc(null);
+    ccProbe.current = "idle";
     setTime(d.startAt);
     setDuration(0);
     setState(YTState.UNSTARTED);
@@ -568,11 +617,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     return () => clearInterval(iv);
   }, [ready, call]);
 
-  // Loop: plays the same video again and again (per video, like YouTube).
-  const [loop, setLoop] = useState(false);
+  // Repeat: the same video again and again; stays on across videos until
+  // the page is closed.
+  const loop = useRepeat();
+  const setLoop = (f: (l: boolean) => boolean) => setRepeat(f(getRepeat()));
   const loopRef = useRef(loop);
   loopRef.current = loop;
-  useEffect(() => setLoop(false), [d.id]);
 
   // Ended → history + autoplay next (handled by the watch page when inline).
   useEffect(() => {
@@ -583,7 +633,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       return;
     }
     dockRefs.ended = true;
-    setControls(true);
+    if (!touch) setControls(true);
     const meta = dock.get().meta;
     if (meta) videoLibrary.recordProgress(meta, meta.duration || duration);
     dockRefs.onEnded?.();
@@ -650,7 +700,14 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setVolumeState(n);
     storage.set("video:ytVolume", n);
     call("setVolume", n);
-    if (n > 0 && (muted || needsUnmute)) unmute();
+    // sound back on at exactly this level (unmute() would jump to 60 % when
+    // the old level was 0 — the "volume suddenly goes to the middle" bug)
+    if (n > 0 && (muted || needsUnmute)) {
+      call("unMute");
+      unmuteAt.current = Date.now();
+      setMuted(false);
+      setNeedsUnmute(false);
+    }
     if (n === 0) {
       call("mute");
       setMuted(true);
@@ -887,6 +944,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => setControls(false), touch ? 3200 : 2600);
   }, [touch]);
+  /** Full screen, mouse at the very left edge of the screen: the controls
+   *  hide at once, like YouTube. True when it did. */
+  const atLeftEdge = (e: { clientX: number; pointerType: string }) => {
+    if (fs === "off" || e.pointerType !== "mouse" || menu) return false;
+    const r = boxRef.current?.getBoundingClientRect();
+    if (!r || e.clientX - r.left > FS_LEFT_EDGE) return false;
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    if (playing) setControls(false);
+    return true;
+  };
   useEffect(() => {
     if (!playing || menu || scrub !== null) {
       if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -990,7 +1057,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     if (pts.current.size > 1) return;
     const s = g.current;
     if (e.pointerType === "mouse" && e.buttons === 0) {
-      if (mode !== "mini") poke();
+      if (mode !== "mini" && !atLeftEdge(e)) poke();
       return;
     }
     if (s.id !== e.pointerId) return;
@@ -1134,12 +1201,16 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     setSeekFx((f) => ({ side, secs: f && f.side === side && now - f.key < 1000 ? f.secs + Math.abs(step) : Math.abs(step), key: now }));
   };
   useEffect(() => {
-    if (mode === "mini") return;
+    if (mode === "mini" || mode === "none") return; // hidden or corner player: keys stay with the page
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      if (["arrowleft", "arrowright", "j", "l"].includes(k) && heldTooSoon(e)) {
+        e.preventDefault();
+        return;
+      }
       if (k === " " || k === "k") togglePlay();
       else if (k === "arrowleft") keySeek(-5);
       else if (k === "arrowright") keySeek(5);
@@ -1159,14 +1230,23 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
       else if (k === "i") toMini();
       else if (k === "m") toggleMute();
       else if (k === "arrowup" || k === "arrowdown") {
+        // like YouTube: volume only with the pointer / focus on the player
+        // (or full screen); otherwise the arrows scroll the page
+        const box = boxRef.current;
+        if (fs === "off" && !box?.matches(":hover") && !box?.contains(document.activeElement)) return;
         const n = Math.max(0, Math.min(100, (muted || needsUnmute ? 0 : volume) + (k === "arrowup" ? 5 : -5)));
         setVolume(n);
         setVolFx({ v: n, key: Date.now() });
       }
+      else if (e.key === "N" && e.shiftKey) playNext(); // next video, like YouTube
       else if (e.key === ">") setSpeed(SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(rate) + 1)] ?? 2);
       else if (e.key === "<") setSpeed(SPEEDS[Math.max(0, SPEEDS.indexOf(rate) - 1)] ?? 0.25);
       else if (k === "escape" && fs === "css") void exitFs();
       else if (/^[0-9]$/.test(k) && duration) seek((Number(k) / 10) * duration);
+      else if (k === "home") seek(0);
+      else if (k === "end" && duration) seek(Math.max(0, duration - 0.25));
+      // YouTube: , and . step one frame while paused
+      else if ((e.key === "," || e.key === ".") && !playing) seek(Math.max(0, time + (e.key === "." ? 1 / 30 : -1 / 30)));
       else return;
       e.preventDefault();
       poke();
@@ -1174,6 +1254,17 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // A chapter tapped on the watch page → jump there.
+  const seekRef = useRef(seek);
+  seekRef.current = seek;
+  useEffect(() => {
+    if (mode === "mini" || mode === "none") return;
+    return onSeekRequest((t) => {
+      seekRef.current(t);
+      call("playVideo");
+    });
+  }, [mode, call]);
 
   // Mouse wheel over the volume control (speaker icon + bar) = volume ±10 %
   // (PC). Anywhere else on the video the wheel does nothing special, so the
@@ -1225,7 +1316,9 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
   /* ------------------------------- layout ------------------------------- */
   const shownTime = scrub ?? time;
   const pct = duration ? (shownTime / duration) * 100 : 0;
-  const showUi = !ad && (controls || !playing || ended);
+  // (phones: the end screen stands alone until tapped, like the YouTube app)
+  const showUi = !ad && (controls || ((!playing || ended) && !(ended && touch)));
+  const curChapter = chapterAt(extras.chapters, shownTime);
   // Fixed quality: lay the iframe out at that level's width, scale to fit.
   const fw = frame.w || 1;
   const fh = frame.h || 1;
@@ -1510,13 +1603,22 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               </div>
             )}
 
+            {!error && !ad && d.id && <PlayerOverlays id={d.id} time={time} controlsShown={showUi} aspect={aspect} />}
+            {/* phones: the autoplay switch sits top right, like the YouTube app */}
+            {touch && showUi && !error && !ad && (
+              <div
+                className={cn("absolute right-11 z-[6] sm:right-12", mode === "full" ? "top-[calc(var(--sa-top)+0.4rem)]" : "top-1")}
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <AutoplaySwitch />
+              </div>
+            )}
+
             {/* ended */}
             {ended && !error && (
-              <div className="absolute inset-0 flex items-center justify-center gap-4">
-                <CtrlBtn label="Replay" onClick={play} className="bg-black/50 p-4">
-                  <RotateCcw className="h-8 w-8" />
-                </CtrlBtn>
-              </div>
+              <EndScreen next={d.next} autoplay={autoplay && !loop} touch={touch} onReplay={play} onNext={playNext} />
             )}
 
             {/* bottom bar */}
@@ -1530,7 +1632,7 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
               onPointerUp={(e) => e.stopPropagation()}
               onPointerMove={(e) => {
                 e.stopPropagation();
-                if (e.pointerType === "mouse") poke();
+                if (e.pointerType === "mouse" && !atLeftEdge(e)) poke();
               }}
             >
               {/* progress */}
@@ -1542,16 +1644,18 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 onPointerUp={barUp}
                 onPointerLeave={() => setHover(null)}
               >
-                {(hover || scrub !== null) && duration > 0 && (
-                  <span
-                    className="pointer-events-none absolute bottom-5 -translate-x-1/2 rounded-md bg-black/80 px-1.5 py-0.5 text-[11px] font-bold tabular-nums"
-                    style={{ left: scrub !== null ? `${pct}%` : hover!.x }}
-                  >
-                    {formatTime(scrub ?? hover!.t)}
-                  </span>
+                {(hover || scrub !== null) && duration > 0 && d.id && (
+                  <SeekPreview
+                    id={d.id}
+                    t={scrub ?? hover!.t}
+                    duration={duration}
+                    left={scrub !== null ? ((barRef.current?.clientWidth ?? 0) * pct) / 100 : hover!.x}
+                    barWidth={barRef.current?.clientWidth}
+                  />
                 )}
                 <div className={cn("relative h-[3px] w-full rounded-full bg-white/25 transition-[height] group-hover/bar:h-[5px]", scrub !== null && "h-[5px]")}>
                   <div className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${loaded * 100}%` }} />
+                  {d.id && <ChapterMarks id={d.id} duration={duration} />}
                   <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${pct}%` }} />
                   <span
                     className={cn(
@@ -1590,10 +1694,12 @@ function DockPlayer({ navigate, musicBar }: { navigate: (r: RouteKey) => void; m
                 <span className="ml-1.5 text-[12px] font-semibold tabular-nums text-white/90 sm:text-[13px]">
                   {formatTime(shownTime)} <span className="text-white/60">/ {duration ? formatTime(duration) : "--:--"}</span>
                 </span>
+                {curChapter && <span className="hidden min-w-0 truncate text-[12px] font-semibold text-white/80 sm:inline sm:text-[13px]">• {curChapter.title}</span>}
 
                 <span className="flex-1" />
 
                 {rate !== 1 && <span className="mr-1 rounded bg-white/15 px-1.5 py-0.5 text-[11px] font-bold">{rate}x</span>}
+                {!touch && <AutoplaySwitch />}
                 <CtrlBtn label={loop ? "Loop on" : "Loop"} onClick={() => setLoop((l) => !l)} className={cn(loop && "text-accent")}>
                   {loop ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
                 </CtrlBtn>

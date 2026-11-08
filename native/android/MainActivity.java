@@ -13,13 +13,17 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // native/android: in-app downloads, songs already on the phone and
-        // the floating video window, YouTube account sign-in.
+        // the floating video window, YouTube account sign-in, the player's
+        // brightness / sound swipes.
         registerPlugin(VideoSaverPlugin.class);
         registerPlugin(DeviceMusicPlugin.class);
         registerPlugin(PipPlugin.class);
         registerPlugin(YtLoginPlugin.class);
         registerPlugin(ShareTargetPlugin.class);
+        registerPlugin(PlayerScreenPlugin.class);
         super.onCreate(savedInstanceState);
+        // videos and Shorts start with sound by themselves, no tap needed
+        getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
         // opened by "Share → AuraBeats" or a YouTube link
         ShareTargetPlugin.handle(getIntent());
     }

@@ -16,17 +16,22 @@ export function ChannelView({ id }: { id: string }) {
   const [more, setMore] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
   const [nonce, setNonce] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setError(null);
+    setLoading(true);
     getChannel(id)
       .then((p) => alive && setPage(p))
-      .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : "Could not load channel"));
+      .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : "Could not load channel"))
+      .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
   }, [id, nonce]);
+  // a different channel: don't show the previous one while loading
+  useEffect(() => setPage(null), [id]);
 
   const loadMore = () => {
     if (!page?.next || more) return;
@@ -97,7 +102,15 @@ export function ChannelView({ id }: { id: string }) {
         <EmptyState
           title="Videos aren't available right now"
           hint="The servers couldn't list this channel's uploads. Try again in a moment."
-          action={<Button variant="outline" onClick={() => setNonce((n) => n + 1)}>Try again</Button>}
+          action={
+            loading ? (
+              <Spinner />
+            ) : (
+              <Button variant="outline" onClick={() => setNonce((n) => n + 1)}>
+                Try again
+              </Button>
+            )
+          }
         />
       ) : page ? (
         <>

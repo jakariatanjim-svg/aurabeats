@@ -6,14 +6,20 @@
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronUp, MessageSquare, Pause, Play, RotateCcw, RotateCw, Share2, ThumbsUp, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize, MessageSquare, Minimize, Pause, Play, RotateCcw, RotateCw, MoreVertical, Share2, Subtitles, ThumbsUp, Volume1, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatCount } from "@/utils/format";
 import { usePlayer } from "@/hooks/usePlayer";
 import { isNative } from "@/services/video/net";
-import { getVideoMeta } from "@/services/video/api";
+import { getVideoAspect, getVideoMeta } from "@/services/video/api";
+import { ShareSheet, shareNative } from "@/components/ShareSheet";
 import { ShortsSource, takeShortsStart, type ShortItem } from "@/services/yt/shorts";
-import { getWatchExtras, watchExtrasAvailable } from "@/services/yt/watch";
+import { getPlayerExtras, getWatchExtras, watchExtrasAvailable } from "@/services/yt/watch";
+import { setVideoExtras } from "@/components/video/videoExtras";
+import { SeekPreview } from "@/components/video/SeekPreview";
+import { SaveSheet } from "@/components/video/YtActions";
+import { OpenIn } from "@/components/OpenIn";
+import { storage } from "@/utils/storage";
 import { likedNow, loadLike, setLiked, subscribeLikes } from "@/services/yt/library";
 import { useYtSession } from "@/services/yt/session";
 import { dropYtLists } from "@/hooks/useYtPaged";
@@ -22,6 +28,8 @@ import { dock } from "@/components/video/dock";
 import { watchLayer } from "@/components/video/watchLayer";
 import { EmbedShort, NativeShort, type ShortHandle } from "@/components/video/ShortPlayers";
 import { CommentsSheet } from "@/components/video/Comments";
+import { ShortMenu } from "./ShortMenu";
+import { heldTooSoon } from "@/utils/keyRepeat";
 import { FollowButton } from "@/components/video/YtActions";
 import { Avatar } from "@/components/video/VideoCards";
 import { Spinner } from "@/components/ui";
@@ -48,10 +56,35 @@ export function ShortsView() {
   const [busy, setBusy] = useState(false);
   const [ended, setEnded] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(() => storage.get<number>("shorts:volume", 1));
+  useEffect(() => storage.set("shorts:volume", volume), [volume]);
   const src = useRef<ShortsSource | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const handle = useRef<ShortHandle>(null);
   const [seekFx, setSeekFx] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
+
+  // computers: full screen like YouTube's — the menu, search and side bar
+  // go away and the Short fills the screen (F, double-click or the button)
+  const [full, setFull] = useState(false);
+  const toggleFull = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else void document.documentElement.requestFullscreen?.().catch(() => {});
+    setFull((f) => !f);
+  }, []);
+  useEffect(() => {
+    const on = () => setFull(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", on);
+    return () => {
+      document.removeEventListener("fullscreenchange", on);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  // keep the same Short in view when the size changes
+  useEffect(() => {
+    const el = box.current;
+    if (el) requestAnimationFrame(() => (el.scrollTop = active * el.clientHeight));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [full]);
 
   // one video at a time: the music and any other video stop
   useEffect(() => {
@@ -68,7 +101,7 @@ export function ShortsView() {
     const got = await src.current.more().catch(() => [] as ShortItem[]);
     setItems((cur) => {
       const ids = new Set(cur.map((s) => s.id));
-      return [...cur, ...got.filter((s) => !ids.has(s.id))];
+      return [...cur, ...got.filter((s) => !ids.has(s.id) && !unwanted(s))];
     });
     if (!got.length) setEnded(true);
     setBusy(false);
@@ -76,7 +109,9 @@ export function ShortsView() {
 
   useEffect(() => {
     const start = takeShortsStart();
-    src.current = new ShortsSource(start ? start.list.slice(start.index) : undefined);
+    // opened from a /shorts/<id> address (a copied link): start with that one
+    const fromUrl = /^\/shorts\/([\w-]{11})/.exec(window.location.pathname)?.[1];
+    src.current = new ShortsSource(start ? start.list.slice(start.index) : fromUrl ? [{ id: fromUrl }] : undefined);
     void loadMore();
     // first page only
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,6 +120,22 @@ export function ShortsView() {
   useEffect(() => {
     if (items.length && active >= items.length - 3) void loadMore();
   }, [active, items.length, loadMore]);
+
+  // the address shows the Short playing (youtube.com/shorts/<id> form), so
+  // copying it from the address bar gives a working link, like a video's
+  const activeId = items[active]?.id;
+  useEffect(() => {
+    if (!activeId) return;
+    const path = `/shorts/${activeId}`;
+    if (window.location.pathname !== path) history.replaceState(history.state, "", path);
+  }, [activeId]);
+
+  // "Not interested" / "Don't recommend this channel": out of the list now
+  // and kept out later (remembered on this device)
+  const skip = useCallback((id: string, channel?: string) => {
+    hideShort(id, channel);
+    setItems((cur) => cur.filter((x) => x.id !== id && !(channel && x.authorId === channel)));
+  }, []);
 
   const go = useCallback((dir: 1 | -1) => {
     const el = box.current;
@@ -122,7 +173,14 @@ export function ShortsView() {
       const t = e.target as HTMLElement | null;
       if (t && (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable)) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // a video page on top (app) or an open dialog / sheet owns the keys
+      if (watchLayer.get().mode === "full" || document.querySelector("[role=dialog]")) return;
       const k = e.key.toLowerCase();
+      if (["arrowleft", "arrowright", "j", "l"].includes(k) && heldTooSoon(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (k === "arrowdown") go(1);
       else if (k === "arrowup") go(-1);
       else if (k === "arrowleft") seek(-5);
@@ -131,13 +189,15 @@ export function ShortsView() {
       else if (k === "l") seek(10);
       else if (k === " " || k === "k") handle.current?.toggle();
       else if (k === "m") setMuted((m) => !m);
+      else if (k === "f" && wide) toggleFull();
+      else if (k === "escape" && full && !document.fullscreenElement) setFull(false);
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [go, seek]);
+  }, [go, seek, wide, full, toggleFull]);
 
   // mouse wheel / touchpad: exactly one Short per gesture
   useEffect(() => {
@@ -158,7 +218,11 @@ export function ShortsView() {
   const view = (
     <div
       className={cn(
-        wide ? "relative mx-auto h-[calc(100dvh-8.5rem)] w-full" : "fixed inset-x-0 top-0 bottom-[calc(var(--sa-bottom)+4.95rem)] z-40 bg-black",
+        wide && full
+          ? "fixed inset-0 z-[78] bg-black text-white"
+          : wide
+            ? "relative mx-auto h-[calc(100dvh-8.5rem)] w-full"
+            : "fixed inset-x-0 top-0 bottom-[calc(var(--sa-bottom)+4.95rem)] z-40 bg-black",
       )}
     >
       <div ref={box} onScroll={onScroll} className="h-full snap-y snap-mandatory overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -167,10 +231,15 @@ export function ShortsView() {
             key={s.id}
             s={s}
             wide={wide}
+            full={wide && full}
+            onFull={toggleFull}
             active={i === active}
             near={Math.abs(i - active) <= 1}
             muted={muted}
             setMuted={setMuted}
+            volume={volume}
+            setVolume={setVolume}
+            onSkip={skip}
             handle={i === active ? handle : undefined}
             seekFx={i === active ? seekFx : null}
             onSeek={seek}
@@ -190,10 +259,10 @@ export function ShortsView() {
 
       {wide && items.length > 0 && (
         <div className="absolute top-1/2 right-2 flex -translate-y-1/2 flex-col gap-3">
-          <RoundBtn label="Previous Short" onClick={() => go(-1)} disabled={active === 0}>
+          <RoundBtn label="Previous Short" onClick={() => go(-1)} disabled={active === 0} dark={full}>
             <ChevronUp className="h-6 w-6" />
           </RoundBtn>
-          <RoundBtn label="Next Short" onClick={() => go(1)}>
+          <RoundBtn label="Next Short" onClick={() => go(1)} dark={full}>
             <ChevronDown className="h-6 w-6" />
           </RoundBtn>
         </div>
@@ -204,7 +273,16 @@ export function ShortsView() {
   return wide ? view : createPortal(view, document.body);
 }
 
-function RoundBtn({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+const HIDDEN = "shorts:hidden";
+const BLOCKED = "shorts:blockedChannels";
+function hideShort(id: string, channel?: string) {
+  storage.set(HIDDEN, [id, ...storage.get<string[]>(HIDDEN, []).filter((x) => x !== id)].slice(0, 500));
+  if (channel) storage.set(BLOCKED, [channel, ...storage.get<string[]>(BLOCKED, []).filter((x) => x !== channel)].slice(0, 500));
+}
+const blockedChannel = (id?: string) => !!id && storage.get<string[]>(BLOCKED, []).includes(id);
+const unwanted = (s: ShortItem) => storage.get<string[]>(HIDDEN, []).includes(s.id) || blockedChannel(s.authorId);
+
+function RoundBtn({ label, onClick, disabled, dark, children }: { label: string; onClick: () => void; disabled?: boolean; dark?: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -212,7 +290,10 @@ function RoundBtn({ label, onClick, disabled, children }: { label: string; onCli
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-12 w-12 items-center justify-center rounded-full bg-ink/[0.08] text-ink transition hover:bg-ink/15 disabled:opacity-30"
+      className={cn(
+        "flex h-12 w-12 items-center justify-center rounded-full transition disabled:opacity-30",
+        dark ? "bg-white/10 text-white hover:bg-white/20" : "bg-ink/[0.08] text-ink hover:bg-ink/15",
+      )}
     >
       {children}
     </button>
@@ -227,6 +308,7 @@ interface Meta {
   likes?: number;
   commentsToken?: string;
   commentCount?: string;
+  description?: string;
 }
 
 function useShortMeta(s: ShortItem, on: boolean): Meta {
@@ -237,7 +319,7 @@ function useShortMeta(s: ShortItem, on: boolean): Meta {
     const fill = (x: Meta) => alive && setM((cur) => ({ ...x, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== undefined && v !== "")) }));
     if (watchExtrasAvailable()) {
       getWatchExtras(s.id)
-        .then((x) => fill({ title: x.title, author: x.author, authorId: x.authorId, authorAvatar: x.authorAvatar, likes: x.likes, commentsToken: x.commentsToken, commentCount: x.commentCount }))
+        .then((x) => fill({ title: x.title, author: x.author, authorId: x.authorId, authorAvatar: x.authorAvatar, likes: x.likes, commentsToken: x.commentsToken, commentCount: x.commentCount, description: x.description }))
         .catch(() => getVideoMeta(s.id).then((x) => fill({ title: x.title, author: x.author })).catch(() => {}));
     } else {
       getVideoMeta(s.id)
@@ -254,20 +336,30 @@ function useShortMeta(s: ShortItem, on: boolean): Meta {
 function Slide({
   s,
   wide,
+  full,
+  onFull,
   active,
   near,
   muted,
   setMuted,
+  volume,
+  setVolume,
+  onSkip,
   handle,
   seekFx,
   onSeek,
 }: {
   s: ShortItem;
   wide: boolean;
+  full: boolean;
+  onFull: () => void;
   active: boolean;
   near: boolean;
   muted: boolean;
   setMuted: (m: boolean) => void;
+  volume: number;
+  setVolume: (v: number) => void;
+  onSkip: (id: string, channel?: string) => void;
   handle?: React.RefObject<ShortHandle | null>;
   seekFx: { side: "l" | "r"; secs: number; key: number } | null;
   onSeek: (s: number) => void;
@@ -277,11 +369,69 @@ function Slide({
   const [comments, setComments] = useState(false);
   const [flash, setFlash] = useState<{ icon: "play" | "pause"; key: number } | null>(null);
   const lastTap = useRef(0);
+  const pointer = useRef("touch");
   const recorded = useRef(false);
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    if (!active) setMenu(null);
+  }, [active]);
 
   useEffect(() => {
     if (!active) setSt({ playing: false, time: 0, duration: 0, failed: undefined });
   }, [active]);
+
+  // the little preview pictures over the progress line (when YouTube gives them)
+  useEffect(() => {
+    if (!active || !(isNative || watchExtrasAvailable())) return;
+    let alive = true;
+    getPlayerExtras(s.id)
+      .then((x) => alive && x.storyboard && setVideoExtras(s.id, { storyboard: x.storyboard }))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [active, s.id]);
+
+  // a channel you chose not to see: straight on to the next Short
+  useEffect(() => {
+    if (active && blockedChannel(meta.authorId)) onSkip(s.id, meta.authorId);
+  }, [active, meta.authorId, s.id, onSkip]);
+
+  // captions on / off (the CC button on the video)
+  const [cc, setCc] = useState<string | null>(null);
+  useEffect(() => setCc(null), [s.id]);
+  const toggleCc = () => {
+    const h = handle?.current;
+    if (!h) return;
+    if (cc) {
+      h.setCaption(null);
+      setCc(null);
+      return;
+    }
+    const list = h.options().captions;
+    const pick = list.find((c) => c.id.startsWith("en")) ?? list[0];
+    if (pick) {
+      h.setCaption(pick.id);
+      setCc(pick.id);
+    }
+  };
+
+  const session = useYtSession();
+  const [saveOpen, setSaveOpen] = useState(false);
+  const save = () => {
+    if (session) setSaveOpen(true);
+    else videoLibrary.toggleLater({ id: s.id, title: meta.title ?? "", author: meta.author ?? "", authorId: meta.authorId, duration: Math.round(st.duration), thumbnail: thumb(s) });
+  };
+
+  // never music and a Short at once: whichever started last keeps playing
+  const { isPlaying: musicOn, pause: pauseMusic } = usePlayer();
+  const was = useRef({ music: musicOn, short: false });
+  useEffect(() => {
+    const w = was.current;
+    if (active && musicOn && !w.music && st.playing) handle?.current?.pause();
+    else if (active && st.playing && !w.short && musicOn) pauseMusic();
+    was.current = { music: musicOn, short: active && st.playing };
+  }, [active, musicOn, st.playing, handle, pauseMusic]);
 
   // remember it in the watch history once it really played
   useEffect(() => {
@@ -300,7 +450,8 @@ function Slide({
     const now = Date.now();
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
-    if (now - lastTap.current < 300 && (x < 0.33 || x > 0.67)) {
+    // double tap on the sides = ±10 s: phones only. A mouse click just pauses / plays.
+    if (pointer.current !== "mouse" && now - lastTap.current < 300 && (x < 0.33 || x > 0.67)) {
       onSeek(x < 0.5 ? -10 : 10);
       lastTap.current = now;
       return;
@@ -310,125 +461,256 @@ function Slide({
     handle?.current?.toggle();
   };
 
+  const shareUrl = `https://www.youtube.com/shorts/${s.id}`;
+  const [shareOpen, setShareOpen] = useState(false);
+  // app: the phone's share sheet; website: our own pop-up
   const share = async () => {
-    const url = `https://www.youtube.com/shorts/${s.id}`;
-    try {
-      if (navigator.share) await navigator.share({ title: meta.title, url });
-      else await navigator.clipboard.writeText(url);
-    } catch {
-      /* cancelled */
-    }
+    if (!(await shareNative({ title: meta.title, url: shareUrl }))) setShareOpen(true);
   };
 
   const Player = isNative ? NativeShort : EmbedShort;
   const progress = st.duration ? Math.min(1, st.time / st.duration) : 0;
 
-  return (
-    <section className={cn("relative flex h-full snap-start snap-always items-center justify-center", wide && "gap-4 py-2")}>
-      <div
-        className={cn("relative overflow-hidden bg-black", wide ? "aspect-[9/16] h-full max-w-full rounded-2xl" : "h-full w-full")}
-      >
+  // The picture's real shape, so there are no black bars: on computers the
+  // player takes the video's shape (wider for a wider video, like YouTube);
+  // on phones a vertical-ish video fills the screen, a wide one fits.
+  const ar = useAspect(s.id, near);
+  const frameAr = Math.min(16 / 9, Math.max(9 / 16, ar));
+  const cover = wide || ar <= 0.8;
+  const mediaStyle: React.CSSProperties = cover
+    ? { width: `max(100cqw, calc(100cqh * ${ar}))`, height: `max(100cqh, calc(100cqw / ${ar}))` }
+    : { width: `min(100cqw, calc(100cqh * ${ar}))`, height: `min(100cqh, calc(100cqw / ${ar}))` };
+  // computers: as tall as fits, leaving room on the right for the buttons and the title
+  const frameH = `min(calc(100cqh - 1rem), calc((100cqw - 26rem) / ${frameAr}))`;
+
+  const frame = (
+    <div
+      className={cn("group/frame relative overflow-hidden bg-black [container-type:size]", wide ? "w-full rounded-2xl" : "h-full w-full")}
+      style={wide ? { height: frameH } : undefined}
+    >
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={mediaStyle}>
         <img src={thumb(s)} alt="" className={cn("absolute inset-0 h-full w-full object-cover", active && st.time > 0 && "opacity-0")} />
         {active && (
           <Player
             ref={handle}
             id={s.id}
             muted={muted}
-            onMutedStart={() => setMuted(true)}
+            volume={volume}
             onState={(x) => setSt({ playing: x.playing, time: x.time, duration: x.duration, failed: x.failed })}
           />
         )}
-        {/* taps: pause / play, double tap on the sides = ±10 s */}
-        <div className="absolute inset-0" onClick={tap} />
-
-        {active && st.failed && (
-          <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-2xl bg-black/70 p-4 text-center text-xs text-white">
-            {st.failed}
-            <a href={routeToPath(`watch:${s.id}`)} data-nav="true" className="mt-2 block font-bold text-accent">
-              Open as a video
-            </a>
-          </div>
-        )}
-
-        {flash && (
-          <span key={flash.key} className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="animate-fade-in rounded-full bg-black/50 p-4 text-white">
-              {flash.icon === "play" ? <Play className="h-8 w-8 fill-current" /> : <Pause className="h-8 w-8 fill-current" />}
-            </span>
-          </span>
-        )}
-        {seekFx && (
-          <span
-            key={seekFx.key}
-            className={cn(
-              "pointer-events-none absolute top-1/2 flex -translate-y-1/2 animate-fade-in items-center gap-1 rounded-full bg-black/55 px-4 py-2 text-sm font-bold text-white",
-              seekFx.side === "l" ? "left-[10%]" : "right-[10%]",
-            )}
-          >
-            {seekFx.side === "l" ? <RotateCcw className="h-4 w-4" /> : <RotateCw className="h-4 w-4" />} {seekFx.secs} seconds
-          </span>
-        )}
-
-        {/* sound */}
-        <button
-          type="button"
-          aria-label={muted ? "Unmute" : "Mute"}
-          onClick={() => setMuted(!muted)}
-          className="absolute top-[calc(var(--sa-top)+0.75rem)] right-3 rounded-full bg-black/40 p-2.5 text-white"
-        >
-          {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-        </button>
-
-        {/* who / what */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pt-16 pb-4 text-white">
-          <div className={cn("pointer-events-auto", !wide && "pr-16")}>
-            <div className="flex items-center gap-2">
-              {meta.authorId ? (
-                <a href={routeToPath(`channel:${meta.authorId}`)} data-nav="true" className="flex min-w-0 items-center gap-2">
-                  <Avatar name={meta.author ?? ""} src={meta.authorAvatar} channelId={meta.authorId} className="h-8 w-8" />
-                  <span className="truncate text-sm font-bold">{meta.author}</span>
-                </a>
-              ) : (
-                <span className="truncate text-sm font-bold">{meta.author}</span>
-              )}
-              {meta.authorId && <FollowButton ch={{ id: meta.authorId, name: meta.author ?? "", avatar: meta.authorAvatar }} className="h-8 px-3 text-xs" />}
-            </div>
-            {meta.title && <p className="mt-2 line-clamp-2 text-sm leading-snug">{meta.title}</p>}
-          </div>
-        </div>
-
-        {/* progress */}
-        {active && <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/20"><div className="h-full bg-accent" style={{ width: `${progress * 100}%` }} /></div>}
-
-        {/* phone: buttons over the video */}
-        {!wide && (
-          <div className="absolute right-2 bottom-24 flex flex-col items-center gap-4 text-white">
-            <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} overlay />
-          </div>
-        )}
       </div>
+      {/* taps: pause / play, double tap on the sides = ±10 s; double-click = full screen */}
+      <div
+        className="absolute inset-0"
+        onPointerDown={(e) => (pointer.current = e.pointerType)}
+        onClick={tap}
+        onDoubleClick={() => wide && pointer.current === "mouse" && onFull()}
+      />
 
-      {/* computer: buttons beside the video */}
-      {wide && (
-        <div className="flex flex-col items-center gap-4 self-end pb-6 text-ink">
-          <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} />
+      {active && st.failed && (
+        <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-2xl bg-black/70 p-4 text-center text-xs text-white">
+          {st.failed}
+          <a href={routeToPath(`watch:${s.id}`)} data-nav="true" className="mt-2 block font-bold text-accent">
+            Open as a video
+          </a>
         </div>
       )}
 
+      {flash && (
+        <span key={flash.key} className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="animate-fade-in rounded-full bg-black/50 p-4 text-white">
+            {flash.icon === "play" ? <Play className="h-8 w-8 fill-current" /> : <Pause className="h-8 w-8 fill-current" />}
+          </span>
+        </span>
+      )}
+      {seekFx && (
+        <span
+          key={seekFx.key}
+          className={cn(
+            "pointer-events-none absolute top-1/2 flex -translate-y-1/2 animate-fade-in items-center gap-1 rounded-full bg-black/55 px-4 py-2 text-sm font-bold text-white",
+            seekFx.side === "l" ? "left-[10%]" : "right-[10%]",
+          )}
+        >
+          {seekFx.side === "l" ? <RotateCcw className="h-4 w-4" /> : <RotateCw className="h-4 w-4" />} {seekFx.secs} seconds
+        </span>
+      )}
+
+      {wide ? (
+        /* computers: the video stays clean; the controls show only while
+           the mouse is over it and go away the moment it leaves */
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent p-2.5 pb-10 text-white opacity-0 group-hover/frame:opacity-100 has-[:focus-visible]:opacity-100">
+          <div className="pointer-events-auto flex items-center gap-0.5">
+            <button type="button" aria-label={st.playing ? "Pause" : "Play"} title={st.playing ? "Pause (k)" : "Play (k)"} onClick={() => handle?.current?.toggle()} className="rounded-full p-2 hover:bg-white/15">
+              {st.playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
+            </button>
+            {/* sound: the slider opens beside the button while pointing at it */}
+            <div className="group/vol flex items-center rounded-full pr-1 hover:bg-white/15">
+              <button type="button" aria-label={muted ? "Unmute" : "Mute"} title={muted ? "Unmute (m)" : "Mute (m)"} onClick={() => setMuted(!muted)} className="rounded-full p-2">
+                {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : volume < 0.5 ? <Volume1 className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.02}
+                aria-label="Volume"
+                value={muted ? 0 : volume}
+                onChange={(e) => {
+                  const v = Number(e.currentTarget.value);
+                  setVolume(v);
+                  if (muted && v > 0) setMuted(false);
+                }}
+                className="ab-range h-1 w-0 cursor-pointer opacity-0 transition-[width,opacity] duration-200 group-hover/vol:w-20 group-hover/vol:opacity-100 focus-visible:w-20 focus-visible:opacity-100 accent-white"
+              />
+            </div>
+          </div>
+          <div className="pointer-events-auto flex items-center gap-0.5">
+            <button type="button" aria-label="Captions" aria-pressed={!!cc} title="Captions" onClick={toggleCc} className={cn("relative rounded-full p-2 hover:bg-white/15", cc && "after:absolute after:inset-x-2.5 after:bottom-1 after:h-0.5 after:rounded-full after:bg-accent")}>
+              <Subtitles className="h-5 w-5" />
+            </button>
+            <button type="button" aria-label="More options" onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())} className="rounded-full p-2 hover:bg-white/15">
+              <MoreVertical className="h-5 w-5" />
+            </button>
+            <button type="button" aria-label={full ? "Exit full screen" : "Full screen"} title={full ? "Exit full screen (f)" : "Full screen (f)"} onClick={onFull} className="rounded-full p-2 hover:bg-white/15">
+              {full ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* phones: sound button, who / what and the buttons over the video, like the YouTube app */}
+          <button
+            type="button"
+            aria-label={muted ? "Unmute" : "Mute"}
+            onClick={() => setMuted(!muted)}
+            className="absolute top-[calc(var(--sa-top)+0.75rem)] right-3 rounded-full bg-black/40 p-2.5 text-white"
+          >
+            {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pt-16 pb-4 text-white">
+            <div className="pointer-events-auto pr-16">
+              <Who meta={meta} />
+              {meta.title && <p className="mt-2 line-clamp-2 text-sm leading-snug">{meta.title}</p>}
+            </div>
+          </div>
+          <div className="absolute right-2 bottom-24 flex flex-col items-center gap-4 text-white">
+            <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} overlay />
+          </div>
+        </>
+      )}
+
+      {/* progress */}
+      {active && <ShortSeekBar id={s.id} progress={progress} duration={st.duration} onSeek={(t) => handle?.current?.seekTo(t)} />}
+    </div>
+  );
+
+  return (
+    <section className={cn("relative flex h-full snap-start snap-always items-center justify-center select-none", wide && "gap-4 py-2 [container-type:size]")}>
+      {wide ? (
+        <>
+          {/* computers: nothing over the picture. The video sits in the
+              middle; the buttons, then channel, Subscribe and title are
+              beside it, lined up with its bottom, like YouTube */}
+          <div className="grid w-full grid-cols-[1fr_auto_1fr] gap-x-4">
+            <span />
+            <div style={{ width: `calc(${frameH} * ${frameAr})` }}>{frame}</div>
+            <div className="flex min-w-0 items-end gap-4 pr-16">
+              <div className="flex shrink-0 flex-col items-center gap-4">
+                <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} dark={full} />
+              </div>
+              <div className={cn("min-w-0 max-w-72 pb-1", full ? "text-white" : "text-ink")}>
+                <Who meta={meta} dark={full} />
+                {meta.title && <p className={cn("mt-2 line-clamp-3 text-sm leading-snug", full ? "text-white/85" : "text-ink2")}>{meta.title}</p>}
+                <OpenIn kind="short" id={s.id} dark={full} className="mt-2" />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        frame
+      )}
+
+      {menu && active && (
+        <ShortMenu
+          handle={handle?.current ?? null}
+          anchor={menu}
+          sheet={!wide}
+          onClose={() => setMenu(null)}
+          info={{ id: s.id, title: meta.title, description: meta.description, author: meta.author }}
+          actions={{
+            onSave: save,
+            onFull: wide ? onFull : undefined,
+            full,
+            onNotInterested: () => onSkip(s.id),
+            onBlockChannel: meta.authorId ? () => onSkip(s.id, meta.authorId) : undefined,
+          }}
+        />
+      )}
+      {saveOpen && <SaveSheet videoId={s.id} onClose={() => setSaveOpen(false)} />}
       {meta.commentsToken && <CommentsSheet token={meta.commentsToken} count={meta.commentCount} open={comments} onClose={() => setComments(false)} side={wide} />}
+      {!isNative && <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} target={{ title: meta.title, url: shareUrl }} />}
     </section>
   );
 }
 
+/** Channel picture, name and Subscribe. */
+function Who({ meta, dark }: { meta: Meta; dark?: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {meta.authorId ? (
+        <a href={routeToPath(`channel:${meta.authorId}`)} data-nav="true" className="flex min-w-0 items-center gap-2">
+          <Avatar name={meta.author ?? ""} src={meta.authorAvatar} channelId={meta.authorId} className="h-8 w-8 shrink-0" />
+          <span className={cn("truncate text-sm font-bold", dark && "text-white")}>{meta.author}</span>
+        </a>
+      ) : (
+        <span className="truncate text-sm font-bold">{meta.author}</span>
+      )}
+      {meta.authorId && <FollowButton ch={{ id: meta.authorId, name: meta.author ?? "", avatar: meta.authorAvatar }} className="h-8 shrink-0 px-3 text-xs" />}
+    </div>
+  );
+}
+
+/** The video's width / height (vertical until known). */
+function useAspect(id: string, on: boolean) {
+  const [ar, setAr] = useState(9 / 16);
+  useEffect(() => {
+    if (!on) return;
+    let alive = true;
+    void getVideoAspect(id, 9 / 16).then((r) => alive && setAr(r));
+    return () => {
+      alive = false;
+    };
+  }, [id, on]);
+  return ar;
+}
+
 const thumb = (s: ShortItem) => s.thumbnail ?? `https://i.ytimg.com/vi/${s.id}/oar2.jpg`;
 
-function Actions({ id, meta, onComments, onShare, overlay }: { id: string; meta: Meta; onComments: () => void; onShare: () => void; overlay?: boolean }) {
+function Actions({
+  id,
+  meta,
+  onComments,
+  onShare,
+  onMore,
+  overlay,
+  dark,
+}: {
+  id: string;
+  meta: Meta;
+  onComments: () => void;
+  onShare: () => void;
+  onMore: (r: DOMRect) => void;
+  overlay?: boolean;
+  /** computers, full screen: on black */
+  dark?: boolean;
+}) {
   const session = useYtSession();
   const liked = useSyncExternalStore(subscribeLikes, () => likedNow(id), () => likedNow(id));
   useEffect(() => {
     if (session) void loadLike(id).catch(() => undefined);
   }, [session, id]);
-  const pill = cn("flex h-12 w-12 items-center justify-center rounded-full transition", overlay ? "bg-black/35" : "bg-ink/[0.08] hover:bg-ink/15");
+  const pill = cn("flex h-12 w-12 items-center justify-center rounded-full transition", overlay ? "bg-black/35" : dark ? "bg-white/10 text-white hover:bg-white/20" : "bg-ink/[0.08] hover:bg-ink/15");
   return (
     <>
       <button
@@ -458,6 +740,90 @@ function Actions({ id, meta, onComments, onShare, overlay }: { id: string; meta:
         </span>
         Share
       </button>
+      <button type="button" aria-label="More options" onClick={(e) => onMore(e.currentTarget.getBoundingClientRect())} className="flex flex-col items-center gap-1 text-xs font-bold">
+        <span className={pill}>
+          <MoreVertical className="h-6 w-6" />
+        </span>
+      </button>
     </>
+  );
+}
+
+/**
+ * The Short's progress line, which can be used: hover (mouse) shows the time
+ * under the pointer, click or drag (mouse or finger) moves the Short there.
+ * It grows a little while hovered or held, like YouTube's.
+ */
+function ShortSeekBar({ id, progress, duration, onSeek }: { id: string; progress: number; duration: number; onSeek: (t: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<number | null>(null); // 0..1 under the mouse
+  const [drag, setDrag] = useState<number | null>(null); // 0..1 while held
+  const [pending, setPending] = useState<number | null>(null); // let go here, waiting for the player
+  useEffect(() => {
+    if (pending === null) return;
+    if (Math.abs(progress - pending) < 0.03) {
+      setPending(null);
+      return;
+    }
+    const t = setTimeout(() => setPending(null), 1500);
+    return () => clearTimeout(t);
+  }, [progress, pending]);
+  const at = (clientX: number) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r || !r.width) return 0;
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  };
+  const usable = duration > 0;
+  const shown = drag ?? pending ?? progress;
+  const tip = drag ?? hover;
+  return (
+    <div
+      ref={ref}
+      role="slider"
+      aria-label="Seek"
+      aria-valuemin={0}
+      aria-valuemax={Math.round(duration)}
+      aria-valuenow={Math.round(progress * duration)}
+      className={cn("group/seek absolute inset-x-0 bottom-0 z-[3] flex h-4 touch-none items-end", usable && "cursor-pointer")}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        if (!usable) return;
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDrag(at(e.clientX));
+      }}
+      onPointerMove={(e) => {
+        if (!usable) return;
+        const x = at(e.clientX);
+        if (drag !== null) setDrag(x);
+        else if (e.pointerType === "mouse") setHover(x);
+      }}
+      onPointerUp={(e) => {
+        if (drag === null) return;
+        const x = at(e.clientX);
+        onSeek(x * duration);
+        setPending(x);
+        setDrag(null);
+        if (e.pointerType !== "mouse") setHover(null);
+      }}
+      onPointerCancel={() => setDrag(null)}
+      onPointerLeave={() => setHover(null)}
+    >
+      <div className={cn("relative w-full bg-white/25 transition-[height] duration-150", drag !== null ? "h-[6px]" : "h-[3px] group-hover/seek:h-[5px]")}>
+        {hover !== null && drag === null && <div className="absolute inset-y-0 left-0 bg-white/30" style={{ width: `${hover * 100}%` }} />}
+        <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${shown * 100}%` }} />
+        {usable && (
+          <span
+            className={cn(
+              "absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent shadow transition-transform duration-150",
+              drag !== null ? "scale-125" : "scale-0 group-hover/seek:scale-100",
+            )}
+            style={{ left: `${shown * 100}%` }}
+          />
+        )}
+      </div>
+      {/* a small picture of that moment over the pointer, with the time */}
+      {usable && tip !== null && <SeekPreview id={id} t={tip * duration} duration={duration} left={tip * (ref.current?.clientWidth ?? 0)} barWidth={ref.current?.clientWidth} />}
+    </div>
   );
 }

@@ -39,20 +39,39 @@ export function readShorts(root: unknown): ShortItem[] {
     }
   };
   for (const l of findAll(root, "shortsLockupViewModel")) {
+    if (isAdEntry(l)) continue;
     const id = findAll(l.onTap, "reelWatchEndpoint")[0]?.videoId ?? String(l.entityId ?? "").replace(/^shorts-shelf-item-/, "");
     const meta = isObj(l.overlayMetadata) ? l.overlayMetadata : {};
     add({ id: String(id), title: text(meta.primaryText) || undefined, views: text(meta.secondaryText) || undefined, thumbnail: bestImage(l.thumbnail) });
   }
   for (const r of findAll(root, "reelItemRenderer")) {
+    if (isAdEntry(r)) continue;
     if (typeof r.videoId === "string") add({ id: r.videoId, title: text(r.headline) || undefined, views: text(r.viewCountText) || undefined, thumbnail: bestImage(r.thumbnail) });
   }
   return out;
 }
 
-const idsIn = (root: unknown) =>
-  findAll(root, "reelWatchEndpoint")
+/**
+ * Ads mixed into the Shorts feed look like Shorts (same kind of entry) but
+ * are whole adverts. They carry ad fields / an ad video type: skip them.
+ */
+const AD_MARK = /"(adClientParams|adSlotRenderer|adSlotAndLayoutMetadata|adLayoutMetadata|promotedSparklesWebRenderer|reelPlayerAdOverlayRenderer|adVideoId)"|REEL_VIDEO_TYPE_AD|_AD"|"isAd":true/;
+export const isAdEntry = (e: unknown): boolean => {
+  try {
+    return AD_MARK.test(JSON.stringify(e));
+  } catch {
+    return false;
+  }
+};
+
+const idsIn = (root: unknown) => {
+  // a list of entries (the sequence): judge each one whole
+  const entries = Array.isArray(root) ? root.filter((e) => !isAdEntry(e)) : root;
+  return findAll(entries, "reelWatchEndpoint")
+    .filter((e) => !isAdEntry(e))
     .map((e) => e.videoId)
     .filter((v): v is string => typeof v === "string");
+};
 
 /** YouTube's own sequence: from `seed`, or the account's feed when no seed. */
 class Sequence {

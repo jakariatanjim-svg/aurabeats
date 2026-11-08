@@ -387,7 +387,7 @@ export function Switch({ on, label, onClick }: { on: boolean; label: string; onC
       aria-pressed={on}
       aria-label={label}
       onClick={onClick}
-      className={cn("relative h-6 w-11 shrink-0 rounded-full transition", on ? "bg-emerald-500" : "bg-ink/15")}
+      className={cn("ab-switch relative h-6 w-11 shrink-0 rounded-full transition", on ? "bg-emerald-500" : "bg-ink/15")}
     >
       <span className={cn("absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)] transition", on ? "translate-x-5" : "translate-x-0")} />
     </button>

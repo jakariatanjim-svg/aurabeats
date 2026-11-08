@@ -33,7 +33,7 @@ Everything personal — favourites, playlists, history and followed channels —
   <tr>
     <td width="50%" valign="top">
       <h3>Music</h3>
-      Full-length songs from YouTube Music, with a “For You” mix built from the songs you love. More catalogues — JioSaavn, SoundCloud, Audius, Jamendo and the Internet Archive — live in their own <i>Other Sources</i> tab.
+      Full-length songs from YouTube Music, with a “For You” mix built from the songs you love. More catalogues — JioSaavn, SoundCloud, Audius, Jamendo and the Internet Archive — live in their own <i>Other Sources</i> tab. When the queue ends, <b>Autoplay</b> can carry on with similar songs.
     </td>
     <td width="50%" valign="top">
       <h3>Video</h3>
@@ -57,7 +57,7 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
     <td valign="top">
       <h3>Your look</h3>
-      Two designs, Material and Liquid Glass, in light or dark, with your own accent colour. Turn <b>Blur</b> off in Settings for a lighter look on slower devices.
+      Two designs, Material (the new Material 3 Expressive) and Liquid Glass, in light or dark, with your own accent colour. Turn <b>Blur</b> off in Settings for a lighter look on slower devices.
     </td>
   </tr>
   <tr>
@@ -68,6 +68,16 @@ Everything personal — favourites, playlists, history and followed channels —
     <td valign="top">
       <h3>Better on the web</h3>
       With the free AuraBeats Connector extension, videos play directly in the site's own player — including ones YouTube doesn't allow on other sites — and missing channel pictures are filled in.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h3>Shorts</h3>
+      An endless Shorts feed that works like YouTube's: swipe, scroll or use the arrow keys. On a computer the video stays clean, with full screen, captions, speed and a preview over the progress line. No black bars, and ads are skipped. Shorts also appear in search and on Home.
+    </td>
+    <td valign="top">
+      <h3>Share and links</h3>
+      Share opens a simple pop-up with the link and quick buttons for WhatsApp, Facebook, X, Telegram and more. Small <b>Play in YouTube</b> and <b>Play in YouTube Music</b> links sit next to what's playing, and the address bar always holds a working YouTube link to the video or Short on screen.
     </td>
   </tr>
 </table>
@@ -102,6 +112,9 @@ Everything personal — favourites, playlists, history and followed channels —
 | `F` | Full-screen player |
 | `Q` | Queue |
 | `Esc` | Close panels |
+| `↑` / `↓` | Previous / next Short |
+| `←` / `→`, `J` / `L` | Skip back / ahead in a video or Short |
+| `K`, `M` | Pause, mute (videos and Shorts) |
 
 </details>
 

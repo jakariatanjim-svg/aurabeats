@@ -22,7 +22,7 @@
 import { http, isNative } from "./net";
 import { extensionCanStream, extensionRequest } from "@/services/yt/extension";
 import { guessRegion } from "./settings";
-import type { AudioStream, MuxedStream, StreamSet, VideoDetails, VideoStream } from "./types";
+import type { AudioStream, CaptionTrack, MuxedStream, StreamLayout, StreamSet, VideoDetails, VideoStream } from "./types";
 import { thumbFor } from "./types";
 
 export const DEVICE_UA =
@@ -51,7 +51,11 @@ export interface ItFormat {
   qualityLabel?: string;
   audioQuality?: string;
   isDrc?: boolean;
-  audioTrack?: { audioIsDefault?: boolean };
+  audioTrack?: { audioIsDefault?: boolean; displayName?: string; id?: string };
+  initRange?: { start: string; end: string };
+  indexRange?: { start: string; end: string };
+  contentLength?: string;
+  approxDurationMs?: string;
 }
 
 export interface PlayerResponse {
@@ -73,7 +77,29 @@ export interface PlayerResponse {
     hlsManifestUrl?: string;
   };
   microformat?: { playerMicroformatRenderer?: { publishDate?: string; uploadDate?: string; ownerProfileUrl?: string } };
+  captions?: {
+    playerCaptionsTracklistRenderer?: {
+      captionTracks?: { baseUrl: string; name?: unknown; languageCode: string; kind?: string; vssId?: string }[];
+    };
+  };
 }
+
+function layoutOf(f: ItFormat): StreamLayout | undefined {
+  if (!f.initRange || !f.indexRange) return undefined;
+  const size = Number(f.contentLength) || Number(/[?&]clen=(\d+)/.exec(f.url ?? "")?.[1]) || undefined;
+  return {
+    init: [Number(f.initRange.start), Number(f.initRange.end)],
+    index: [Number(f.indexRange.start), Number(f.indexRange.end)],
+    size,
+    durMs: Number(f.approxDurationMs) || undefined,
+  };
+}
+
+const plainText = (t: unknown): string => {
+  if (!t || typeof t !== "object") return typeof t === "string" ? t : "";
+  const o = t as { simpleText?: string; runs?: { text: string }[] };
+  return o.simpleText ?? o.runs?.map((r) => r.text).join("") ?? "";
+};
 
 /** App always; website when the extension can fetch streams. */
 export const deviceExtractionAvailable = (): boolean => isNative || extensionCanStream();
@@ -248,11 +274,17 @@ export function toDetails(data: PlayerResponse): VideoDetails {
     if (!f.url || f.isDrc) continue;
     if (f.mimeType.startsWith("video/")) {
       const h = f.height ?? 0;
-      video.push({ url: f.url, mime: f.mimeType, height: h, fps: f.fps, bitrate: f.bitrate, label: f.qualityLabel || `${h}p` });
+      video.push({ url: f.url, mime: f.mimeType, height: h, fps: f.fps, bitrate: f.bitrate, label: f.qualityLabel || `${h}p`, layout: layoutOf(f) });
     } else if (f.mimeType.startsWith("audio/")) {
-      // Dubbed videos carry several audio tracks — keep the original one.
-      if (f.audioTrack && f.audioTrack.audioIsDefault === false) continue;
-      audio.push({ url: f.url, mime: f.mimeType, bitrate: f.bitrate });
+      // Dubbed videos carry several audio tracks (original + other languages)
+      const tr = f.audioTrack;
+      audio.push({
+        url: f.url,
+        mime: f.mimeType,
+        bitrate: f.bitrate,
+        layout: layoutOf(f),
+        track: tr?.id ? { id: tr.id, name: tr.displayName || tr.id, isDefault: tr.audioIsDefault !== false } : undefined,
+      });
     }
   }
   for (const f of sd.formats ?? []) {
@@ -267,6 +299,14 @@ export function toDetails(data: PlayerResponse): VideoDetails {
 
   const mf = data.microformat?.playerMicroformatRenderer;
   const date = mf?.publishDate || mf?.uploadDate;
+  const captions: CaptionTrack[] = (data.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [])
+    .filter((c) => c.baseUrl)
+    .map((c) => ({
+      url: c.baseUrl.startsWith("http") ? c.baseUrl : `https://www.youtube.com${c.baseUrl}`,
+      lang: c.languageCode,
+      name: plainText(c.name) || c.languageCode,
+      auto: c.kind === "asr" || undefined,
+    }));
   return {
     id: vd.videoId,
     title: vd.title,
@@ -280,7 +320,16 @@ export function toDetails(data: PlayerResponse): VideoDetails {
     description: vd.shortDescription || "",
     related: [],
     streams,
+    captions: captions.length ? captions : undefined,
   };
+}
+
+/** A caption track's text (YouTube's json3 format), fetched like the player data. */
+export async function fetchCaptionText(url: string): Promise<string> {
+  const base = url.replace(/([?&])fmt=[^&]*&?/, "$1").replace(/[?&]$/, "");
+  const u = `${base}${base.includes("?") ? "&" : "?"}fmt=json3`;
+  if (isNative) return http<string>(u, { timeout: 12000, headers: { "User-Agent": DEVICE_UA } }, "text");
+  return viaExtension(u, "GET");
 }
 
 /* --------------------------- WEB client (no sign-in) --------------------- */

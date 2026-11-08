@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Bookmark, Clock, History, Sparkles, Rss, Trash2, Users, X } from "lucide-react";
 import { useFeed } from "@/hooks/useFeed";
 import { useVideoLibrary, videoLibrary } from "@/hooks/useVideoLibrary";
@@ -113,11 +113,19 @@ function LocalHome({ onNavigate }: { onNavigate: (r: RouteKey) => void }) {
         <section>
           <SectionHeader title="Recommended for you" icon={<Sparkles className="h-5 w-5 text-accent" />} />
           {recList ? (
-            <VideoGrid>
-              {recList.map((v) => (
-                <VideoCard key={v.id} v={v} progress={progress.get(v.id)} />
+            // a Shorts shelf every 16 videos, like YouTube's home
+            <div className="space-y-8">
+              {Array.from({ length: Math.ceil(recList.length / 16) }, (_, i) => (
+                <Fragment key={i}>
+                  {i > 0 && i <= 3 && <ShortsRow part={i} />}
+                  <VideoGrid>
+                    {recList.slice(i * 16, i * 16 + 16).map((v) => (
+                      <VideoCard key={v.id} v={v} progress={progress.get(v.id)} />
+                    ))}
+                  </VideoGrid>
+                </Fragment>
               ))}
-            </VideoGrid>
+            </div>
           ) : rec.error ? (
             <ErrorState message={rec.error} onRetry={rec.refresh} />
           ) : (
@@ -255,7 +263,7 @@ function LocalLibrary() {
           hint={tab === "history" ? "Videos you watch appear here, with where you left off." : "Tap “Watch later” under any video to save it here."}
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="ab-stagger grid gap-3 lg:grid-cols-2">
           {list.map((v) => (
             <VideoRow
               key={v.id}

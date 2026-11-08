@@ -9,7 +9,7 @@
 
   /* Every surface is a clear lens: little fill, the colours behind it
      blurred and saturated, and a bright rim of light around the edge. */
-  --panel-backdrop: blur(16px) saturate(200%) brightness(1.06);
+  --panel-backdrop: blur(18px) saturate(220%) brightness(1.07) contrast(1.04);
   --panel-radius: 26px;
   --panel-hover-lift: 0px;
   --panel-border: 0 solid transparent;
@@ -23,12 +23,22 @@
   --bar-radius: 32px;
   --raised-border: 0 solid transparent;
 
-  /* the luminous rim (top-left brightest, like light through a lens) */
+  /* The lens edge, built like real glass:
+     - a crisp specular line where the light hits (top-left brightest) and a
+       weaker one on the opposite edge, where light leaves the glass
+     - a hair-thin clear outline holding the shape
+     - a faint prism split at the sides (blue one way, warm the other)
+     - light gathering inside the bottom edge (the refraction caustic)
+     - a soft inner glow giving the slab thickness */
   --lg-rim:
+    inset 0 1px 0 -0.25px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.95)),
     inset 1.5px 1.5px 1px -0.5px rgb(255 255 255 / var(--lg-rim-a, 0.7)),
-    inset -1px -1px 1px -0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.6)),
-    inset 0 0 0 1px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.22)),
-    inset 0 0 20px -6px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55));
+    inset -1px -1px 1px -0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55)),
+    inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.32)),
+    inset 2px 0 2px -1.5px rgb(140 200 255 / calc(var(--lg-rim-a, 0.7) * 0.35)),
+    inset -2px 0 2px -1.5px rgb(255 170 210 / calc(var(--lg-rim-a, 0.7) * 0.3)),
+    inset 0 -12px 18px -14px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.5)),
+    inset 0 0 24px -8px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.42));
   --panel-highlight: var(--lg-rim);
   --raised-highlight: var(--lg-rim);
 }
@@ -45,21 +55,40 @@
   --c-solid: #171a26;
   --c-solid-strong: #1e2230;
   --lg-rim-a: 0.5;
+  /* lensed glass (utils/liquidRefraction): edge light strength, card frost */
+  --lg-spec: 0.62;
+  --lg-card-blur: 3;
 
-  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.02) 45%, rgb(255 255 255 / 0.07));
-  --panel-shadow: 0 10px 30px -14px rgb(0 0 0 / 0.55);
+  /* light falling on the slab: a broad glare from the top-left, a fainter
+     bounce at the bottom-right, a gentle top-to-bottom falloff */
+  --panel-sheen:
+    radial-gradient(130% 85% at 0% 0%, rgb(255 255 255 / 0.15), transparent 52%),
+    radial-gradient(110% 75% at 100% 100%, rgb(255 255 255 / 0.06), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.01) 45%, rgb(255 255 255 / 0.035));
+  /* contact shadow + soft lift */
+  --panel-shadow: 0 1px 1.5px rgb(0 0 0 / 0.16), 0 12px 32px -14px rgb(0 0 0 / 0.6);
+  --lg-lit-a: 0.1;
 
   --c-elev-strong: rgb(40 44 60 / 0.38);
-  --panel-backdrop-raised: blur(22px) saturate(210%) brightness(1.05);
-  --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.03) 50%, rgb(255 255 255 / 0.08));
-  --raised-shadow: 0 16px 40px -14px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.3);
+  --panel-backdrop-raised: blur(28px) saturate(230%) brightness(1.06) contrast(1.05);
+  --raised-sheen:
+    radial-gradient(130% 90% at 0% 0%, rgb(255 255 255 / 0.2), transparent 55%),
+    radial-gradient(110% 80% at 100% 100%, rgb(255 255 255 / 0.08), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02) 50%, rgb(255 255 255 / 0.05));
+  --raised-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 18px 44px -14px rgb(0 0 0 / 0.65), 0 4px 12px -4px rgb(0 0 0 / 0.3);
   --bar-shadow: var(--raised-shadow);
 
   --shell-bg: rgb(255 255 255 / 0.025);
   --shell-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07), inset 1px 1px 0 rgb(255 255 255 / 0.1);
 
-  /* colourful light behind the glass (from the accent colour) */
+  /* colourful light behind the glass (from the accent colour): broad glows
+     plus two sweeping ribbons of aurora light — curved bands with soft
+     edges, which the glass visibly bends (a smooth wash shows no lensing),
+     without the spots the old round discs made */
   --app-bg-image:
+    radial-gradient(135% 70% at 18% 112%, transparent 56%, color-mix(in oklab, var(--c-accent) 30%, transparent) 61%, color-mix(in oklab, var(--c-accent2) 26%, transparent) 65.5%, color-mix(in oklab, #38bdf8 14%, transparent) 69%, transparent 74%),
+    radial-gradient(120% 62% at 88% -14%, transparent 55%, color-mix(in oklab, #f472b6 18%, transparent) 60%, color-mix(in oklab, var(--c-accent2) 28%, transparent) 64.5%, color-mix(in oklab, var(--c-accent) 16%, transparent) 68%, transparent 73%),
+    linear-gradient(122deg, transparent 38%, rgb(255 255 255 / 0.035) 46%, transparent 47.5%, transparent 53%, rgb(255 255 255 / 0.025) 58%, transparent 60%),
     radial-gradient(60% 55% at 8% 4%, color-mix(in oklab, var(--c-accent) 60%, transparent), transparent 70%),
     radial-gradient(55% 50% at 96% 12%, color-mix(in oklab, var(--c-accent2) 50%, transparent), transparent 70%),
     radial-gradient(60% 60% at 80% 96%, color-mix(in oklab, var(--c-accent) 45%, #f59e0b 20%), transparent 70%),
@@ -73,7 +102,7 @@
      behind showed through in patches, so cards and text sat on blotches. */
   --c-elev: rgb(255 255 255 / 0.55);
   --c-elev2: rgb(15 23 42 / 0.05);
-  --panel-backdrop: blur(22px) saturate(140%);
+  --panel-backdrop: blur(24px) saturate(160%) brightness(1.02);
   --c-line: rgb(30 41 59 / 0.12);
   --c-ink: #0b0b0f;
   --c-ink2: #2f3340;
@@ -84,13 +113,26 @@
   --c-solid-strong: #ffffff;
   --lg-rim-a: 0.9;
 
-  --panel-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0.05) 45%, rgb(255 255 255 / 0.18));
-  --panel-shadow: 0 10px 28px -14px rgb(30 41 59 / 0.25), 0 1px 3px rgb(30 41 59 / 0.06);
+  --panel-sheen:
+    radial-gradient(130% 85% at 0% 0%, rgb(255 255 255 / 0.45), transparent 55%),
+    radial-gradient(110% 75% at 100% 100%, rgb(255 255 255 / 0.2), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.04) 50%, rgb(255 255 255 / 0.12));
+  /* a hair-thin dark edge so white glass still reads on a white page */
+  --panel-shadow: 0 0 0 0.5px rgb(30 41 59 / 0.07), 0 1px 2px rgb(30 41 59 / 0.08), 0 12px 30px -14px rgb(30 41 59 / 0.28);
+  --lg-lit-a: 0.45;
+  /* lensed surfaces (utils/liquidRefraction): more frost on white, so text
+     never sits on colour blotches */
+  --lg-lens-blur: 16;
+  --lg-spec: 0.8;
+  --lg-card-blur: 5;
 
   --c-elev-strong: rgb(255 255 255 / 0.7);
-  --panel-backdrop-raised: blur(26px) saturate(150%);
-  --raised-sheen: linear-gradient(135deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0.35));
-  --raised-shadow: 0 14px 34px -14px rgb(30 41 59 / 0.3), 0 1px 4px rgb(30 41 59 / 0.08);
+  --panel-backdrop-raised: blur(30px) saturate(170%) brightness(1.03);
+  --raised-sheen:
+    radial-gradient(130% 90% at 0% 0%, rgb(255 255 255 / 0.7), transparent 55%),
+    radial-gradient(110% 80% at 100% 100%, rgb(255 255 255 / 0.3), transparent 55%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.08) 50%, rgb(255 255 255 / 0.2));
+  --raised-shadow: 0 0 0 0.5px rgb(30 41 59 / 0.08), 0 1px 3px rgb(30 41 59 / 0.1), 0 16px 38px -14px rgb(30 41 59 / 0.34);
   --bar-shadow: var(--raised-shadow);
 
   --shell-bg: rgb(255 255 255 / 0.22);
@@ -99,6 +141,8 @@
   /* soft pastel light behind the glass: wide and faint, so it reads as a
      tint of the whole background rather than coloured spots */
   --app-bg-image:
+    radial-gradient(135% 70% at 18% 112%, transparent 56%, color-mix(in oklab, var(--c-accent) 14%, transparent) 61%, color-mix(in oklab, var(--c-accent2) 12%, transparent) 65.5%, color-mix(in oklab, #38bdf8 8%, transparent) 69%, transparent 74%),
+    radial-gradient(120% 62% at 88% -14%, transparent 55%, color-mix(in oklab, #f472b6 9%, transparent) 60%, color-mix(in oklab, var(--c-accent2) 13%, transparent) 64.5%, color-mix(in oklab, var(--c-accent) 8%, transparent) 68%, transparent 73%),
     radial-gradient(75% 65% at 0% 0%, color-mix(in oklab, var(--c-accent) 22%, transparent), transparent 75%),
     radial-gradient(70% 60% at 100% 10%, color-mix(in oklab, var(--c-accent2) 18%, transparent), transparent 75%),
     radial-gradient(75% 70% at 90% 100%, color-mix(in oklab, #fb923c 16%, transparent), transparent 75%),
@@ -129,6 +173,14 @@
 }
 [data-theme="liquid"] :is(h1, h2) {
   letter-spacing: -0.025em;
+}
+
+/* Mouse: the glass catches the light where the pointer is (the position comes
+   from utils/themeSheets.ts), and brightens a touch under it. */
+[data-theme="liquid"] .blur-panel[data-lg-lit]:not([class*="bg-gradient"], [class*="bg-linear"], [class*="bg-radial"]) {
+  background-image:
+    radial-gradient(280px circle at var(--lg-x, 50%) var(--lg-y, 0%), rgb(255 255 255 / var(--lg-lit-a, 0.1)), transparent 70%),
+    var(--ab-r-sheen, var(--panel-sheen, none));
 }
 
 /* Hover lift is not an iOS idiom; press feedback is. */
@@ -249,5 +301,141 @@
     --shell-bg: transparent;
     --shell-shadow: 0 0 #0000;
     --shell-radius: 0px;
+  }
+}
+
+/* ---------------------- iOS 26 controls in glass ------------------------
+   Switches and sliders: a white capsule knob that, while held, turns into a
+   clear magnifying drop of glass (the iOS 26 touch); glass capsules swell a
+   little under the finger instead of sinking. */
+[data-theme="liquid"] .ab-switch {
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.06), inset 0 1px 2px rgb(0 0 0 / 0.12);
+}
+[data-theme="liquid"] .ab-switch[aria-pressed="true"] {
+  background-color: #34c759;
+}
+[data-theme="liquid"] .ab-switch > span {
+  width: 22px;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.22), 0 0 0 0.5px rgb(0 0 0 / 0.04);
+  transition:
+    translate 0.32s cubic-bezier(0.34, 1.4, 0.64, 1),
+    scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+[data-theme="liquid"] .ab-switch[aria-pressed="true"] > span {
+  translate: 14px 0;
+}
+[data-theme="liquid"] .ab-switch:active > span {
+  scale: 1.32 1.45;
+  background-color: rgb(255 255 255 / 0.28);
+  -webkit-backdrop-filter: blur(1px) saturate(180%);
+  backdrop-filter: blur(1px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    inset 0 -1px 1px rgb(255 255 255 / 0.4),
+    inset 0 0 6px rgb(255 255 255 / 0.5),
+    0 4px 12px -2px rgb(0 0 0 / 0.3);
+}
+
+[data-theme="liquid"] input[type="range"].ab-range::-webkit-slider-thumb {
+  width: 22px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.28), 0 0 0 0.5px rgb(0 0 0 / 0.06);
+  transition:
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+[data-theme="liquid"] input[type="range"].ab-range:active::-webkit-slider-thumb {
+  transform: scale(1.5, 1.7);
+  background: rgb(255 255 255 / 0.3);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -1px 1px rgb(255 255 255 / 0.45),
+    inset 0 0 5px rgb(255 255 255 / 0.55),
+    0 4px 12px -2px rgb(0 0 0 / 0.35);
+}
+[data-theme="liquid"] input[type="range"].ab-range::-moz-range-thumb {
+  width: 22px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
+}
+
+/* glass capsules swell and brighten under the finger / pointer */
+[data-theme="liquid"] :is(.ab-chip, .ab-btn-outline, .ab-topbar button.border) {
+  transition:
+    scale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+[data-theme="liquid"] :is(.ab-chip, .ab-btn-outline, .ab-topbar button.border):active {
+  scale: 1.06;
+  background-color: color-mix(in oklab, var(--c-elev-strong) 70%, rgb(255 255 255 / 0.35));
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-theme="liquid"] :is(.ab-chip, .ab-btn-outline):not([data-active="true"]):hover {
+    background-color: color-mix(in oklab, var(--c-elev) 75%, rgb(255 255 255 / 0.3));
+  }
+}
+
+/* Menus and sheets open like a drop of glass: a quick springy swell. */
+[data-theme="liquid"] .surface-raised.animate-scale-in {
+  animation: lg-drop-in 0.38s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+@keyframes lg-drop-in {
+  from {
+    opacity: 0;
+    scale: 0.86;
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    scale: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="liquid"] .surface-raised.animate-scale-in {
+    animation: none;
+  }
+}
+
+/* ------------------------- lensed glass (Chromium) ------------------------
+   utils/liquidRefraction marks the surfaces it lenses with data-lg-lens; the
+   filter paints their curved edge light itself, so the CSS rim steps back to
+   a hairline and a soft inner glow (no doubled edges). */
+[data-theme="liquid"] .blur-panel[data-lg-lens] {
+  --ab-inset:
+    inset 0 0 0 0.5px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.3)),
+    inset 0 1px 0 -0.25px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.55)),
+    inset 0 0 22px -8px rgb(255 255 255 / calc(var(--lg-rim-a, 0.7) * 0.4));
+}
+/* clear cards on strong computers: thinner tint, so the bent light shows */
+[data-theme="liquid"][data-mode="dark"] .blur-panel[data-lg-lens]:not(.surface-raised) {
+  --panel-fill: rgb(255 255 255 / 0.045);
+}
+
+/* Interactive glass (iOS 26): a tapped card or capsule swells a touch with a
+   spring and lights up from inside, instead of sinking. */
+[data-theme="liquid"] :is(a.blur-panel, button.blur-panel, .blur-panel.cursor-pointer) {
+  transition:
+    scale 0.34s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+[data-theme="liquid"] :is(a.blur-panel, button.blur-panel, .blur-panel.cursor-pointer):active {
+  scale: 1.025;
+  background-color: color-mix(in oklab, var(--panel-fill, var(--c-elev)) 70%, rgb(255 255 255 / 0.22));
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="liquid"] :is(a.blur-panel, button.blur-panel, .blur-panel.cursor-pointer):active {
+    scale: none;
   }
 }
