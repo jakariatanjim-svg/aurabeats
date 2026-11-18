@@ -721,18 +721,18 @@ input[type="range"].ab-range::-moz-range-thumb {
   position: absolute;
   display: block;
   inset: -20%;
-  opacity: 0.36;
-  animation: ab-song-veil 48s ease-in-out infinite alternate;
+  opacity: 0.5;
+  animation: ab-song-veil 22s ease-in-out infinite alternate;
 }
 .ab-wash-one {
   background:
-    linear-gradient(130deg, color-mix(in oklab, var(--wash-1) 80%, transparent), transparent 65%),
-    radial-gradient(ellipse 100% 80% at 100% 110%, var(--wash-2), transparent 90%);
+    radial-gradient(ellipse 90% 100% at 5% 25%, var(--wash-1), transparent 80%),
+    radial-gradient(ellipse 100% 85% at 95% 90%, var(--wash-2), transparent 85%);
 }
 .ab-wash-two {
-  background: linear-gradient(245deg, var(--wash-3), transparent 72%);
-  opacity: 0.22;
-  animation-duration: 64s;
+  background: radial-gradient(ellipse 110% 95% at 80% 15%, var(--wash-3), transparent 85%);
+  opacity: 0.32;
+  animation-duration: 29s;
   animation-delay: -22s;
   animation-direction: alternate-reverse;
 }
@@ -742,8 +742,8 @@ input[type="range"].ab-range::-moz-range-thumb {
 [data-mode="light"] .ab-wash-layer { opacity: 0.16; }
 [data-mode="light"] .ab-wash-two { opacity: 0.1; }
 @keyframes ab-song-veil {
-  from { transform: translate3d(-3%, -2%, 0); }
-  to { transform: translate3d(4%, 3%, 0); }
+  from { transform: translate3d(-8%, -5%, 0) scale(1.02); }
+  to { transform: translate3d(9%, 7%, 0) scale(1.16); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ab-wash-layer { animation: none; }

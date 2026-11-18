@@ -438,16 +438,13 @@
    No rotating sweep, visible circles or grain. Only transform is animated.
    ========================================================================== */
 [data-theme="liquid"] .ab-ambient {
-  --amb-1: var(--amb-song-1, var(--c-accent));
-  --amb-2: var(--amb-song-2, var(--c-accent2));
-  --amb-3: var(--amb-song-3, #f472b6);
+  --amb-1: var(--c-accent);
+  --amb-2: var(--c-accent2);
+  --amb-3: color-mix(in oklab, var(--c-accent) 55%, var(--c-accent2));
   --amb-a: 0.55;
   background: radial-gradient(120% 90% at 50% 0%, #121a3a 0%, #0a0d1d 55%, #07070f 100%);
 }
 [data-theme="liquid"] [data-app-mode="video"] > .ab-ambient {
-  --amb-1: #e11d48;
-  --amb-2: #7c3aed;
-  --amb-3: #2563eb;
   --amb-a: 0.42;
   background: radial-gradient(120% 90% at 50% 0%, #1a1030 0%, #0b0a16 55%, #060509 100%);
 }
@@ -467,7 +464,7 @@
   inset: -18%;
   opacity: calc(var(--amb-a) * 0.65);
   background-repeat: no-repeat;
-  animation: ab-ambient-veil 70s ease-in-out infinite alternate;
+  animation: ab-ambient-veil 32s ease-in-out infinite alternate;
 }
 [data-theme="liquid"] .ab-amb-1 {
   background: linear-gradient(125deg, color-mix(in oklab, var(--amb-1) 60%, transparent), transparent 62%);
@@ -479,12 +476,12 @@
 }
 [data-theme="liquid"] .ab-amb-3 {
   background: radial-gradient(ellipse 110% 85% at 65% 120%, color-mix(in oklab, var(--amb-3) 65%, transparent), transparent 85%);
-  animation-duration: 90s;
+  animation-duration: 44s;
   animation-delay: -40s;
 }
 @keyframes ab-ambient-veil {
-  from { transform: translate3d(-2%, -1%, 0); }
-  to { transform: translate3d(3%, 2%, 0); }
+  from { transform: translate3d(-6%, -4%, 0) scale(1.03); }
+  to { transform: translate3d(7%, 5%, 0) scale(1.12); }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-theme="liquid"] .ab-amb { animation: none; }

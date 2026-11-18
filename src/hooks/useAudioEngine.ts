@@ -1,3 +1,4 @@
+import { spectrumReader } from "@/utils/audioSpectrum";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   initYouTubePlayer,
@@ -35,6 +36,7 @@ export interface AudioEngine {
   nudge: (delta: number) => void;
   setVolume: (v: number) => void;
   setMuted: (m: boolean) => void;
+  readSpectrum: () => Uint8Array<ArrayBuffer> | null;
 }
 
 export interface LoadOptions {
@@ -44,6 +46,7 @@ export interface LoadOptions {
 
 export function useAudioEngine(): AudioEngine {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const spectrum = useRef<ReturnType<typeof spectrumReader> | null>(null);
   const [isYtMode, setIsYtMode] = useState(false);
   const currentYtIdRef = useRef<string | null>(null);
 
@@ -76,9 +79,13 @@ export function useAudioEngine(): AudioEngine {
     el.preload = "auto";
     el.volume = 0.85;
     audioRef.current = el;
+    spectrum.current = spectrumReader(el);
   }
 
+  const readSpectrum = useCallback(() => currentYtIdRef.current ? null : spectrum.current?.read() ?? null, []);
+
   const load = useCallback((src: string, opts: LoadOptions = {}) => {
+    spectrum.current?.reset();
     setError(null);
     setCurrentTime(0);
     setDuration(0);
@@ -352,6 +359,7 @@ export function useAudioEngine(): AudioEngine {
 
   useEffect(() => () => {
     audioRef.current?.pause();
+    spectrum.current?.reset();
     releaseYouTubeVideo();
   }, []);
 
@@ -377,6 +385,7 @@ export function useAudioEngine(): AudioEngine {
       nudge,
       setVolume,
       setMuted,
+      readSpectrum,
     }),
     [
       isPlaying,
@@ -399,6 +408,7 @@ export function useAudioEngine(): AudioEngine {
       nudge,
       setVolume,
       setMuted,
+      readSpectrum,
     ]
   );
 }
