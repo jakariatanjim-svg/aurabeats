@@ -1,5 +1,5 @@
 import { flushSync } from "react-dom";
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PlayerProvider, usePlayer } from "@/hooks/usePlayer";
 import { useSavedSongs } from "@/hooks/useSavedSongs";
 import { ThemeProvider } from "@/hooks/useTheme";
@@ -30,6 +30,7 @@ import { listenForShares } from "@/utils/shareTarget";
 import { baseOrientation } from "@/utils/orientation";
 import { dropOldAccountData } from "@/services/yt/accounts";
 import { subscribeVideoSettings } from "@/services/video/settings";
+import { shortsFull } from "@/utils/shortsFull";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
 const SearchView = lazy(() => import("@/views/SearchView").then((m) => ({ default: m.SearchView })));
@@ -226,9 +227,26 @@ function Shell() {
     };
   }, []);
 
+  // Shorts in full screen: the side menu folds to its rail (a click opens it
+  // again) and the top bar hides; leaving puts the menu back as it was
+  const shortsFullOn = useSyncExternalStore(shortsFull.subscribe, shortsFull.get, shortsFull.get);
+  const beforeFull = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (shortsFullOn) {
+      if (beforeFull.current === null) beforeFull.current = collapsed;
+      setCollapsed(true);
+    } else if (beforeFull.current !== null) {
+      setCollapsed(beforeFull.current);
+      beforeFull.current = null;
+    }
+    // only when Shorts full screen starts / ends
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shortsFullOn]);
+
   const toggleCollapse = useCallback(() => {
     setCollapsed((c) => {
-      storage.set("sidebarCollapsed", !c);
+      // in Shorts full screen it opens / folds for now only, not remembered
+      if (beforeFull.current === null) storage.set("sidebarCollapsed", !c);
       return !c;
     });
   }, []);
@@ -341,7 +359,7 @@ function Shell() {
       <Sidebar route={shownRoute} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
 
       <div className="shell-panel flex min-w-0 flex-1 flex-col relative z-10 h-full overflow-hidden">
-        <TopBar route={shownRoute} onNavigate={navigate} />
+        {!shortsFullOn && <TopBar route={shownRoute} onNavigate={navigate} />}
         <main
           id="ab-scroll"
           className={cn(
@@ -352,6 +370,8 @@ function Shell() {
               : "pb-[calc(var(--sa-bottom)+6.5rem)] md:pb-10",
             // room for the video miniplayer bar too
             isNative && layer.mode === "mini" && (current ? "pb-[calc(var(--sa-bottom)+17.5rem)]" : "pb-[calc(var(--sa-bottom)+12rem)]"),
+            // Shorts full screen: the Short takes the whole height
+            shortsFullOn && "pt-3 md:pb-3",
           )}
         >
           <Suspense
