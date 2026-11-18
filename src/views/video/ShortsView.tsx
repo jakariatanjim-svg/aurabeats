@@ -20,6 +20,7 @@ import { SeekPreview } from "@/components/video/SeekPreview";
 import { SaveSheet } from "@/components/video/YtActions";
 import { OpenIn } from "@/components/OpenIn";
 import { storage } from "@/utils/storage";
+import { shortsFull } from "@/utils/shortsFull";
 import { likedNow, loadLike, setLiked, subscribeLikes } from "@/services/yt/library";
 import { useYtSession } from "@/services/yt/session";
 import { dropYtLists } from "@/hooks/useYtPaged";
@@ -63,22 +64,41 @@ export function ShortsView() {
   const handle = useRef<ShortHandle>(null);
   const [seekFx, setSeekFx] = useState<{ side: "l" | "r"; secs: number; key: number } | null>(null);
 
-  // computers: full screen like YouTube's — the menu, search and side bar
-  // go away and the Short fills the screen (F, double-click or the button)
+  // computers: real full screen, like a video's — the browser bars and the
+  // taskbar go away, the side menu folds to its slim rail (a click opens it),
+  // the top bar hides and the Short gets the whole screen. The button, F or
+  // a double-click switch it; Esc only leaves it.
   const [full, setFull] = useState(false);
+  const fullRef = useRef(false);
+  fullRef.current = full;
   const toggleFull = useCallback(() => {
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-    else void document.documentElement.requestFullscreen?.().catch(() => {});
-    setFull((f) => !f);
+    const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
+    const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+    if (fullRef.current) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      else if (doc.webkitFullscreenElement) doc.webkitExitFullscreen?.();
+      setFull(false);
+      return;
+    }
+    if (root.requestFullscreen) void root.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+    else root.webkitRequestFullscreen?.();
+    setFull(true);
   }, []);
   useEffect(() => {
-    const on = () => setFull(!!document.fullscreenElement);
+    // leaving the browser's full screen (Esc, F11, the browser's own button) ends ours too
+    const on = () => {
+      if (!document.fullscreenElement) setFull(false);
+    };
     document.addEventListener("fullscreenchange", on);
+    document.addEventListener("webkitfullscreenchange", on);
     return () => {
       document.removeEventListener("fullscreenchange", on);
+      document.removeEventListener("webkitfullscreenchange", on);
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      shortsFull.set(false);
     };
   }, []);
+  useEffect(() => shortsFull.set(wide && full), [wide, full]);
   // keep the same Short in view when the size changes
   useEffect(() => {
     const el = box.current;
@@ -219,7 +239,7 @@ export function ShortsView() {
     <div
       className={cn(
         wide && full
-          ? "fixed inset-0 z-[78] bg-black text-white"
+          ? "relative mx-auto h-[calc(100dvh-4rem)] w-full"
           : wide
             ? "relative mx-auto h-[calc(100dvh-8.5rem)] w-full"
             : "fixed inset-x-0 top-0 bottom-[calc(var(--sa-bottom)+4.95rem)] z-40 bg-black",
@@ -259,10 +279,10 @@ export function ShortsView() {
 
       {wide && items.length > 0 && (
         <div className="absolute top-1/2 right-2 flex -translate-y-1/2 flex-col gap-3">
-          <RoundBtn label="Previous Short" onClick={() => go(-1)} disabled={active === 0} dark={full}>
+          <RoundBtn label="Previous Short" onClick={() => go(-1)} disabled={active === 0}>
             <ChevronUp className="h-6 w-6" />
           </RoundBtn>
-          <RoundBtn label="Next Short" onClick={() => go(1)} dark={full}>
+          <RoundBtn label="Next Short" onClick={() => go(1)}>
             <ChevronDown className="h-6 w-6" />
           </RoundBtn>
         </div>
@@ -610,19 +630,18 @@ function Slide({
       {wide ? (
         <>
           {/* computers: nothing over the picture. The video sits in the
-              middle; the buttons, then channel, Subscribe and title are
-              beside it, lined up with its bottom, like YouTube */}
+              middle; channel, Subscribe and title on its left, the buttons
+              on its right, both lined up with its bottom */}
           <div className="grid w-full grid-cols-[1fr_auto_1fr] gap-x-4">
-            <span />
+            <div className="min-w-0 max-w-72 self-end justify-self-end pb-1 pl-4 text-ink">
+              <Who meta={meta} />
+              {meta.title && <p className="mt-2 line-clamp-3 text-sm leading-snug text-ink2">{meta.title}</p>}
+              <OpenIn kind="short" id={s.id} className="mt-2" />
+            </div>
             <div style={{ width: `calc(${frameH} * ${frameAr})` }}>{frame}</div>
-            <div className="flex min-w-0 items-end gap-4 pr-16">
+            <div className="flex min-w-0 flex-col items-start justify-end gap-4 pr-16">
               <div className="flex shrink-0 flex-col items-center gap-4">
-                <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} dark={full} />
-              </div>
-              <div className={cn("min-w-0 max-w-72 pb-1", full ? "text-white" : "text-ink")}>
-                <Who meta={meta} dark={full} />
-                {meta.title && <p className={cn("mt-2 line-clamp-3 text-sm leading-snug", full ? "text-white/85" : "text-ink2")}>{meta.title}</p>}
-                <OpenIn kind="short" id={s.id} dark={full} className="mt-2" />
+                <Actions id={s.id} meta={meta} onComments={() => setComments(true)} onShare={share} onMore={setMenu} />
               </div>
             </div>
           </div>
