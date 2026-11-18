@@ -414,25 +414,6 @@ button, a, .blur-panel, .chip {
     transform: translateY(0);
   }
 }
-@keyframes ab-drift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-@keyframes ab-aurora {
-  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
-  33% { transform: translate(5%, 10%) scale(1.1) rotate(5deg); }
-  66% { transform: translate(-5%, 5%) scale(0.9) rotate(-5deg); }
-  100% { transform: translate(10%, -5%) scale(1.05) rotate(2deg); }
-}
-
 .animate-spin-slow {
   animation: ab-spin 22s linear infinite;
 }
@@ -444,6 +425,10 @@ button, a, .blur-panel, .chip {
 }
 .animate-pulse-glow {
   animation: ab-pulse-glow 3.2s ease-in-out infinite;
+}
+/* Both effects share one element in the welcome card; compose, not replace. */
+.animate-float.animate-pulse-glow {
+  animation: ab-float 6s ease-in-out infinite, ab-pulse-glow 3.2s ease-in-out infinite;
 }
 /* fill-mode backwards (not both): once finished, no transform is left behind
    on the route wrapper, so it stops being a containing block for fixed
@@ -639,11 +624,6 @@ img.ab-fade[data-loaded] {
     animation: none;
   }
 }
-.gradient-drift {
-  background-size: 200% 200%;
-  animation: ab-drift 14s ease infinite;
-}
-
 .eq-bar {
   transform-origin: bottom;
   animation: ab-eq 1s ease-in-out infinite;
@@ -699,22 +679,6 @@ input[type="range"].ab-range::-moz-range-thumb {
 .focus-ring:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--c-accent) 70%, transparent);
   outline-offset: 2px;
-}
-
-.marquee-track {
-  display: inline-block;
-  white-space: nowrap;
-  animation: ab-marquee 12s linear infinite;
-}
-@keyframes ab-marquee {
-  0%,
-  12% {
-    transform: translateX(0);
-  }
-  88%,
-  100% {
-    transform: translateX(calc(-100% + var(--mq-w, 200px)));
-  }
 }
 
 /* ------------------------------ app guide ------------------------------- */
