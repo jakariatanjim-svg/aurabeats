@@ -36,7 +36,7 @@ interface Hit {
 
 const API = "https://lrclib.net/api";
 const memo = new Map<string, Lyrics | null>();
-const CACHE_KEY = "lyricsCache:v2";
+const CACHE_KEY = "lyricsCache:v3";
 
 export function cleanTitle(raw: string): string {
   return raw
@@ -83,13 +83,14 @@ function similarity(a: string, b: string): number {
 
 export function parseLRC(raw: string): LyricLine[] {
   const out: LyricLine[] = [];
+  const offset = Number(raw.match(/\[offset:([+-]?\d+)\]/i)?.[1] || 0) / 1000;
   for (const line of raw.split(/\r?\n/)) {
     const stamps = [...line.matchAll(/\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g)];
     if (!stamps.length) continue;
     const text = line.replace(/\[[^\]]*\]/g, "").trim();
     for (const m of stamps) {
       const t = parseInt(m[1]) * 60 + parseInt(m[2]) + (m[3] ? parseInt(m[3].padEnd(3, "0")) / 1000 : 0);
-      out.push({ t, text });
+      out.push({ t: Math.max(0, t - offset), text });
     }
   }
   out.sort((a, b) => a.t - b.t);
@@ -166,36 +167,45 @@ export async function fetchLyrics(
 
   const scored = hits
     .map((h) => {
-      const ts = Math.max(...variants.map((v) => similarity(v.song, h.trackName || "")));
-      const as = Math.max(...variants.map((v) => (v.by ? similarity(v.by, h.artistName || "") : 0.5)));
-      let ds = 0;
-      if (dur && h.duration) {
-        const d = Math.abs(dur - h.duration);
-        ds = d <= 2 ? 1 : d <= 5 ? 0.7 : d <= 10 ? 0.25 : -1.5;
-      }
-      return { h, ts, score: ts * 3 + as * 1.5 + ds * 2 + (h.syncedLyrics ? 0.6 : 0) };
+      // Score title and artist from the SAME interpretation of an upload title.
+      const match = variants.map((v) => ({
+        ts: similarity(v.song, h.trackName || ""),
+        artist: v.by ? similarity(v.by, h.artistName || "") : 0,
+      })).sort((a, b) => (b.ts * 3 + b.artist * 2) - (a.ts * 3 + a.artist * 2))[0];
+      const delta = dur && h.duration ? Math.abs(dur - h.duration) : null;
+      const timingSafe = delta !== null && delta <= 3;
+      const score = match.ts * 3 + match.artist * 2 + (timingSafe ? 1 : 0);
+      return { h, ...match, delta, timingSafe, score };
     })
-    .filter((x) => x.ts >= 0.5)
+    .filter((x) => x.ts >= 0.8 && x.artist >= 0.5 && (x.delta === null || x.delta <= 12))
     .sort((a, b) => b.score - a.score);
 
   let result: Lyrics | null = null;
   if (scored.length) {
     const best = scored[0];
     const near = (x: (typeof scored)[number]) =>
-      x.score >= best.score - 2 && (!dur || !x.h.duration || Math.abs(dur - x.h.duration) <= 5);
+      x.score >= best.score - 0.35 &&
+      similarity(x.h.trackName || "", best.h.trackName || "") >= 0.9 &&
+      similarity(x.h.artistName || "", best.h.artistName || "") >= 0.8;
     const native = scored.find((x) => near(x) && nonLatinShare(textOf(x.h)) > 0.5);
     const latin = scored.find((x) => near(x) && nonLatinShare(textOf(x.h)) < 0.1);
     // Original script first when the song has one; Roman version alongside.
     const mainHit = native ?? best;
-    const main = version(mainHit.h);
-    const latinV = native && latin ? version(latin.h) : undefined;
+    // Different edits may share words but not timestamps; show plain lyrics
+    // rather than claim they are synced when duration cannot be verified.
+    const safeVersion = (x: (typeof scored)[number]) => {
+      const v = version(x.h);
+      return x.timingSafe ? v : { ...v, synced: null };
+    };
+    const main = safeVersion(mainHit);
+    const latinV = native && latin ? safeVersion(latin) : undefined;
     result = {
       main,
       latin: latinV,
       canRomanize: Boolean(latinV) || needsRomanizing(main.plain),
     };
   }
-  if (offline) return null; // try again next time
+  if (offline || !result) return null; // retry missing lyrics instead of caching misses forever
   memo.set(key, result);
   saveCache(key, result);
   return result;

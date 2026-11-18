@@ -334,14 +334,10 @@ function Shell() {
     // Mouse wheel volume control
     const onWheel = (e: WheelEvent) => {
       const target = e.target as HTMLElement | null;
-      // Is the full screen player currently mounted and visible?
-      const isFullScreen = expanded;
-      
-      // If NOT in full screen, disable volume wheel over scrollable areas (so page can scroll normally)
-      if (!isFullScreen && target?.closest(".scroll-area, main, aside, [role=dialog], [data-video-player]")) return;
-      
-      // If IN full screen, ONLY disable volume wheel if hovering over the "Up Next" queue area
-      if (isFullScreen && target?.closest(".scroll-area")) return;
+      // Only the visible music controller owns wheel volume, never the page.
+      if (!target?.closest("[data-music-controller]")) return;
+      if (target.closest('[role="slider"], input, .scroll-area')) return;
+      if (!e.deltaY) return;
 
       e.preventDefault();
       const delta = e.deltaY < 0 ? 0.05 : -0.05;

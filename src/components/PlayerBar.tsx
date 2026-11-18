@@ -124,6 +124,7 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
       <div
         ref={panelRef}
         data-tour="player"
+        data-music-controller
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
