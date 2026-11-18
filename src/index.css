@@ -733,3 +733,14 @@ input[type="range"].ab-range::-moz-range-thumb {
   20%, 60% { transform: translateX(-6px); }
   40%, 80% { transform: translateX(6px); }
 }
+
+/* The living background layer (components/AmbientBackground). Only placed
+   here; what it shows comes from the active theme (Liquid Glass). */
+.ab-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}

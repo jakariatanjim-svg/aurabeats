@@ -25,6 +25,7 @@ import { cn } from "@/utils/cn";
 import { FavIcon } from "@/components/FavIcon";
 import { videoIdOfTrack, watchTrackVideo, canSaveOffline } from "@/utils/watchVideo";
 import { OpenIn } from "@/components/OpenIn";
+import { SongAura } from "@/components/SongAura";
 import { requestVideoDownload } from "@/services/videoDownload";
 import { formatTime, gradientFrom } from "@/utils/format";
 import { usePlaybackClock, usePlayer } from "@/hooks/usePlayer";
@@ -318,6 +319,8 @@ export function FullScreenPlayer() {
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
+      {/* moving light of this song: its colours, its own kind of motion */}
+      <SongAura id={current.id} art={art || undefined} playing={isPlaying} className="pointer-events-none absolute inset-0 h-full w-full" />
       <div className="relative z-10 flex h-full flex-col pt-[var(--sa-top)] pr-[var(--sa-right)] pb-[var(--sa-bottom)] pl-[var(--sa-left)]">
         {/* top bar */}
         <div className="flex shrink-0 items-center justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
