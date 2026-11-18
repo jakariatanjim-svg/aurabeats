@@ -708,3 +708,43 @@ input[type="range"].ab-range::-moz-range-thumb {
   pointer-events: none;
   contain: strict;
 }
+
+/* Full player: seamless artwork-coloured light, with no pipes, spinning
+   rays or discrete blobs. Oversized layers remain soft at every screen size. */
+.ab-song-wash {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ab-wash-layer {
+  position: absolute;
+  display: block;
+  inset: -20%;
+  opacity: 0.36;
+  animation: ab-song-veil 48s ease-in-out infinite alternate;
+}
+.ab-wash-one {
+  background:
+    linear-gradient(130deg, color-mix(in oklab, var(--wash-1) 80%, transparent), transparent 65%),
+    radial-gradient(ellipse 100% 80% at 100% 110%, var(--wash-2), transparent 90%);
+}
+.ab-wash-two {
+  background: linear-gradient(245deg, var(--wash-3), transparent 72%);
+  opacity: 0.22;
+  animation-duration: 64s;
+  animation-delay: -22s;
+  animation-direction: alternate-reverse;
+}
+.ab-song-wash[data-playing="false"] .ab-wash-layer {
+  animation-play-state: paused;
+}
+[data-mode="light"] .ab-wash-layer { opacity: 0.16; }
+[data-mode="light"] .ab-wash-two { opacity: 0.1; }
+@keyframes ab-song-veil {
+  from { transform: translate3d(-3%, -2%, 0); }
+  to { transform: translate3d(4%, 3%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ab-wash-layer { animation: none; }
+}
