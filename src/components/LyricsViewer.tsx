@@ -28,24 +28,25 @@ function activeIndex(lines: LyricLine[], t: number): number {
  */
 function useActiveLine(lines: LyricLine[] | null): { index: number; now: () => number } {
   const { currentTime } = usePlaybackClock();
-  const { isPlaying } = usePlayer();
+  const { isPlaying, isBuffering } = usePlayer();
+  const advancing = isPlaying && !isBuffering;
   const anchor = useRef({ t: currentTime, at: performance.now() });
   const shown = useRef(currentTime);
   const [index, setIndex] = useState(-1);
 
   const now = useCallback(() => {
     const a = anchor.current;
-    let t = isPlaying ? a.t + Math.min(1, (performance.now() - a.at) / 1000) : a.t;
+    let t = advancing ? a.t + Math.min(1, (performance.now() - a.at) / 1000) : a.t;
     // a fresh report slightly behind the interpolated time must not step back
-    if (isPlaying && shown.current > t && shown.current - t < 0.6) t = shown.current;
+    if (advancing && shown.current > t && shown.current - t < 0.6) t = shown.current;
     shown.current = t;
     return t;
-  }, [isPlaying]);
+  }, [advancing]);
 
   useEffect(() => {
     anchor.current = { t: currentTime, at: performance.now() };
     if (Math.abs(shown.current - currentTime) > 0.6) shown.current = currentTime; // seek
-  }, [currentTime]);
+  }, [currentTime, advancing]);
 
   useEffect(() => {
     if (!lines?.length) {
@@ -56,11 +57,11 @@ function useActiveLine(lines: LyricLine[] | null): { index: number; now: () => n
     const tick = () => {
       const i = activeIndex(lines, now());
       setIndex((p) => (p === i ? p : i));
-      if (isPlaying) raf = requestAnimationFrame(tick);
+      if (advancing) raf = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [lines, isPlaying, now, currentTime]);
+  }, [lines, advancing, now, currentTime]);
 
   return { index, now };
 }
@@ -74,6 +75,8 @@ interface Props {
 
 export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
   const { seek } = usePlayer();
+  const { duration: playbackDuration } = usePlaybackClock();
+  const duration = playbackDuration > 0 ? playbackDuration : track.duration;
   const [data, setData] = useState<Lyrics | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "none">("loading");
   const [follow, setFollow] = useState(true);
@@ -86,14 +89,15 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     setData(null);
     setFollow(true);
     scroller.current?.scrollTo({ top: 0 });
-    fetchLyrics({ title: track.title, artist: track.artist, duration: track.duration }, ctl.signal)
+    fetchLyrics({ title: track.title, artist: track.artist, duration }, ctl.signal)
       .then((l) => {
+        if (ctl.signal.aborted) return;
         setData(l);
         setStatus(l ? "ready" : "none");
       })
       .catch(() => !ctl.signal.aborted && setStatus("none"));
     return () => ctl.abort();
-  }, [track.id, track.title, track.artist, track.duration]);
+  }, [track.id, track.title, track.artist, duration]);
 
   useEffect(() => {
     onRomanizable?.(Boolean(data?.canRomanize));
@@ -134,7 +138,7 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     const box = scroller.current;
     const el = lineEls.current[Math.max(0, i)];
     if (!box || !el) return;
-    const top = el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2;
+    const top = box.scrollTop + el.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 2 + el.offsetHeight / 2;
     box.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
   }, []);
 

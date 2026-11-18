@@ -493,7 +493,7 @@ export function FullScreenPlayer() {
             </div>
 
             {/* Controls — ALWAYS visible, on a raised glass card */}
-            <div className="blur-panel surface-raised glass-inset mt-4 mb-4 w-full max-w-xl shrink-0 space-y-3 rounded-[2rem]! px-4 pt-4 pb-3 sm:mb-6 sm:px-6 sm:pt-5">
+            <div data-music-controller className="blur-panel surface-raised glass-inset mt-4 mb-4 w-full max-w-xl shrink-0 space-y-3 rounded-[2rem]! px-4 pt-4 pb-3 sm:mb-6 sm:px-6 sm:pt-5">
               {!showLyrics && (
                 <div className="-mt-1 h-7 w-full opacity-80">
                   <Visualizer variant="mirror" barCount={48} active={isPlaying} />

@@ -412,7 +412,7 @@ function SearchRows({
     if (row.kind === "trend" && (i === 0 || rows[i - 1].kind !== "trend")) {
       out.push(
         <p key="trend-h" className={cn("px-4 pb-1 text-[11px] font-bold tracking-[0.14em] text-ink3 uppercase", i > 0 ? "mt-3 border-t border-line pt-3" : "pt-1")}>
-          Trending searches
+          Trending searches · Google
         </p>,
       );
     }
@@ -425,12 +425,12 @@ function SearchRows({
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => onPick(row.text)}
         className={cn(
-          "group flex cursor-pointer items-center gap-3.5 px-4 py-2.5 text-[15px] text-ink transition-colors",
+          "group flex cursor-pointer items-center gap-3 px-4 py-2 text-[14px] text-ink transition-colors",
           i === active ? "bg-ink/[0.10]" : "hover:bg-ink/[0.06] active:bg-ink/[0.08]",
         )}
       >
         <Icon className={cn("h-[18px] w-[18px] shrink-0", row.kind === "trend" ? "text-accent" : "text-ink3")} />
-        <span className="min-w-0 flex-1 truncate">
+        <span className="min-w-0 flex-1 truncate font-medium">
           <Highlight text={row.text} typed={typed} />
         </span>
         {row.kind === "history" ? (
