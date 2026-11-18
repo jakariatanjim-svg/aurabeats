@@ -70,12 +70,16 @@ export function SongAura({ id, art, playing, className }: { id: string; art?: st
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let w = 0;
     let h = 0;
+    let redraw: (() => void) | undefined;
     const fit = () => {
       const r = cv.getBoundingClientRect();
       w = Math.max(1, Math.round(r.width * SCALE));
       h = Math.max(1, Math.round(r.height * SCALE));
+      const changed = cv.width !== w || cv.height !== h;
       if (cv.width !== w) cv.width = w;
       if (cv.height !== h) cv.height = h;
+      // Resizing clears a canvas, including when paused or motion is reduced.
+      if (changed) redraw?.();
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -173,6 +177,8 @@ export function SongAura({ id, art, playing, className }: { id: string; art?: st
         }
       }
     };
+
+    redraw = draw;
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);

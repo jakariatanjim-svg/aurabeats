@@ -149,6 +149,11 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
         />
       </div>
 
+      {/* A dedicated row keeps the wave clear of the controls at every width.
+          The old wave shared a fixed-width cluster and could shrink away. */}
+      <div className="pointer-events-none mt-3 h-5 w-full shrink-0 md:mt-0 md:mb-2" aria-hidden="true">
+        <Visualizer variant="wave" barCount={28} active={isPlaying} />
+      </div>
       <div className="mt-2 flex items-center gap-3 md:mt-0 md:gap-4">
         {/* now playing */}
         <button
@@ -271,9 +276,6 @@ export function PlayerBar({ onOpenQueue }: { onOpenQueue: () => void }) {
 
         {/* right cluster */}
         <div className="flex items-center justify-end gap-1 md:w-[25%] md:gap-2">
-          <div className="mr-2 hidden h-7 w-16 lg:block">
-            <Visualizer variant="wave" barCount={28} active={isPlaying} />
-          </div>
           {current && hasVideo && (
             <IconButton
               size="sm"

@@ -8,16 +8,18 @@
  */
 import { useEffect, useRef } from "react";
 import { usePlayer } from "@/hooks/usePlayer";
+import { useTheme } from "@/hooks/useTheme";
 import { songPalette } from "@/utils/songPalette";
 
 export function AmbientBackground() {
   const { current } = usePlayer();
+  const { theme } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
   const art = current ? current.artwork || current.artworkLarge : undefined;
   const id = current?.id;
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || theme !== "liquid") return;
     if (!id) {
       for (const n of [1, 2, 3]) el.style.removeProperty(`--amb-song-${n}`);
       return;
@@ -30,7 +32,8 @@ export function AmbientBackground() {
     return () => {
       alive = false;
     };
-  }, [id, art]);
+  }, [id, art, theme]);
+  if (theme !== "liquid") return null;
   return (
     <div ref={ref} className="ab-ambient" aria-hidden="true">
       <i className="ab-amb ab-amb-1" />
