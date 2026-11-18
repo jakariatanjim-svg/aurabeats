@@ -31,6 +31,7 @@ import { baseOrientation } from "@/utils/orientation";
 import { dropOldAccountData } from "@/services/yt/accounts";
 import { subscribeVideoSettings } from "@/services/video/settings";
 import { shortsFull } from "@/utils/shortsFull";
+import { AmbientBackground } from "@/components/AmbientBackground";
 
 const HomeView = lazy(() => import("@/views/HomeView").then((m) => ({ default: m.HomeView })));
 const SearchView = lazy(() => import("@/views/SearchView").then((m) => ({ default: m.SearchView })));
@@ -356,6 +357,7 @@ function Shell() {
 
   return (
     <div data-app-mode={videoMode ? "video" : "music"} className="app-shell flex w-full overflow-hidden gap-4 relative z-0">
+      <AmbientBackground />
       <Sidebar route={shownRoute} onNavigate={navigate} collapsed={collapsed} onToggleCollapse={toggleCollapse} />
 
       <div className="shell-panel flex min-w-0 flex-1 flex-col relative z-10 h-full overflow-hidden">
