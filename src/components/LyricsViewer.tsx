@@ -1,5 +1,7 @@
+import { videoIdOfTrack } from "@/utils/watchVideo";
+import { useExtension } from "@/services/yt/extension";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LocateFixed, Music2 } from "lucide-react";
+import { LocateFixed, Music2, RefreshCw } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { usePlaybackClock, usePlayer } from "@/hooks/usePlayer";
 import { fetchLyrics, type LyricLine, type Lyrics } from "@/services/lyrics";
@@ -75,11 +77,13 @@ interface Props {
 
 export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
   const { seek } = usePlayer();
+  const connector = useExtension();
   const { duration: playbackDuration } = usePlaybackClock();
   const duration = playbackDuration > 0 ? playbackDuration : track.duration;
   const [data, setData] = useState<Lyrics | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "none">("loading");
   const [follow, setFollow] = useState(true);
+  const [retry, setRetry] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
   const lineEls = useRef<(HTMLElement | null)[]>([]);
 
@@ -89,7 +93,7 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     setData(null);
     setFollow(true);
     scroller.current?.scrollTo({ top: 0 });
-    fetchLyrics({ title: track.title, artist: track.artist, duration }, ctl.signal)
+    fetchLyrics({ title: track.title, artist: track.artist, duration, videoId: videoIdOfTrack(track) || undefined }, ctl.signal)
       .then((l) => {
         if (ctl.signal.aborted) return;
         setData(l);
@@ -97,7 +101,7 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
       })
       .catch(() => !ctl.signal.aborted && setStatus("none"));
     return () => ctl.abort();
-  }, [track.id, track.title, track.artist, duration]);
+  }, [track.id, track.title, track.artist, duration, connector.connected, connector.version, retry]);
 
   useEffect(() => {
     onRomanizable?.(Boolean(data?.canRomanize));
@@ -184,7 +188,10 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-ink3">
         <Music2 className="h-9 w-9 opacity-60" />
-        <p className="text-[15px] font-semibold">No lyrics for this song</p>
+        <p className="text-[15px] font-semibold">Lyrics unavailable</p>
+        <button type="button" onClick={() => setRetry((n) => n + 1)} className="flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink">
+          <RefreshCw className="h-4 w-4" /> Retry
+        </button>
       </div>
     );
   }
@@ -252,7 +259,7 @@ export function LyricsViewer({ track, romanized, onRomanizable }: Props) {
                 ),
               )}
 
-          <p className="mt-10 text-[11px] font-medium text-ink3/70">Lyrics: LRCLIB</p>
+          <p className="mt-10 text-[11px] font-medium text-ink3/70">Lyrics: {data?.source || "LRCLIB"}</p>
         </div>
       </div>
 
