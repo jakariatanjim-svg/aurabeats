@@ -18,6 +18,7 @@ export interface LyricsVersion {
   plain: string[];
 }
 export interface Lyrics {
+  source?: "YouTube Music" | "LRCLIB";
   main: LyricsVersion;
   /** same song in Roman letters, when `main` is in another script */
   latin?: LyricsVersion;
@@ -36,7 +37,7 @@ interface Hit {
 
 const API = "https://lrclib.net/api";
 const memo = new Map<string, Lyrics | null>();
-const CACHE_KEY = "lyricsCache:v3";
+const CACHE_KEY = "lyricsCache:v4";
 
 export function cleanTitle(raw: string): string {
   return raw
@@ -135,9 +136,20 @@ function saveCache(key: string, value: Lyrics | null) {
 }
 
 export async function fetchLyrics(
-  t: { title: string; artist: string; duration?: number },
+  t: { title: string; artist: string; duration?: number; videoId?: string },
   signal?: AbortSignal,
 ): Promise<Lyrics | null> {
+  // Try the video's own lyrics before metadata matching or its cached fallback.
+  if (t.videoId) {
+    const { youtubeLyrics } = await import("@/services/yt/lyrics");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const own = await Promise.race([
+      youtubeLyrics(t.videoId, signal),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 8000); }),
+    ]).finally(() => clearTimeout(timer));
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    if (own) return own;
+  }
   const key = `${norm(t.title)}|${norm(t.artist)}|${Math.round(t.duration || 0)}`;
   if (memo.has(key)) return memo.get(key)!;
   const cached = loadCache()[key];
@@ -177,7 +189,9 @@ export async function fetchLyrics(
       const score = match.ts * 3 + match.artist * 2 + (timingSafe ? 1 : 0);
       return { h, ...match, delta, timingSafe, score };
     })
-    .filter((x) => x.ts >= 0.8 && x.artist >= 0.5 && (x.delta === null || x.delta <= 12))
+    // Upload channels are often labels, not performers. An exact title plus
+    // a near-identical recording length can still identify the right lyrics.
+    .filter((x) => x.ts >= 0.8 && (x.artist >= 0.5 || (x.ts >= 0.98 && x.timingSafe)) && (x.delta === null || x.delta <= 12))
     .sort((a, b) => b.score - a.score);
 
   let result: Lyrics | null = null;
@@ -200,6 +214,7 @@ export async function fetchLyrics(
     const main = safeVersion(mainHit);
     const latinV = native && latin ? safeVersion(latin) : undefined;
     result = {
+      source: "LRCLIB",
       main,
       latin: latinV,
       canRomanize: Boolean(latinV) || needsRomanizing(main.plain),

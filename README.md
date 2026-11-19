@@ -90,7 +90,7 @@ Everything personal — favourites, playlists, history and followed channels —
 - **Real search trends.** **Trending searches · Google** shows regional Google Search trends, not YouTube rankings or a music-only chart. The list is hidden when fresh data is unavailable.
 - **Dynamic wave.** The music player uses audio data when the browser permits it. Otherwise, including YouTube embeds, it shows a decorative animated wave rather than claiming to follow the beat.
 - **Wheel volume on computers.** Hover over the music controller to adjust volume with the mouse wheel. Scrolling elsewhere in the full player does not change it.
-- **Lyrics availability.** Lyrics come from LRCLIB and may be missing or differ between recordings. **Sync** returns to the current line; it does not repair incorrect source timestamps.
+- **Lyrics availability.** For YouTube songs, the website first asks YouTube Music through the Connector extension; Android requests the same source directly. LRCLIB is the fallback. Lyrics may be missing or differ between recordings. **Sync** returns to the current line; it does not repair incorrect source timestamps.
 
 <br/>
 
@@ -189,7 +189,7 @@ To use another Google account, sign in to it on YouTube in the same browser (or 
 
 ## Credits
 
-Music and videos are provided by their respective creators and catalogues. Lyrics are supplied by [LRCLIB](https://lrclib.net/); regional search trends come from [Google Trends](https://trends.google.com/trending). AuraBeats is not affiliated with YouTube, Google or these providers.
+Music and videos are provided by their respective creators and catalogues. Lyrics come from YouTube Music where available, with [LRCLIB](https://lrclib.net/) as a fallback; regional search trends come from [Google Trends](https://trends.google.com/trending). AuraBeats is not affiliated with YouTube, Google or these providers.
 
 <br/>
 
