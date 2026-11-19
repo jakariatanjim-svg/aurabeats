@@ -47,7 +47,7 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
     <td valign="top">
       <h3>Synced lyrics</h3>
-      Lyrics that follow the song, scroll freely and snap back into sync with one tap.
+      Follow timed lyrics when a matching version is available, scroll freely and return to the current line with <b>Sync</b>. On phones, swipe left in the full player to open lyrics; swipe either way to return. If timing cannot be matched confidently, available lyrics appear as plain text.
     </td>
   </tr>
   <tr>
@@ -57,7 +57,7 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
     <td valign="top">
       <h3>Your look</h3>
-      Two designs, Material (the new Material 3 Expressive) and Liquid Glass, in light or dark, with your own accent colour. Turn <b>Blur</b> off in Settings for a lighter look on slower devices.
+      Two designs, Material (Material 3 Expressive style) and Liquid Glass, in light or dark, with your own accent colour. Liquid Glass has a moving, accent-coloured backdrop; the full music player has separate artwork-coloured lighting that pauses with the song. Turn <b>Blur</b> off in Settings for solid surfaces.
     </td>
   </tr>
   <tr>
@@ -73,7 +73,7 @@ Everything personal — favourites, playlists, history and followed channels —
   <tr>
     <td valign="top">
       <h3>Shorts</h3>
-      An endless Shorts feed that works like YouTube's: swipe, scroll or use the arrow keys. On a computer the video stays clean, with full screen, captions, speed and a preview over the progress line. No black bars, and ads are skipped. Shorts also appear in search and on Home.
+      Browse Shorts by swiping, scrolling or using the arrow keys. On a computer, channel details sit to the left and actions to the right, keeping the video clear. Use the full-screen button, <b>F</b> or a double-click for browser full screen; <b>Esc</b> exits. Captions, playback speed and seek previews are available where supported. Shorts also appear in search and on Home.
     </td>
     <td valign="top">
       <h3>Share and links</h3>
@@ -81,6 +81,16 @@ Everything personal — favourites, playlists, history and followed channels —
     </td>
   </tr>
 </table>
+
+<br/>
+
+## Search and playback
+
+- **Search when you choose.** Type a song, artist or video, then press **Enter**. Suggestions help you finish a query; recent searches can be removed individually.
+- **Real search trends.** **Trending searches · Google** shows regional Google Search trends, not YouTube rankings or a music-only chart. The list is hidden when fresh data is unavailable.
+- **Dynamic wave.** The music player uses audio data when the browser permits it. Otherwise, including YouTube embeds, it shows a decorative animated wave rather than claiming to follow the beat.
+- **Wheel volume on computers.** Hover over the music controller to adjust volume with the mouse wheel. Scrolling elsewhere in the full player does not change it.
+- **Lyrics availability.** Lyrics come from LRCLIB and may be missing or differ between recordings. **Sync** returns to the current line; it does not repair incorrect source timestamps.
 
 <br/>
 
@@ -172,13 +182,14 @@ To use another Google account, sign in to it on YouTube in the same browser (or 
 
 - **No account needed.** Nothing to sign up for. The optional YouTube sign-in stays on your device or browser.
 - **On your device.** Favourites, playlists, history and follows are stored locally and can be cleared in Settings at any time.
-- **No servers of our own.** AuraBeats streams directly from public sources and stores no media.
+- **No servers of our own.** Media comes from external sources. Offline saves stay on your device, not on AuraBeats servers.
+- **External requests.** Search, playback, lyrics and trends contact their respective providers. The public trends feed may use a third-party relay when the browser cannot access it directly; your search history is not sent with that feed request.
 
 <br/>
 
-## Built with
+## Credits
 
-React · TypeScript · Vite · Tailwind CSS · Capacitor
+Music and videos are provided by their respective creators and catalogues. Lyrics are supplied by [LRCLIB](https://lrclib.net/); regional search trends come from [Google Trends](https://trends.google.com/trending). AuraBeats is not affiliated with YouTube, Google or these providers.
 
 <br/>
 
